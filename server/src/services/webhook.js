@@ -25,6 +25,8 @@ export async function enviarWebhookOrden(data) {
     'Garantia': data.garantia,
     'Requiere Factura': data.requiereFactura,
     'Firma Supervisor': data.firmaBase64,
+    'Fotos Antes': data.fotosAntes || [],
+    'Fotos Despues': data.fotosDespues || [],
     'Fecha Envio': new Date().toISOString(),
   };
 

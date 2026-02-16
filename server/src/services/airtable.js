@@ -11,8 +11,8 @@ const mockTecnicos = [
 ];
 
 const mockClientes = [
-  { rut: '12.345.678-9', nombre: 'Condominio Vista Hermosa', email: 'admin@vistahermosa.cl', telefono: '+56 2 1234 5678', direccion: 'Av. Principal 1000, Providencia', comuna: 'Providencia', empresa: true },
-  { rut: '9.876.543-2', nombre: 'Restaurant El Buen Sabor', email: 'contacto@buensabor.cl', telefono: '+56 2 8765 4321', direccion: 'Calle Comercio 456, Santiago', comuna: 'Santiago', empresa: true },
+  { rut: '12.345.678-9', nombre: 'Condominio Vista Hermosa', email: 'admin@vistahermosa.cl', telefono: '+56 2 1234 5678', direccion: 'Av. Principal 1000, Providencia', comuna: 'Providencia', tipo: 'Empresa', empresa: 'Condominio Vista Hermosa' },
+  { rut: '9.876.543-2', nombre: 'Restaurant El Buen Sabor', email: 'contacto@buensabor.cl', telefono: '+56 2 8765 4321', direccion: 'Calle Comercio 456, Santiago', comuna: 'Santiago', tipo: 'Empresa', empresa: 'Restaurant El Buen Sabor' },
 ];
 
 // Airtable connection (only when not in mock mode)
@@ -21,6 +21,8 @@ if (!MOCK_MODE) {
   Airtable.configure({ apiKey: process.env.AIRTABLE_API_KEY });
   base = Airtable.base(process.env.AIRTABLE_BASE_ID);
 }
+
+// --- Empleados ---
 
 export async function findTecnicoByEmail(email) {
   if (MOCK_MODE) {
@@ -58,6 +60,8 @@ export async function getTecnicos() {
   }));
 }
 
+// --- Clientes ---
+
 export async function buscarClientes(query) {
   if (MOCK_MODE) {
     const q = query.toLowerCase().replace(/\./g, '');
@@ -69,7 +73,7 @@ export async function buscarClientes(query) {
   }
   const records = await base('Clientes')
     .select({
-      filterByFormula: `OR(FIND('${query}', {RUT}), FIND('${query}', {Nombre}))`,
+      filterByFormula: `SEARCH("${query}", {RUT})`,
       maxRecords: 10,
     })
     .firstPage();
@@ -80,19 +84,38 @@ export async function buscarClientes(query) {
     telefono: r.get('Telefono'),
     direccion: r.get('Direccion'),
     comuna: r.get('Comuna'),
-    empresa: !!r.get('Empresa'),
+    tipo: r.get('Tipo'),
+    empresa: r.get('Empresa'),
   }));
 }
+
+// --- Ordenes de Trabajo ---
 
 export async function crearOrdenEnAirtable(data) {
   if (MOCK_MODE) {
     console.log('[MOCK] Orden guardada en Airtable:', data.clienteNombre);
     return { id: 'mock_' + Date.now() };
   }
-  const record = await base('Ordenes').create({
+
+  // Auto-generate order number
+  let numeroOrden = 'OT-1';
+  try {
+    const existing = await base('Ordenes de Trabajo')
+      .select({ fields: ['ID'], sort: [{ field: 'ID', direction: 'desc' }], maxRecords: 1 })
+      .firstPage();
+    if (existing.length > 0) {
+      const lastId = parseInt(existing[0].get('ID') || '0', 10);
+      numeroOrden = `OT-${lastId + 1}`;
+    }
+  } catch {
+    numeroOrden = `OT-${Date.now()}`;
+  }
+
+  const record = await base('Ordenes de Trabajo').create({
+    'Numero orden': numeroOrden,
     'Fecha': data.fecha,
     'Estado': 'Completada',
-    'Cliente nombre': data.clienteNombre,
+    'Cliente': data.clienteNombre,
     'Cliente RUT': data.clienteRut,
     'Cliente email': data.clienteEmail,
     'Cliente telefono': data.clienteTelefono,
@@ -107,9 +130,8 @@ export async function crearOrdenEnAirtable(data) {
     'Observaciones': data.observaciones,
     'Personal': JSON.stringify(data.personal),
     'Patente vehiculo': data.patenteVehiculo,
-    'Total': data.total,
+    'Total': data.total || 0,
     'Metodo pago': data.metodoPago,
-    'Garantia': data.garantia,
     'Requiere factura': data.requiereFactura,
   });
   return { id: record.id };

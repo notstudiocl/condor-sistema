@@ -30,5 +30,6 @@ export const WIZARD_STEPS = [
   { id: 1, label: 'Cliente' },
   { id: 2, label: 'Trabajos' },
   { id: 3, label: 'Personal' },
-  { id: 4, label: 'Firma' },
+  { id: 4, label: 'Fotos' },
+  { id: 5, label: 'Firma' },
 ];
