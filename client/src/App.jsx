@@ -50,7 +50,7 @@ export default function App() {
 
   return (
     <HashRouter>
-      <div className="min-h-screen bg-gray-50 flex flex-col">
+      <div className="min-h-screen bg-white flex flex-col">
         <Header user={user} onLogout={handleLogout} />
         <main className="flex-1">
           <Routes>

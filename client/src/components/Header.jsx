@@ -1,12 +1,16 @@
 import { LogOut, User } from 'lucide-react';
 
+const logoUrl = import.meta.env.BASE_URL + 'condor-logo.png';
+
 export default function Header({ user, onLogout }) {
   return (
     <header className="bg-condor-900 text-white px-4 py-3 flex items-center justify-between shadow-lg sticky top-0 z-50">
       <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center font-heading font-bold text-sm tracking-wider">
-          CA
-        </div>
+        <img
+          src={logoUrl}
+          alt="Condor Alcantarillados"
+          className="h-8 w-auto brightness-0 invert"
+        />
         <div className="hidden sm:block">
           <p className="font-heading font-semibold text-sm leading-tight">
             Condor Alcantarillados

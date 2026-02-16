@@ -215,19 +215,19 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
             <button
               type="button"
               onClick={() => i < step && goToStep(i)}
-              className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+              className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors border-2 ${
                 i === step
-                  ? 'bg-condor-600 text-white'
+                  ? 'border-accent-600 bg-white text-accent-600'
                   : i < step
-                    ? 'bg-condor-200 text-condor-800 cursor-pointer'
-                    : 'bg-gray-200 text-gray-400'
+                    ? 'border-condor-900 bg-condor-900 text-white cursor-pointer'
+                    : 'border-gray-300 bg-white text-gray-400'
               }`}
             >
               {s.id}
             </button>
             <span
               className={`ml-1.5 text-xs font-medium hidden sm:inline ${
-                i === step ? 'text-condor-800' : 'text-gray-400'
+                i === step ? 'text-accent-600' : i < step ? 'text-condor-900' : 'text-gray-400'
               }`}
             >
               {s.label}
@@ -235,7 +235,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
             {i < WIZARD_STEPS.length - 1 && (
               <div
                 className={`flex-1 h-0.5 mx-2 rounded ${
-                  i < step ? 'bg-condor-300' : 'bg-gray-200'
+                  i < step ? 'bg-condor-900' : 'bg-gray-200'
                 }`}
               />
             )}
@@ -410,7 +410,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
                 key={t.nombre}
                 className={`rounded-xl border-2 transition-colors ${
                   t.checked
-                    ? 'border-condor-300 bg-condor-50'
+                    ? 'border-accent-200 bg-accent-50'
                     : 'border-gray-200 bg-white'
                 }`}
               >
@@ -420,19 +420,19 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
                   className="w-full flex items-center gap-3 px-4 py-3 text-left"
                 >
                   {t.checked ? (
-                    <CheckSquare size={22} className="text-condor-600 shrink-0" />
+                    <CheckSquare size={22} className="text-accent-600 shrink-0" />
                   ) : (
                     <Square size={22} className="text-gray-300 shrink-0" />
                   )}
                   <span
                     className={`text-sm font-medium flex-1 ${
-                      t.checked ? 'text-condor-900' : 'text-gray-600'
+                      t.checked ? 'text-gray-900' : 'text-gray-600'
                     }`}
                   >
                     {t.nombre}
                   </span>
                   {t.checked && (
-                    <span className="text-xs font-bold text-condor-700 bg-condor-200 px-2 py-0.5 rounded-full">
+                    <span className="text-xs font-bold text-white bg-accent-600 px-2 py-0.5 rounded-full">
                       {t.cantidad}
                     </span>
                   )}
@@ -446,13 +446,13 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
                     >
                       <Minus size={16} />
                     </button>
-                    <span className="text-lg font-bold text-condor-800 w-8 text-center">
+                    <span className="text-lg font-bold text-accent-700 w-8 text-center">
                       {t.cantidad}
                     </span>
                     <button
                       type="button"
                       onClick={() => updateCantidad(idx, 1)}
-                      className="w-9 h-9 rounded-lg bg-condor-600 text-white flex items-center justify-center active:bg-condor-700"
+                      className="w-9 h-9 rounded-lg bg-accent-600 text-white flex items-center justify-center active:bg-accent-700"
                     >
                       <Plus size={16} />
                     </button>
@@ -545,7 +545,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
                       value={v}
                       checked={form.requiereFactura === v}
                       onChange={(e) => updateField('requiereFactura', e.target.value)}
-                      className="accent-condor-600 w-4 h-4"
+                      className="accent-accent-600 w-4 h-4"
                     />
                     <span className="text-sm">{v}</span>
                   </label>
@@ -571,12 +571,12 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
               {form.personal.map((nombre, idx) => (
                 <div
                   key={idx}
-                  className="flex items-center justify-between bg-condor-50 border border-condor-200 rounded-xl px-4 py-2.5"
+                  className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5"
                 >
-                  <span className="text-sm font-medium text-condor-900">
+                  <span className="text-sm font-medium text-gray-900">
                     {nombre}
                     {idx === 0 && (
-                      <span className="text-xs text-condor-500 ml-2">(responsable)</span>
+                      <span className="text-xs text-condor-600 ml-2">(responsable)</span>
                     )}
                   </span>
                   {idx > 0 && (
@@ -661,7 +661,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
 
           <Summary data={form} onEdit={(s) => goToStep(s)} />
 
-          <div className="bg-white rounded-xl p-4 shadow-sm">
+          <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
             <p className="text-sm text-gray-500 mb-1">Supervisor</p>
             <p className="text-sm font-medium mb-3">{form.supervisor || '—'}</p>
             <SignaturePad
@@ -669,14 +669,14 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
             />
           </div>
 
-          <label className="flex items-start gap-3 bg-condor-50 rounded-xl p-4 cursor-pointer">
+          <label className="flex items-start gap-3 bg-gray-50 border border-gray-200 rounded-xl p-4 cursor-pointer">
             <input
               type="checkbox"
               checked={form.confirmado}
               onChange={(e) => updateField('confirmado', e.target.checked)}
-              className="accent-condor-600 w-5 h-5 mt-0.5 shrink-0"
+              className="accent-accent-600 w-5 h-5 mt-0.5 shrink-0"
             />
-            <span className="text-sm text-condor-900">
+            <span className="text-sm text-gray-900">
               Confirmo que los datos ingresados son correctos y que el trabajo fue
               realizado según lo descrito.
             </span>
