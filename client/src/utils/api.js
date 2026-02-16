@@ -32,7 +32,8 @@ export async function login(email, pin) {
 }
 
 export async function buscarClientes(query) {
-  const res = await fetch(`${API_URL}/clientes/buscar?q=${encodeURIComponent(query)}`);
+  const baseUrl = (import.meta.env.VITE_API_URL || 'https://clientes-condor-api.f8ihph.easypanel.host/api').replace(/\/api\/?$/, '');
+  const res = await fetch(`${baseUrl}/api/clientes/buscar?q=${encodeURIComponent(query)}`);
   return res.json();
 }
 
