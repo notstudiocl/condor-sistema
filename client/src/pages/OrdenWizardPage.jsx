@@ -180,7 +180,10 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
     };
 
     try {
-      await crearOrden(payload);
+      const result = await crearOrden(payload);
+      if (result?.offline) {
+        payload._offline = true;
+      }
     } catch {
       // Ignore backend errors — show confirmation anyway
     }

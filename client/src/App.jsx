@@ -4,6 +4,7 @@ import LoginPage from './pages/LoginPage';
 import OrdenWizardPage from './pages/OrdenWizardPage';
 import ConfirmacionPage from './pages/ConfirmacionPage';
 import Header from './components/Header';
+import OfflineIndicator from './components/OfflineIndicator';
 
 export default function App() {
   const [user, setUser] = useState(() => {
@@ -43,6 +44,7 @@ export default function App() {
   if (!user) {
     return (
       <HashRouter>
+        <OfflineIndicator />
         <LoginPage onLogin={handleLogin} />
       </HashRouter>
     );
@@ -50,6 +52,7 @@ export default function App() {
 
   return (
     <HashRouter>
+      <OfflineIndicator />
       <div className="min-h-screen bg-white flex flex-col">
         <Header user={user} onLogout={handleLogout} />
         <main className="flex-1">

@@ -1,23 +1,40 @@
-import { CheckCircle2, Plus } from 'lucide-react';
+import { CheckCircle2, Clock, Plus } from 'lucide-react';
 import { formatCLP, todayFormatted } from '../utils/helpers';
 
 export default function ConfirmacionPage({ orden, onNuevaOrden }) {
   const trabajosActivos = (orden.trabajos || []).filter((t) => t.cantidad > 0);
+  const isOffline = orden._offline === true;
 
   return (
     <div className="min-h-[calc(100vh-56px)] bg-white p-4 pb-8">
       <div className="max-w-md mx-auto pt-8">
-        {/* Success icon */}
+        {/* Success / Offline icon */}
         <div className="flex flex-col items-center mb-6">
-          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-4">
-            <CheckCircle2 size={48} className="text-green-500" />
-          </div>
-          <h1 className="text-gray-900 font-heading font-bold text-2xl">
-            Orden Enviada
-          </h1>
-          <p className="text-gray-500 text-sm mt-1">
-            La orden fue registrada exitosamente
-          </p>
+          {isOffline ? (
+            <>
+              <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mb-4">
+                <Clock size={48} className="text-amber-500" />
+              </div>
+              <h1 className="text-gray-900 font-heading font-bold text-2xl">
+                Orden Guardada
+              </h1>
+              <p className="text-gray-500 text-sm mt-1 text-center">
+                Se enviará automáticamente al recuperar conexión
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                <CheckCircle2 size={48} className="text-green-500" />
+              </div>
+              <h1 className="text-gray-900 font-heading font-bold text-2xl">
+                Orden Enviada
+              </h1>
+              <p className="text-gray-500 text-sm mt-1">
+                La orden fue registrada exitosamente
+              </p>
+            </>
+          )}
         </div>
 
         {/* Resumen */}
