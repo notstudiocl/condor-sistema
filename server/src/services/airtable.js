@@ -63,30 +63,33 @@ export async function getTecnicos() {
 // --- Clientes ---
 
 export async function buscarClientes(query) {
+  const cleanQuery = query.replace(/[.\-]/g, '').toLowerCase();
+  if (!cleanQuery) return [];
+
   if (MOCK_MODE) {
-    const q = query.toLowerCase().replace(/\./g, '');
-    return mockClientes.filter(
-      (c) =>
-        c.rut.replace(/\./g, '').toLowerCase().includes(q) ||
-        c.nombre.toLowerCase().includes(q)
+    return mockClientes.filter((c) =>
+      c.rut.replace(/[.\-]/g, '').toLowerCase().includes(cleanQuery)
     );
   }
-  const records = await base('Clientes')
-    .select({
-      filterByFormula: `SEARCH("${query}", {RUT})`,
-      maxRecords: 10,
+
+  // Fetch all clients and filter locally (few records, avoids Airtable format issues)
+  const records = await base('Clientes').select({ fields: ['RUT', 'Nombre', 'Email', 'Telefono', 'Direccion', 'Comuna', 'Tipo', 'Empresa'] }).firstPage();
+  return records
+    .filter((r) => {
+      const rut = (r.get('RUT') || '').replace(/[.\-]/g, '').toLowerCase();
+      return rut.includes(cleanQuery);
     })
-    .firstPage();
-  return records.map((r) => ({
-    rut: r.get('RUT'),
-    nombre: r.get('Nombre'),
-    email: r.get('Email'),
-    telefono: r.get('Telefono'),
-    direccion: r.get('Direccion'),
-    comuna: r.get('Comuna'),
-    tipo: r.get('Tipo'),
-    empresa: r.get('Empresa'),
-  }));
+    .slice(0, 10)
+    .map((r) => ({
+      rut: r.get('RUT'),
+      nombre: r.get('Nombre'),
+      email: r.get('Email'),
+      telefono: r.get('Telefono'),
+      direccion: r.get('Direccion'),
+      comuna: r.get('Comuna'),
+      tipo: r.get('Tipo'),
+      empresa: r.get('Empresa'),
+    }));
 }
 
 // --- Ordenes de Trabajo ---

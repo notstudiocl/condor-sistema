@@ -705,7 +705,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
                 ref={fotosAntesRef}
                 type="file"
                 accept="image/*"
-                capture="environment"
+
                 multiple
                 className="hidden"
                 onChange={(e) => handleFotoUpload(e, 'fotosAntes')}
@@ -748,7 +748,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
                 ref={fotosDespuesRef}
                 type="file"
                 accept="image/*"
-                capture="environment"
+
                 multiple
                 className="hidden"
                 onChange={(e) => handleFotoUpload(e, 'fotosDespues')}
