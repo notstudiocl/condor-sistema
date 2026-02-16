@@ -25,6 +25,9 @@ app.use('/uploads', express.static(uploadsDir));
 
 const uploadMulter = multer({ dest: uploadsDir });
 
+// Cache para prevenir duplicados (race condition)
+const procesandoOrdenes = new Set();
+
 setInterval(() => {
   try {
     const files = readdirSync(uploadsDir);
@@ -248,6 +251,29 @@ app.post('/api/ordenes', async (req, res) => {
 
     // --- PASO 0: Idempotency check ---
     const idempotencyKey = data.idempotencyKey;
+
+    // Check 1: Cache en memoria (previene race condition)
+    if (idempotencyKey) {
+      if (procesandoOrdenes.has(idempotencyKey)) {
+        console.log('Orden ya está siendo procesada (cache):', idempotencyKey);
+        return res.json({
+          success: true,
+          data: {
+            airtableOk: true,
+            recordId: null,
+            webhookOk: true,
+            webhookError: null,
+            webhookData: null,
+            duplicate: true,
+            message: 'Orden ya está siendo procesada',
+          },
+        });
+      }
+      procesandoOrdenes.add(idempotencyKey);
+      setTimeout(() => procesandoOrdenes.delete(idempotencyKey), 60000);
+    }
+
+    // Check 2: Airtable (por si el servidor se reinició)
     if (idempotencyKey) {
       try {
         const existing = await base('Ordenes de Trabajo').select({
@@ -256,7 +282,8 @@ app.post('/api/ordenes', async (req, res) => {
         }).firstPage();
 
         if (existing.length > 0) {
-          console.log('Orden duplicada detectada, devolviendo existente:', existing[0].id);
+          console.log('Orden duplicada encontrada en Airtable:', existing[0].id);
+          procesandoOrdenes.delete(idempotencyKey);
           return res.json({
             success: true,
             data: {
@@ -427,12 +454,14 @@ app.post('/api/ordenes', async (req, res) => {
     }
 
     // --- RESPUESTA ---
+    if (idempotencyKey) procesandoOrdenes.delete(idempotencyKey);
     console.log('5. Respondiendo - airtableOk: true, webhookOk:', webhookOk);
     res.json({
       success: true,
       data: { airtableOk: true, recordId: ordenRecordId, webhookOk, webhookError, webhookData },
     });
   } catch (error) {
+    if (data.idempotencyKey) procesandoOrdenes.delete(data.idempotencyKey);
     console.error('ERROR GENERAL:', error.message);
     res.json({ success: false, error: error.message });
   }

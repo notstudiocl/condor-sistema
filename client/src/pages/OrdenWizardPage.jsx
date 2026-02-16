@@ -82,8 +82,12 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState(initialFormData);
   const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
   const [sendingText, setSendingText] = useState('');
   const [confirmado, setConfirmado] = useState(false);
+
+  // Idempotency key — generated once per wizard session, reused on retry
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
 
   // RUT search with debounce
   const [searchResults, setSearchResults] = useState([]);
@@ -93,9 +97,6 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
   // Tecnicos
   const [tecnicos, setTecnicos] = useState([]);
   const [nuevoPersonal, setNuevoPersonal] = useState('');
-
-  // Idempotency key (generated once per submit, reused on retry)
-  const idempotencyKeyRef = useRef(null);
 
   // Photo refs
   const fotosAntesRef = useRef(null);
@@ -268,18 +269,14 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
   const goToStep = (s) => setStep(s);
 
   const handleSubmit = async () => {
-    if (sending) return;
+    if (sendingRef.current) return;
+    sendingRef.current = true;
     setSending(true);
     setSendingText('Preparando orden...');
 
-    // Generate idempotency key once (reuse on retry)
-    if (!idempotencyKeyRef.current) {
-      idempotencyKeyRef.current = crypto.randomUUID();
-    }
-
     const payload = {
       fecha: todayISO(),
-      idempotencyKey: idempotencyKeyRef.current,
+      idempotencyKey,
       clienteEmpresa: form.clienteEmpresa,
       clienteRut: form.clienteRut,
       clienteEmail: form.clienteEmail,
@@ -359,9 +356,9 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
     } catch (err) {
       payload._submitError = err.message || 'Error al enviar la orden';
     }
-    // Reset idempotency key on successful submit so next order gets a new one
-    if (!payload._submitError) {
-      idempotencyKeyRef.current = null;
+    if (payload._submitError) {
+      // Allow retry on error
+      sendingRef.current = false;
     }
     setSending(false);
     setSendingText('');
