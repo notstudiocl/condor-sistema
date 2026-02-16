@@ -25,6 +25,48 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+// Test envío completo (no auth, diagnostic)
+app.post('/api/test-envio', async (req, res) => {
+  try {
+    const webhookUrl = process.env.WEBHOOK_OT_N8N_URL;
+    const mockMode = process.env.MOCK_MODE === 'true';
+    const testData = {
+      numero_orden: 'TEST-001',
+      fecha: new Date().toISOString(),
+      cliente: 'Test Cliente',
+      rut: '12.345.678-9',
+      trabajos: [{ trabajo: 'Destape', cantidad: 1 }],
+      personal: ['Test Tecnico'],
+      test: true,
+    };
+
+    console.log('=== TEST ENVÍO ===');
+    console.log('MOCK_MODE:', mockMode);
+    console.log('WEBHOOK_URL:', webhookUrl || 'NO CONFIGURADA');
+
+    if (!webhookUrl) {
+      return res.json({ success: false, error: 'WEBHOOK_OT_N8N_URL no está configurada', mockMode });
+    }
+    if (mockMode) {
+      return res.json({ success: false, error: 'MOCK_MODE está activado, el webhook no se envía realmente', mockMode, webhookUrl });
+    }
+
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(testData),
+    });
+
+    const text = await response.text();
+    console.log('Test envío - respuesta:', response.status, text);
+
+    res.json({ success: true, status: response.status, response: text, dataSent: testData, webhookUrl, mockMode });
+  } catch (error) {
+    console.error('Test envío - error:', error);
+    res.json({ success: false, error: error.message, webhookUrl: process.env.WEBHOOK_OT_N8N_URL });
+  }
+});
+
 // Test webhook (no auth, diagnostic)
 app.get('/api/test-webhook', async (req, res) => {
   try {
