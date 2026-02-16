@@ -355,6 +355,7 @@ app.post('/api/ordenes', async (req, res) => {
     // --- PASO 4: Webhook ---
     let webhookOk = false;
     let webhookError = null;
+    let webhookData = null;
     const webhookUrl = process.env.WEBHOOK_OT_N8N_URL;
 
     if (webhookUrl) {
@@ -368,18 +369,25 @@ app.post('/api/ordenes', async (req, res) => {
         delete webhookPayload.fotosDespues;
         delete webhookPayload.firmaBase64;
 
-        const response = await fetch(webhookUrl, {
+        const webhookResponse = await fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(webhookPayload),
           signal: controller.signal,
         });
         clearTimeout(timeout);
+        webhookOk = webhookResponse.ok;
 
-        const responseText = await response.text();
-        console.log('4b. Webhook respuesta:', response.status, responseText);
-        webhookOk = response.ok;
-        if (!response.ok) webhookError = `Status ${response.status}: ${responseText}`;
+        try {
+          webhookData = await webhookResponse.json();
+        } catch (e) {
+          webhookData = null;
+        }
+
+        console.log('4b. Webhook respuesta:', webhookResponse.status, JSON.stringify(webhookData));
+        if (!webhookResponse.ok) {
+          webhookError = webhookData?.message || `HTTP ${webhookResponse.status}`;
+        }
       } catch (err) {
         console.error('4. Webhook error:', err.message);
         webhookError = err.message;
@@ -392,7 +400,7 @@ app.post('/api/ordenes', async (req, res) => {
     console.log('5. Respondiendo - airtableOk: true, webhookOk:', webhookOk);
     res.json({
       success: true,
-      data: { airtableOk: true, recordId: ordenRecordId, webhookOk, webhookError },
+      data: { airtableOk: true, recordId: ordenRecordId, webhookOk, webhookError, webhookData },
     });
   } catch (error) {
     console.error('ERROR GENERAL:', error.message);
@@ -475,6 +483,7 @@ app.put('/api/ordenes/:recordId', async (req, res) => {
     // Webhook
     let webhookOk = false;
     let webhookError = null;
+    let webhookData = null;
     const webhookUrl = process.env.WEBHOOK_OT_N8N_URL;
     if (webhookUrl) {
       try {
@@ -484,21 +493,30 @@ app.put('/api/ordenes/:recordId', async (req, res) => {
         delete webhookPayload.fotosAntes;
         delete webhookPayload.fotosDespues;
         delete webhookPayload.firmaBase64;
-        const response = await fetch(webhookUrl, {
+        const webhookResponse = await fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(webhookPayload),
           signal: controller.signal,
         });
         clearTimeout(timeout);
-        webhookOk = response.ok;
-        if (!response.ok) webhookError = `Status ${response.status}: ${await response.text()}`;
+        webhookOk = webhookResponse.ok;
+
+        try {
+          webhookData = await webhookResponse.json();
+        } catch (e) {
+          webhookData = null;
+        }
+
+        if (!webhookResponse.ok) {
+          webhookError = webhookData?.message || `HTTP ${webhookResponse.status}`;
+        }
       } catch (err) {
         webhookError = err.message;
       }
     }
 
-    res.json({ success: true, data: { airtableOk: true, recordId, webhookOk, webhookError } });
+    res.json({ success: true, data: { airtableOk: true, recordId, webhookOk, webhookError, webhookData } });
   } catch (error) {
     console.error('Error actualizando orden:', error);
     res.json({ success: false, error: error.message });
