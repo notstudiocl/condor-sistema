@@ -1,19 +1,20 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, Edit3, RotateCcw, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Loader2, RotateCcw, FileText, X } from 'lucide-react';
 import { formatCLP } from '../utils/helpers';
 
 const API_URL = (import.meta.env.VITE_API_URL || 'https://clientes-condor-api.f8ihph.easypanel.host/api').replace(/\/api\/?$/, '');
 
 function EstadoBadge({ estado }) {
   const styles = {
-    Enviada: 'bg-blue-100 text-blue-700',
-    Completada: 'bg-green-100 text-green-700',
-    Error: 'bg-red-100 text-red-700',
-    Pendiente: 'bg-amber-100 text-amber-700',
+    Enviada: 'bg-blue-500 text-white',
+    Completada: 'bg-emerald-500 text-white',
+    Error: 'bg-red-500 text-white',
+    Pendiente: 'bg-amber-400 text-black',
+    Facturada: 'bg-purple-500 text-white',
   };
   return (
-    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${styles[estado] || 'bg-gray-100 text-gray-600'}`}>
+    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${styles[estado] || 'bg-gray-400 text-white'}`}>
       {estado}
     </span>
   );
@@ -29,12 +30,47 @@ function Field({ label, value }) {
   );
 }
 
+function PhotoViewer({ fotos, initialIndex, onClose }) {
+  const [index, setIndex] = useState(initialIndex);
+  const foto = fotos[index];
+
+  const handlePrev = () => setIndex((i) => (i > 0 ? i - 1 : fotos.length - 1));
+  const handleNext = () => setIndex((i) => (i < fotos.length - 1 ? i + 1 : 0));
+
+  return (
+    <div className="fixed inset-0 bg-black z-[100] flex flex-col" onClick={onClose}>
+      <div className="flex items-center justify-between p-4">
+        <span className="text-white/60 text-sm">{index + 1} / {fotos.length}</span>
+        <button onClick={onClose} className="p-2 text-white/80 hover:text-white">
+          <X size={24} />
+        </button>
+      </div>
+      <div className="flex-1 flex items-center justify-center px-4" onClick={(e) => e.stopPropagation()}>
+        <img src={foto.url} alt="" className="max-w-full max-h-full object-contain" />
+      </div>
+      {fotos.length > 1 && (
+        <div className="flex justify-center gap-6 p-4" onClick={(e) => e.stopPropagation()}>
+          <button onClick={handlePrev} className="px-6 py-3 bg-white/10 text-white rounded-xl text-sm font-medium active:bg-white/20">
+            Anterior
+          </button>
+          <button onClick={handleNext} className="px-6 py-3 bg-white/10 text-white rounded-xl text-sm font-medium active:bg-white/20">
+            Siguiente
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DetalleOrdenPage() {
   const { recordId } = useParams();
   const navigate = useNavigate();
   const [orden, setOrden] = useState(null);
   const [loading, setLoading] = useState(true);
   const [reenviando, setReenviando] = useState(false);
+  const [reenvioMsg, setReenvioMsg] = useState(null);
+  const [viewerFotos, setViewerFotos] = useState(null);
+  const [viewerIndex, setViewerIndex] = useState(0);
 
   useEffect(() => {
     const cargar = async () => {
@@ -53,37 +89,27 @@ export default function DetalleOrdenPage() {
   }, [recordId]);
 
   const handleReenviar = async () => {
-    if (!orden) return;
+    if (reenviando) return;
     setReenviando(true);
+    setReenvioMsg(null);
     try {
-      const webhookUrl = `${API_URL}/api/ordenes/${recordId}`;
-      await fetch(webhookUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clienteEmpresa: orden.clienteEmpresa,
-          clienteEmail: orden.email,
-          clienteTelefono: orden.telefono,
-          direccion: orden.direccion,
-          comuna: orden.comuna,
-          ordenCompra: orden.ordenCompra,
-          supervisor: orden.supervisor,
-          horaInicio: orden.horaInicio,
-          horaTermino: orden.horaTermino,
-          trabajos: orden.trabajos,
-          descripcion: orden.descripcion,
-          observaciones: orden.observaciones,
-          patenteVehiculo: orden.patente,
-          total: orden.total,
-          metodoPago: orden.metodoPago,
-          requiereFactura: orden.requiereFactura,
-        }),
-      });
-      navigate('/');
-    } catch {
+      const res = await fetch(`${API_URL}/api/ordenes/${recordId}/reenviar`, { method: 'POST' });
+      const result = await res.json();
+      if (result?.data?.webhookOk) {
+        setReenvioMsg({ ok: true, text: 'Orden reenviada correctamente' });
+      } else {
+        setReenvioMsg({ ok: false, text: result?.data?.webhookError || 'Error al reenviar' });
+      }
+    } catch (err) {
+      setReenvioMsg({ ok: false, text: err.message });
     } finally {
       setReenviando(false);
     }
+  };
+
+  const openViewer = (fotos, index) => {
+    setViewerFotos(fotos);
+    setViewerIndex(index);
   };
 
   if (loading) {
@@ -98,7 +124,7 @@ export default function DetalleOrdenPage() {
     return (
       <div className="min-h-[calc(100vh-56px)] flex flex-col items-center justify-center p-4">
         <p className="text-gray-400 mb-4">Orden no encontrada</p>
-        <button onClick={() => navigate('/')} className="btn-secondary px-4 py-2">Volver</button>
+        <button onClick={() => navigate('/')} className="btn-secondary px-4 py-2 rounded-xl">Volver</button>
       </div>
     );
   }
@@ -106,13 +132,14 @@ export default function DetalleOrdenPage() {
   let trabajos = [];
   try { trabajos = typeof orden.trabajos === 'string' ? JSON.parse(orden.trabajos) : orden.trabajos || []; } catch { trabajos = []; }
   const trabajosActivos = trabajos.filter(t => t.cantidad > 0);
+  const hasPdf = orden.pdf && orden.pdf.length > 0;
 
   return (
     <div className="min-h-[calc(100vh-56px)] bg-gray-50">
       <div className="max-w-lg mx-auto px-4 pt-4 pb-8">
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => navigate('/')} className="p-2 rounded-xl hover:bg-gray-200 transition-colors">
+          <button onClick={() => navigate('/')} className="p-2.5 rounded-xl hover:bg-gray-200 active:bg-gray-300 transition-colors">
             <ArrowLeft size={20} className="text-gray-600" />
           </button>
           <div className="flex-1">
@@ -122,26 +149,29 @@ export default function DetalleOrdenPage() {
           <EstadoBadge estado={orden.estado} />
         </div>
 
-        {/* Cliente */}
-        <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm mb-4">
-          <h3 className="font-heading font-semibold text-condor-900 mb-2">Cliente</h3>
+        {/* Información del Cliente */}
+        <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm mb-3">
+          <h3 className="font-heading font-semibold text-condor-900 mb-2">Información del Cliente</h3>
           <Field label="Cliente / Empresa" value={orden.clienteEmpresa} />
-          <Field label="RUT" value={typeof orden.clienteRut === 'object' ? '' : orden.clienteRut} />
+          <Field label="Supervisor / Encargado" value={orden.supervisor} />
           <Field label="Email" value={orden.email} />
-          <Field label="Telefono" value={orden.telefono} />
-          <Field label="Direccion" value={orden.direccion} />
+          <Field label="Teléfono" value={orden.telefono} />
+          <Field label="Dirección" value={orden.direccion} />
           <Field label="Comuna" value={orden.comuna} />
           <Field label="Orden de Compra" value={orden.ordenCompra} />
-          <Field label="Supervisor / Encargado" value={orden.supervisor} />
-          <Field label="Inicio" value={orden.horaInicio} />
-          <Field label="Termino" value={orden.horaTermino} />
         </div>
 
-        {/* Trabajos */}
-        <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm mb-4">
-          <h3 className="font-heading font-semibold text-condor-900 mb-2">Trabajos Realizados</h3>
+        {/* Trabajo */}
+        <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm mb-3">
+          <h3 className="font-heading font-semibold text-condor-900 mb-2">Trabajo</h3>
+          {(orden.horaInicio || orden.horaTermino) && (
+            <div className="flex gap-2 mb-2">
+              {orden.horaInicio && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-lg">Inicio: {orden.horaInicio}</span>}
+              {orden.horaTermino && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-lg">Término: {orden.horaTermino}</span>}
+            </div>
+          )}
           {trabajosActivos.length > 0 ? (
-            <div className="space-y-1">
+            <div className="space-y-1 mb-2">
               {trabajosActivos.map((t, i) => (
                 <div key={i} className="flex justify-between py-1 border-b border-gray-100 last:border-0">
                   <span className="text-sm text-gray-700">{t.trabajo || t.nombre}</span>
@@ -150,57 +180,65 @@ export default function DetalleOrdenPage() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-gray-400">Sin trabajos</p>
+            <p className="text-sm text-gray-400 mb-2">Sin trabajos</p>
           )}
-          <Field label="Descripcion" value={orden.descripcion} />
+          <Field label="Descripción" value={orden.descripcion} />
           <Field label="Observaciones" value={orden.observaciones} />
-          <div className="mt-2 pt-2 border-t border-gray-200">
-            <Field label="Total" value={formatCLP(orden.total)} />
-            <Field label="Metodo de Pago" value={orden.metodoPago} />
-            <Field label="Requiere Factura" value={orden.requiereFactura} />
-          </div>
         </div>
 
-        {/* Personal */}
-        <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm mb-4">
-          <h3 className="font-heading font-semibold text-condor-900 mb-2">Personal</h3>
+        {/* Equipo */}
+        <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm mb-3">
+          <h3 className="font-heading font-semibold text-condor-900 mb-2">Equipo</h3>
           <Field label="Patente" value={orden.patente} />
         </div>
 
-        {/* Fotos */}
-        {(orden.fotosAntes.length > 0 || orden.fotosDespues.length > 0) && (
-          <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm mb-4">
-            <h3 className="font-heading font-semibold text-condor-900 mb-2">Fotos</h3>
-            {orden.fotosAntes.length > 0 && (
-              <div className="mb-3">
-                <p className="text-xs text-gray-400 mb-1">Antes ({orden.fotosAntes.length})</p>
-                <div className="flex gap-2 flex-wrap">
-                  {orden.fotosAntes.map((f, i) => (
-                    <a key={i} href={f.url} target="_blank" rel="noopener noreferrer" className="w-16 h-16 rounded-lg overflow-hidden bg-gray-100 block">
-                      <img src={f.url} alt={`Antes ${i+1}`} className="w-full h-full object-cover" />
-                    </a>
-                  ))}
-                </div>
-              </div>
-            )}
-            {orden.fotosDespues.length > 0 && (
-              <div>
-                <p className="text-xs text-gray-400 mb-1">Despues ({orden.fotosDespues.length})</p>
-                <div className="flex gap-2 flex-wrap">
-                  {orden.fotosDespues.map((f, i) => (
-                    <a key={i} href={f.url} target="_blank" rel="noopener noreferrer" className="w-16 h-16 rounded-lg overflow-hidden bg-gray-100 block">
-                      <img src={f.url} alt={`Despues ${i+1}`} className="w-full h-full object-cover" />
-                    </a>
-                  ))}
-                </div>
-              </div>
-            )}
+        {/* Pago */}
+        <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm mb-3">
+          <h3 className="font-heading font-semibold text-condor-900 mb-2">Pago</h3>
+          <Field label="Total" value={formatCLP(orden.total)} />
+          <Field label="Método de Pago" value={orden.metodoPago} />
+          <Field label="Requiere Factura" value={orden.requiereFactura} />
+        </div>
+
+        {/* Fotos Antes */}
+        {orden.fotosAntes && orden.fotosAntes.length > 0 && (
+          <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm mb-3">
+            <h3 className="font-heading font-semibold text-condor-900 mb-2">Fotos Antes ({orden.fotosAntes.length})</h3>
+            <div className="grid grid-cols-3 gap-2">
+              {orden.fotosAntes.map((f, i) => (
+                <button
+                  key={i}
+                  onClick={() => openViewer(orden.fotosAntes, i)}
+                  className="aspect-square rounded-xl overflow-hidden bg-gray-100"
+                >
+                  <img src={f.url} alt={`Antes ${i + 1}`} className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Fotos Después */}
+        {orden.fotosDespues && orden.fotosDespues.length > 0 && (
+          <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm mb-3">
+            <h3 className="font-heading font-semibold text-condor-900 mb-2">Fotos Después ({orden.fotosDespues.length})</h3>
+            <div className="grid grid-cols-3 gap-2">
+              {orden.fotosDespues.map((f, i) => (
+                <button
+                  key={i}
+                  onClick={() => openViewer(orden.fotosDespues, i)}
+                  className="aspect-square rounded-xl overflow-hidden bg-gray-100"
+                >
+                  <img src={f.url} alt={`Después ${i + 1}`} className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
         {/* Firma */}
         {orden.firma && orden.firma.length > 0 && (
-          <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm mb-4">
+          <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm mb-3">
             <h3 className="font-heading font-semibold text-condor-900 mb-2">Firma</h3>
             <div className="w-48 h-24 border border-gray-200 rounded-lg overflow-hidden bg-white">
               <img src={orden.firma[0].url} alt="Firma" className="w-full h-full object-contain" />
@@ -208,34 +246,64 @@ export default function DetalleOrdenPage() {
           </div>
         )}
 
-        {/* Botones de accion */}
-        <div className="space-y-3 mt-6">
-          {(orden.estado === 'Error' || orden.estado === 'Pendiente') && (
+        {/* PDF */}
+        <div className="mb-3">
+          {hasPdf ? (
+            <button
+              onClick={() => window.open(orden.pdf[0].url, '_blank')}
+              className="w-full bg-condor-900 hover:bg-condor-800 active:bg-condor-700 text-white font-bold rounded-2xl py-4 text-sm transition-colors flex items-center justify-center gap-2 shadow-lg"
+            >
+              <FileText size={20} />
+              Ver PDF de la Orden
+            </button>
+          ) : (
+            <button
+              disabled
+              className="w-full bg-gray-200 text-gray-400 font-semibold rounded-2xl py-4 text-sm cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              <FileText size={20} />
+              PDF pendiente de generar
+            </button>
+          )}
+        </div>
+
+        {/* Reenvío message */}
+        {reenvioMsg && (
+          <div className={`rounded-2xl p-3 mb-3 text-sm font-medium text-center ${reenvioMsg.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+            {reenvioMsg.text}
+          </div>
+        )}
+
+        {/* Botones de acción */}
+        <div className="space-y-3 mt-4">
+          {(orden.estado === 'Error' || orden.estado === 'Pendiente' || !hasPdf) && (
             <button
               onClick={handleReenviar}
               disabled={reenviando}
-              className="w-full bg-accent-600 hover:bg-accent-700 disabled:opacity-50 text-white font-bold rounded-2xl py-4 text-sm transition-colors flex items-center justify-center gap-2"
+              className="w-full bg-accent-600 hover:bg-accent-700 active:bg-accent-800 disabled:opacity-50 text-white font-bold rounded-2xl py-4 text-sm transition-colors flex items-center justify-center gap-2"
             >
               {reenviando ? <Loader2 size={18} className="animate-spin" /> : <RotateCcw size={18} />}
-              {reenviando ? 'Reenviando...' : 'Reintentar Envio'}
+              {reenviando ? 'Reenviando...' : 'Reintentar Envío'}
             </button>
           )}
           <button
-            onClick={() => navigate(`/orden/${recordId}/editar`)}
-            className="w-full bg-condor-900 hover:bg-condor-800 text-white font-semibold rounded-2xl py-4 text-sm transition-colors flex items-center justify-center gap-2"
-          >
-            <Edit3 size={18} />
-            Editar y Reenviar
-          </button>
-          <button
             onClick={() => navigate('/')}
-            className="w-full btn-secondary py-3 rounded-2xl flex items-center justify-center gap-2"
+            className="w-full btn-secondary py-3.5 rounded-2xl flex items-center justify-center gap-2 text-sm"
           >
             <ArrowLeft size={18} />
             Volver al Inicio
           </button>
         </div>
       </div>
+
+      {/* Photo Viewer Modal */}
+      {viewerFotos && (
+        <PhotoViewer
+          fotos={viewerFotos}
+          initialIndex={viewerIndex}
+          onClose={() => setViewerFotos(null)}
+        />
+      )}
     </div>
   );
 }

@@ -199,7 +199,7 @@ app.get('/api/ordenes', async (req, res) => {
     const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
 
     const records = await base('Ordenes de Trabajo').select({
-      sort: [{ field: 'Fecha', direction: 'desc' }],
+      sort: [{ field: 'Creada', direction: 'desc' }],
       maxRecords: 50,
     }).firstPage();
 
@@ -229,6 +229,7 @@ app.get('/api/ordenes', async (req, res) => {
       fotosAntes: (r.get('Fotos Antes') || []).map(f => ({ url: f.url, filename: f.filename })),
       fotosDespues: (r.get('Fotos Despues') || []).map(f => ({ url: f.url, filename: f.filename })),
       firma: (r.get('Firma') || []).map(f => ({ url: f.url })),
+      pdf: (r.get('PDF') || []).map(f => ({ url: f.url, filename: f.filename })),
       creada: r.get('Creada') || '',
     }));
 
@@ -578,6 +579,76 @@ app.put('/api/ordenes/:recordId', async (req, res) => {
     res.json({ success: true, data: { airtableOk: true, recordId, webhookOk, webhookError, webhookData } });
   } catch (error) {
     console.error('Error actualizando orden:', error);
+    res.json({ success: false, error: error.message });
+  }
+});
+
+// POST reenviar orden al webhook
+app.post('/api/ordenes/:recordId/reenviar', async (req, res) => {
+  try {
+    const { recordId } = req.params;
+    console.log('=== REENVIANDO ORDEN ===', recordId);
+
+    const Airtable = (await import('airtable')).default;
+    const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
+
+    const record = await base('Ordenes de Trabajo').find(recordId);
+
+    const webhookPayload = {
+      airtableRecordId: recordId,
+      accion: 'reenviar',
+      fecha: record.get('Fecha'),
+      clienteEmpresa: record.get('Cliente / Empresa'),
+      supervisor: record.get('Supervisor'),
+      email: record.get('Cliente email'),
+      telefono: record.get('Cliente telefono'),
+      direccion: record.get('Direccion'),
+      comuna: record.get('Comuna'),
+      ordenCompra: record.get('Orden compra'),
+      horaInicio: record.get('Hora inicio'),
+      horaTermino: record.get('Hora termino'),
+      trabajos: record.get('Trabajos realizados'),
+      descripcion: record.get('Descripcion trabajo'),
+      observaciones: record.get('Observaciones'),
+      patente: record.get('Patente vehiculo'),
+      total: record.get('Total'),
+      metodoPago: record.get('Metodo pago'),
+      requiereFactura: record.get('Requiere factura'),
+      personal: record.get('Empleados') || [],
+    };
+
+    let webhookOk = false;
+    let webhookError = null;
+    let webhookData = null;
+    const webhookUrl = process.env.WEBHOOK_OT_N8N_URL;
+
+    if (webhookUrl) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000);
+        const webhookResponse = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(webhookPayload),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        webhookOk = webhookResponse.ok;
+        try { webhookData = await webhookResponse.json(); } catch (e) { webhookData = null; }
+        if (!webhookResponse.ok) {
+          webhookError = webhookData?.message || `HTTP ${webhookResponse.status}`;
+        }
+      } catch (err) {
+        webhookError = err.message;
+      }
+    } else {
+      webhookError = 'WEBHOOK_OT_N8N_URL no configurada';
+    }
+
+    console.log('Reenvío resultado - webhookOk:', webhookOk);
+    res.json({ success: true, data: { webhookOk, webhookError, webhookData } });
+  } catch (error) {
+    console.error('Error reenviando orden:', error);
     res.json({ success: false, error: error.message });
   }
 });
