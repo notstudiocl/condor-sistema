@@ -47,14 +47,14 @@ condor-sistema/
 │   │   ├── routes/        # auth.js, tecnicos.js, clientes.js
 │   │   ├── services/      # airtable.js (read-only: clientes, empleados, login)
 │   │   └── index.js       # Main server + ordenes endpoint + public endpoints
-│   └── uploads/           # Temp photo storage (auto-cleaned every 30min)
+│   └── uploads/           # Temp photo/PDF storage (auto-cleaned every 30min)
 ├── CLAUDE.md        # Este archivo
 └── package.json     # Scripts raíz del monorepo
 ```
 
 **Stack:**
 - Frontend: React 18, Vite, Tailwind CSS 3, React Router (HashRouter), Lucide React icons
-- Backend: Express, Airtable API, JWT auth simple
+- Backend: Express, Airtable API, JWT auth simple, Multer (upload PDF)
 - DB: Airtable (linked records)
 - Automatización: n8n vía webhooks
 - Deploy: GitHub Pages (frontend) + EasyPanel/Docker (backend)
@@ -62,18 +62,35 @@ condor-sistema/
 ## Flujo de envío de órdenes
 
 Al presionar "Enviar Orden":
+0. Verificar idempotency key (prevenir duplicados por race condition o reconexión)
 1. Si es cliente nuevo (no vino de búsqueda), crear cliente en Airtable tabla "Clientes"
-2. Guardar orden en Airtable tabla "Ordenes de Trabajo" (con linked records)
-3. Subir fotos como attachments en Airtable (base64 → archivo → URL → Airtable attachment)
+2. Guardar orden en Airtable tabla "Ordenes de Trabajo" (con linked records + idempotency key)
+3. Subir fotos + firma como attachments en Airtable (base64 → archivo → URL → Airtable attachment)
 4. Enviar webhook a n8n con todos los datos + recordId de Airtable (sin fotos/firma base64)
-5. Esperar respuesta del webhook (timeout 30s)
-6. Responder al frontend con resultado de todo
+5. Leer respuesta JSON del webhook (incluye pdfUrl, numeroOrden, etc.)
+6. Responder al frontend con resultado de todo + webhookData
+
+### Idempotency (prevención de duplicados)
+
+Protección en 3 niveles:
+1. **Frontend — useRef guard**: `sendingRef` bloquea instantáneamente (sin esperar re-render)
+2. **Backend — Set en memoria** (`procesandoOrdenes`): Bloquea requests concurrentes con mismo key. Auto-limpia en 60s
+3. **Backend — Airtable check**: Busca campo "Idempotency Key" como respaldo si el servidor se reinició
+
+El `idempotencyKey` se genera una vez al montar el wizard (`useState(() => crypto.randomUUID())`). Se reutiliza en reintentos, y cada nueva orden genera un key nuevo.
 
 ### Linked Records (IMPORTANTE)
 
 - **"Cliente RUT"** en Ordenes de Trabajo es un LINKED RECORD a tabla Clientes → se pasa como `[recordId]`
 - **"Empleados"** en Ordenes de Trabajo es un LINKED RECORD a tabla Empleados → se pasa como `[recordId1, recordId2, ...]`
 - Los record IDs de Airtable se obtienen al buscar clientes, listar técnicos, y al hacer login
+
+### Mapeo Cliente / Supervisor (IMPORTANTE)
+
+- **"Cliente / Empresa"** en Ordenes = nombre de la EMPRESA (ej: "Burger King")
+- **"Supervisor"** en Ordenes = nombre de la PERSONA de contacto (ej: "Carla Curififil")
+- Al buscar RUT y seleccionar cliente: `Clientes.Empresa` → clienteEmpresa, `Clientes.Nombre` → supervisor
+- Al crear cliente nuevo: `supervisor` → Clientes.Nombre, `clienteEmpresa` → Clientes.Empresa
 
 ### Campos que NO se envían a Airtable
 
@@ -85,14 +102,14 @@ Al presionar "Enviar Orden":
 - Fecha de la orden (auto: hoy)
 
 ### Datos del cliente
+- Cliente / Empresa (nombre de la empresa)
+- Supervisor / Encargado (nombre de la persona de contacto)
+- RUT (formato chileno: 12.345.678-9, con búsqueda autocompletado desde Airtable)
 - Correo electrónico
 - Teléfono
 - Dirección
-- Cliente / Nombre
-- RUT (formato chileno: 12.345.678-9, con búsqueda autocompletado desde Airtable)
 - Comuna
 - Orden de Compra (opcional, para clientes empresa)
-- Supervisor / Encargado
 
 ### Horarios
 - Hora Inicio (datetime-local)
@@ -137,7 +154,7 @@ Al presionar "Enviar Orden":
 
 ## Flujo del Wizard (5 pasos)
 
-1. **Cliente**: RUT (con búsqueda pública, sin auth), nombre, email, teléfono, dirección, comuna, OC, supervisor, horarios
+1. **Cliente**: RUT (con búsqueda pública, sin auth), cliente/empresa, supervisor/encargado, email, teléfono, dirección, comuna, OC, horarios
 2. **Trabajos**: Checklist de trabajos con cantidad, descripción, observaciones, pago
 3. **Personal**: Patente vehículo, personal asignado, chips de técnicos de Airtable, agregar persona externa
 4. **Fotos**: Fotos antes y después (camera o galería)
@@ -153,15 +170,20 @@ Al presionar "Enviar Orden":
 | `/orden/:recordId/editar` | OrdenWizardPage (editMode) | Editar y reenviar una orden existente |
 | `/confirmacion` | ConfirmacionPage | Resultado del envío con colores según estado |
 
+### Navegación
+- **Header**: Logo (link al dashboard) + botón "← Inicio" + nombre usuario + cerrar sesión
+- **ConfirmacionPage**: Botón "Nueva Orden" (→ /orden/nueva) + botón "Ir al Inicio" (→ /)
+
 ### DashboardPage
 - Botón rojo "Nueva Orden de Trabajo" en la parte superior
 - Lista de órdenes desde Airtable (`GET /api/ordenes`)
-- Cards con: número de orden, fecha, estado (badge de color), cliente, trabajos, total
+- Cards con: número de orden, fecha, estado (badge de color), cliente/empresa, trabajos, total
 - Click en card navega al detalle (`/orden/:recordId`)
 - Botón de refresh, estados de carga y vacío
 
 ### DetalleOrdenPage
 - Vista completa de todos los campos de la orden
+- Labels: "Cliente / Empresa", "Supervisor / Encargado"
 - Fotos antes/después como thumbnails (URLs de Airtable)
 - Firma del supervisor (URL de Airtable)
 - Botón "Reintentar Envío" para órdenes con estado Error/Pendiente (PUT request)
@@ -175,19 +197,56 @@ Al presionar "Enviar Orden":
 - Título paso 5: "Editar y Reenviar" en vez de "Resumen y Firma"
 - Botón: "Actualizar y Reenviar" en vez de "Enviar Orden de Trabajo"
 
+### ConfirmacionPage (detallada)
+- Fondo coloreado según estado (verde/amarillo/rojo)
+- Número de orden destacado en grande (de webhookData.numeroOrden)
+- Card blanca con checks detallados de cada paso:
+  - ✅/❌ Registro creado en Airtable
+  - ✅/❌ Fotos subidas correctamente
+  - ✅/❌ Firma guardada
+  - ✅/❌ PDF generado (de webhookData.pdfGenerado)
+  - ✅/❌ Orden procesada por n8n
+  - 📄 Número de orden (azul #1E3A8A)
+- Colores checks: verde #065F46 para OK, rojo #991B1B para errores
+- Si es duplicado: pill "Esta orden ya fue registrada anteriormente"
+- Botones: Reintentar (si error), Nueva Orden, Ir al Inicio
+
 ## API Endpoints
 
 ```
 POST   /api/auth/login          # Login con email + PIN (devuelve recordId del empleado)
 GET    /api/tecnicos-lista       # Listar técnicos activos (público, sin auth, incluye recordId)
-GET    /api/clientes/buscar?q=   # Buscar clientes por RUT/nombre (público, sin auth, incluye recordId)
-GET    /api/ordenes              # Listar todas las órdenes (público, con attachments URLs)
-POST   /api/ordenes              # Crear orden → Airtable + fotos + firma + webhook n8n (público)
+GET    /api/clientes/buscar?q=   # Buscar clientes por RUT/nombre (público, sin auth, incluye recordId, nombre, empresa)
+GET    /api/ordenes              # Listar todas las órdenes (público, con attachments URLs, campo clienteEmpresa)
+POST   /api/ordenes              # Crear orden → idempotency check → Airtable + fotos + firma + webhook n8n
 PUT    /api/ordenes/:recordId    # Actualizar orden → Airtable + re-upload attachments + webhook con accion:'actualizar'
+POST   /api/upload-pdf           # Recibir PDF desde n8n (multipart, multer) y servir públicamente
 GET    /api/health               # Health check
 GET    /api/test-webhook         # Diagnóstico: test webhook connectivity
 POST   /api/test-envio           # Diagnóstico: simula envío completo
 GET    /api/clientes/test        # Diagnóstico: test Airtable clientes
+```
+
+### Respuesta de POST /api/ordenes
+```json
+{
+  "success": true,
+  "data": {
+    "airtableOk": true,
+    "recordId": "recXXX",
+    "webhookOk": true,
+    "webhookError": null,
+    "webhookData": {
+      "success": true,
+      "message": "Orden procesada correctamente",
+      "numeroOrden": "OT009",
+      "pdfUrl": "https://clientes-condor-api.../uploads/xxx.pdf",
+      "pdfGenerado": true,
+      "airtableActualizado": true
+    },
+    "duplicate": false
+  }
+}
 ```
 
 ## Variables de entorno
@@ -212,7 +271,7 @@ VITE_API_URL=http://localhost:3001/api
 ## Airtable — Estructura de tablas
 
 ### Tabla "Ordenes de Trabajo"
-Campos: Fecha, Estado (Enviada/Completada/Facturada), Cliente, Cliente RUT (LINKED RECORD → Clientes), Cliente email, Cliente telefono, Direccion, Comuna, Orden compra, Supervisor, Hora inicio, Hora termino, Trabajos realizados (JSON string), Descripcion trabajo, Observaciones, Empleados (LINKED RECORD → Empleados), Patente vehiculo, Total, Metodo pago, Requiere factura, Garantia, Fotos Antes (attachment), Fotos Despues (attachment), Firma (attachment)
+Campos: Fecha, Estado (Enviada/Completada/Facturada), Cliente / Empresa, Cliente RUT (LINKED RECORD → Clientes), Cliente email, Cliente telefono, Direccion, Comuna, Orden compra, Supervisor, Hora inicio, Hora termino, Trabajos realizados (JSON string), Descripcion trabajo, Observaciones, Empleados (LINKED RECORD → Empleados), Patente vehiculo, Total, Metodo pago, Requiere factura, Garantia, Fotos Antes (attachment), Fotos Despues (attachment), Firma (attachment), Idempotency Key (single line text)
 
 Campos automáticos (NO enviar): Numero orden, ID, Creada
 
@@ -220,7 +279,7 @@ Campos automáticos (NO enviar): Numero orden, ID, Creada
 Campos: ID, Nombre, Email, Pin Acceso, Telefono, Especialidad, Estado (Activo/Inactivo)
 
 ### Tabla "Clientes"
-Campos: RUT, Nombre, Email, Telefono, Direccion, Comuna, Tipo, Empresa
+Campos: RUT, Nombre (persona de contacto), Email, Telefono, Direccion, Comuna, Tipo, Empresa (nombre empresa)
 
 ## Webhook payload (n8n)
 
@@ -228,14 +287,14 @@ Al crear una orden se envía POST al webhook (sin fotos/firma base64 para no hac
 ```json
 {
   "fecha": "2026-02-16",
-  "clienteNombre": "Juan Pérez",
+  "clienteEmpresa": "Burger King",
   "clienteRut": "12.345.678-9",
-  "clienteEmail": "juan@mail.com",
+  "clienteEmail": "contacto@bk.cl",
   "clienteTelefono": "+56 9 1234 5678",
   "direccion": "Av. Los Leones 1234",
   "comuna": "Providencia",
   "ordenCompra": "OC-001",
-  "supervisor": "María González",
+  "supervisor": "Carla Curififil",
   "horaInicio": "2026-02-16T08:30",
   "horaTermino": "2026-02-16T12:00",
   "trabajos": [
@@ -250,6 +309,7 @@ Al crear una orden se envía POST al webhook (sin fotos/firma base64 para no hac
   "metodoPago": "Transferencia",
   "garantia": "3 meses",
   "requiereFactura": "Sí",
+  "idempotencyKey": "uuid-v4",
   "airtableRecordId": "recXXXXXX",
   "clienteRecordId": "recYYYYYY",
   "empleadosRecordIds": ["recAAA", "recBBB"]
@@ -260,10 +320,11 @@ Al crear una orden se envía POST al webhook (sin fotos/firma base64 para no hac
 
 | Estado | Color fondo | Icono | Título | Botones |
 |---|---|---|---|---|
-| Airtable OK + Webhook OK | Verde `#10B981` | CheckCircle | "Orden Registrada" | Nueva Orden |
-| Airtable OK + Webhook FALLÓ | Amarillo `#F59E0B` | AlertTriangle | "Orden Guardada" | Reintentar + Nueva Orden |
-| Offline | Amarillo `#F59E0B` | Clock | "Orden Guardada" | Nueva Orden |
-| Error total | Rojo `#DC2626` | XCircle | "Error al Enviar" | Reintentar + Nueva Orden |
+| Airtable OK + Webhook OK | Verde `#10B981` | CheckCircle | "Orden Registrada" | Nueva Orden + Ir al Inicio |
+| Airtable OK + Webhook FALLÓ | Amarillo `#F59E0B` | AlertTriangle | "Orden Guardada" | Reintentar + Nueva Orden + Ir al Inicio |
+| Offline | Amarillo `#F59E0B` | Clock | "Orden Guardada" | Nueva Orden + Ir al Inicio |
+| Error total | Rojo `#DC2626` | XCircle | "Error al Enviar" | Reintentar + Nueva Orden + Ir al Inicio |
+| Duplicado detectado | Verde `#10B981` | CheckCircle | "Orden Registrada" + pill "ya registrada" | Nueva Orden + Ir al Inicio |
 
 ## Técnicos de prueba (modo mock)
 
@@ -297,10 +358,11 @@ Al crear una orden se envía POST al webhook (sin fotos/firma base64 para no hac
 9. **Dashboard**: Historial de órdenes con cards clickeables, refresh manual, estados de carga/vacío.
 10. **Detalle de orden**: Vista completa con fotos, firma, botones de editar y reintentar.
 11. **Edición de órdenes**: Carga datos existentes en el wizard, permite editar y reenviar.
+12. **Anti-duplicados**: Idempotency key + ref guard + in-memory Set. El usuario nunca ve duplicados.
 
 ## Deploy
 
 - **Frontend**: GitHub Pages con `base: '/condor-sistema/'` en vite.config.js, usando HashRouter
 - **Backend**: EasyPanel con Docker, variable CORS_ORIGIN apuntando al dominio de GitHub Pages
-- **Fotos**: Se guardan temporalmente en `/uploads/` del server, se limpian cada 30 min (1 hora de vida)
+- **Fotos/PDFs**: Se guardan en `/uploads/` del server, fotos se limpian cada 30 min (1 hora de vida)
 - **Repo**: https://github.com/notstudiocl/condor-sistema
