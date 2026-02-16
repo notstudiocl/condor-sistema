@@ -4,7 +4,6 @@ import {
   ChevronRight,
   Plus,
   Minus,
-  Trash2,
   Send,
   Loader2,
   CheckSquare,
@@ -571,64 +570,40 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
               Personal y Vehículo
             </h2>
 
-            <div>
-              <label className="label-field">Personal que ejecuta</label>
-              <div className="space-y-2">
-                {form.personal.map((p, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-2xl px-4 py-2.5 shadow-sm"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-gray-900">{p.nombre}</span>
-                      {p.esEmpleado && (
-                        <span className="text-[10px] font-semibold text-condor-700 bg-condor-100 px-2 py-0.5 rounded-full">
-                          Empleado
-                        </span>
-                      )}
-                      {idx === 0 && (
-                        <span className="text-[10px] text-gray-400">(responsable)</span>
-                      )}
-                    </div>
-                    {idx > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => removePersonal(idx)}
-                        className="text-gray-400 hover:text-accent-600 p-1"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Empleados from Airtable */}
+            {/* Técnicos Disponibles from Airtable */}
             {tecnicos.length > 0 && (
               <div>
-                <label className="label-field">Agregar empleado</label>
+                <label className="label-field">Técnicos Disponibles</label>
                 <div className="flex flex-wrap gap-2">
-                  {tecnicos
-                    .filter((t) => !form.personal.some((p) => p.nombre === t.nombre))
-                    .map((t) => (
+                  {tecnicos.map((t) => {
+                    const isSelected = form.personal.some((p) => p.nombre === t.nombre);
+                    return (
                       <button
-                        key={t.nombre}
+                        key={t.id || t.nombre}
                         type="button"
-                        onClick={() => addTecnicoToPersonal(t)}
-                        className="text-xs bg-white border border-gray-200 rounded-xl px-3 py-2.5 hover:border-condor-300 hover:bg-condor-50 transition-colors flex items-center gap-1.5 shadow-sm"
+                        onClick={() => !isSelected && addTecnicoToPersonal(t)}
+                        className={`text-xs rounded-full px-3.5 py-2 border transition-colors flex items-center gap-1.5 ${
+                          isSelected
+                            ? 'bg-condor-100 border-condor-300 text-condor-800 cursor-default'
+                            : 'bg-white border-gray-200 text-gray-700 hover:border-condor-400 hover:bg-condor-50 cursor-pointer'
+                        }`}
                       >
-                        <UserPlus size={13} className="text-condor-600" />
+                        {isSelected ? (
+                          <Check size={13} className="text-condor-600" />
+                        ) : (
+                          <UserPlus size={13} className="text-gray-400" />
+                        )}
                         {t.nombre}
                       </button>
-                    ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
 
-            {/* Manual add */}
+            {/* Agregar persona manual */}
             <div>
-              <label className="label-field">Agregar otra persona</label>
+              <label className="label-field">Agregar persona externa</label>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -647,6 +622,46 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
                 </button>
               </div>
             </div>
+
+            {/* Personal asignado */}
+            {form.personal.length > 0 && (
+              <div>
+                <label className="label-field">Personal asignado ({form.personal.length})</label>
+                <div className="space-y-2">
+                  {form.personal.map((p, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-2xl px-4 py-2.5 shadow-sm"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-900">{p.nombre}</span>
+                        {p.esEmpleado ? (
+                          <span className="text-[10px] font-semibold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+                            Técnico
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-semibold text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">
+                            Externo
+                          </span>
+                        )}
+                        {idx === 0 && (
+                          <span className="text-[10px] text-gray-400">(responsable)</span>
+                        )}
+                      </div>
+                      {idx > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => removePersonal(idx)}
+                          className="text-gray-400 hover:text-red-500 p-1"
+                        >
+                          <X size={16} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="label-field">Patente Vehículo</label>
