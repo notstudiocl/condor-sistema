@@ -94,6 +94,9 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
   const [tecnicos, setTecnicos] = useState([]);
   const [nuevoPersonal, setNuevoPersonal] = useState('');
 
+  // Idempotency key (generated once per submit, reused on retry)
+  const idempotencyKeyRef = useRef(null);
+
   // Photo refs
   const fotosAntesRef = useRef(null);
   const fotosDespuesRef = useRef(null);
@@ -265,10 +268,18 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
   const goToStep = (s) => setStep(s);
 
   const handleSubmit = async () => {
+    if (sending) return;
     setSending(true);
     setSendingText('Preparando orden...');
+
+    // Generate idempotency key once (reuse on retry)
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current = crypto.randomUUID();
+    }
+
     const payload = {
       fecha: todayISO(),
+      idempotencyKey: idempotencyKeyRef.current,
       clienteEmpresa: form.clienteEmpresa,
       clienteRut: form.clienteRut,
       clienteEmail: form.clienteEmail,
@@ -337,6 +348,9 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
           if (result?.data?.webhookData) {
             payload._webhookData = result.data.webhookData;
           }
+          if (result?.data?.duplicate) {
+            payload._duplicate = true;
+          }
           if (result?.success === false) {
             payload._submitError = result.error || 'Error al enviar la orden';
           }
@@ -344,6 +358,10 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
       }
     } catch (err) {
       payload._submitError = err.message || 'Error al enviar la orden';
+    }
+    // Reset idempotency key on successful submit so next order gets a new one
+    if (!payload._submitError) {
+      idempotencyKeyRef.current = null;
     }
     setSending(false);
     setSendingText('');

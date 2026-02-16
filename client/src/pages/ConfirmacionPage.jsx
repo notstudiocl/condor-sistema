@@ -10,6 +10,7 @@ export default function ConfirmacionPage({ orden, onNuevaOrden, onReintentar, on
   const webhookData = orden._webhookData;
   const webhookOk = !webhookError && !isOffline && airtableOk;
   const numeroOrden = webhookData?.numeroOrden || null;
+  const isDuplicate = orden._duplicate === true;
 
   // Determine state
   let bgClass, icon, title, subtitle;
@@ -66,6 +67,11 @@ export default function ConfirmacionPage({ orden, onNuevaOrden, onReintentar, on
           </div>
           <h1 className="text-white font-heading font-bold text-2xl">{title}</h1>
           <p className="text-white/80 text-sm mt-1 text-center">{subtitle}</p>
+          {isDuplicate && (
+            <p className="text-white/90 text-xs mt-2 bg-white/20 rounded-full px-3 py-1">
+              Esta orden ya fue registrada anteriormente
+            </p>
+          )}
         </div>
 
         {/* Numero de orden destacado */}

@@ -246,6 +246,35 @@ app.post('/api/ordenes', async (req, res) => {
     const Airtable = (await import('airtable')).default;
     const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
 
+    // --- PASO 0: Idempotency check ---
+    const idempotencyKey = data.idempotencyKey;
+    if (idempotencyKey) {
+      try {
+        const existing = await base('Ordenes de Trabajo').select({
+          filterByFormula: `{Idempotency Key} = '${idempotencyKey}'`,
+          maxRecords: 1,
+        }).firstPage();
+
+        if (existing.length > 0) {
+          console.log('Orden duplicada detectada, devolviendo existente:', existing[0].id);
+          return res.json({
+            success: true,
+            data: {
+              airtableOk: true,
+              recordId: existing[0].id,
+              webhookOk: true,
+              webhookError: null,
+              webhookData: null,
+              duplicate: true,
+              message: 'Orden ya fue creada anteriormente',
+            },
+          });
+        }
+      } catch (err) {
+        console.error('Error verificando idempotency:', err.message);
+      }
+    }
+
     // --- PASO 1: Cliente ---
     let clienteRecordId = data.clienteRecordId;
 
@@ -291,6 +320,7 @@ app.post('/api/ordenes', async (req, res) => {
       'Total': Number(data.total) || 0,
       'Metodo pago': data.metodoPago || '',
       'Requiere factura': data.requiereFactura || 'No',
+      'Idempotency Key': idempotencyKey || '',
     };
 
     if (clienteRecordId) {
