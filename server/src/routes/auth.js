@@ -30,7 +30,7 @@ router.post('/login', async (req, res, next) => {
       });
     }
 
-    if (tecnico.pin !== pin) {
+    if (String(tecnico.pin) !== String(pin)) {
       return res.status(401).json({
         success: false,
         error: 'Credenciales incorrectas',

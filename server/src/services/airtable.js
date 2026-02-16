@@ -26,16 +26,16 @@ export async function findTecnicoByEmail(email) {
   if (MOCK_MODE) {
     return mockTecnicos.find((t) => t.email === email) || null;
   }
-  const records = await base('Tecnicos')
+  const records = await base('Empleados')
     .select({ filterByFormula: `{Email} = '${email}'`, maxRecords: 1 })
     .firstPage();
   if (records.length === 0) return null;
   const r = records[0];
   return {
-    id: r.id,
+    id: r.get('ID') || r.id,
     nombre: r.get('Nombre'),
     email: r.get('Email'),
-    pin: r.get('Pin Acceso'),
+    pin: String(r.get('Pin Acceso') || ''),
     telefono: r.get('Telefono'),
     especialidad: r.get('Especialidad'),
     estado: r.get('Estado'),
@@ -46,11 +46,11 @@ export async function getTecnicos() {
   if (MOCK_MODE) {
     return mockTecnicos.map(({ pin, ...rest }) => rest);
   }
-  const records = await base('Tecnicos')
+  const records = await base('Empleados')
     .select({ filterByFormula: `{Estado} = 'Activo'` })
     .firstPage();
   return records.map((r) => ({
-    id: r.id,
+    id: r.get('ID') || r.id,
     nombre: r.get('Nombre'),
     email: r.get('Email'),
     telefono: r.get('Telefono'),
