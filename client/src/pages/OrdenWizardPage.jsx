@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useParams } from 'react-router-dom';
 import {
   ChevronLeft,
   ChevronRight,
@@ -14,7 +15,7 @@ import {
 } from 'lucide-react';
 import { TRABAJOS, METODOS_PAGO, GARANTIAS, WIZARD_STEPS } from '../utils/constants';
 import { formatRut, formatCLP, parseCLP, todayISO } from '../utils/helpers';
-import { buscarClientes, getTecnicosPublic, crearOrden } from '../utils/api';
+import { buscarClientes, getTecnicosPublic, crearOrden, actualizarOrden } from '../utils/api';
 import SignaturePad from '../components/SignaturePad';
 import Summary from '../components/Summary';
 
@@ -77,7 +78,7 @@ function processImage(file) {
   });
 }
 
-export default function OrdenWizardPage({ user, onOrdenEnviada }) {
+export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState(initialFormData);
   const [sending, setSending] = useState(false);
@@ -97,12 +98,69 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
   const fotosAntesRef = useRef(null);
   const fotosDespuesRef = useRef(null);
 
+  const { recordId: editRecordId } = editMode ? useParams() : { recordId: null };
+  const [editLoading, setEditLoading] = useState(!!editMode);
+
   useEffect(() => {
     getTecnicosPublic()
       .then((res) => setTecnicos(res.data || []))
       .catch(() => {});
     setForm((prev) => ({ ...prev, personal: [{ nombre: user.nombre, esEmpleado: true, recordId: user.recordId || null }] }));
   }, [user.nombre]);
+
+  // Load existing order for edit mode
+  useEffect(() => {
+    if (!editMode || !editRecordId) return;
+    const loadOrden = async () => {
+      try {
+        const baseUrl = (import.meta.env.VITE_API_URL || 'https://clientes-condor-api.f8ihph.easypanel.host/api').replace(/\/api\/?$/, '');
+        const res = await fetch(`${baseUrl}/api/ordenes`);
+        const data = await res.json();
+        const orden = (data.data || []).find(o => o.recordId === editRecordId);
+        if (orden) {
+          let trabajos = [];
+          try { trabajos = typeof orden.trabajos === 'string' ? JSON.parse(orden.trabajos) : orden.trabajos || []; } catch { trabajos = []; }
+
+          const { TRABAJOS } = await import('../utils/constants');
+          const mappedTrabajos = TRABAJOS.map(nombre => {
+            const found = trabajos.find(t => (t.trabajo || t.nombre) === nombre);
+            return { nombre, checked: found ? found.cantidad > 0 : false, cantidad: found ? found.cantidad : 0 };
+          });
+
+          setForm({
+            clienteRut: typeof orden.clienteRut === 'object' ? '' : (orden.clienteRut || ''),
+            clienteNombre: orden.cliente || '',
+            clienteEmail: orden.email || '',
+            clienteTelefono: orden.telefono || '',
+            direccion: orden.direccion || '',
+            comuna: orden.comuna || '',
+            ordenCompra: orden.ordenCompra || '',
+            supervisor: orden.supervisor || '',
+            horaInicio: orden.horaInicio || '',
+            horaTermino: orden.horaTermino || '',
+            trabajos: mappedTrabajos,
+            descripcion: orden.descripcion || '',
+            observaciones: orden.observaciones || '',
+            total: orden.total ? String(orden.total) : '',
+            metodoPago: orden.metodoPago || 'Efectivo',
+            garantia: 'Sin garantía',
+            requiereFactura: orden.requiereFactura || 'No',
+            personal: [{ nombre: user.nombre, esEmpleado: true, recordId: user.recordId || null }],
+            patenteVehiculo: orden.patente || '',
+            fotosAntes: [],
+            fotosDespues: [],
+            firmaBase64: null,
+            clienteRecordId: null,
+          });
+        }
+      } catch (err) {
+        console.error('Error cargando orden para edición:', err);
+      } finally {
+        setEditLoading(false);
+      }
+    };
+    loadOrden();
+  }, [editMode, editRecordId, user.nombre, user.recordId]);
 
   const updateField = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -239,18 +297,9 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
     };
 
     try {
-      if (!form.clienteRecordId && form.clienteRut) {
-        setSendingText('Registrando cliente...');
-      }
-      setSendingText('Guardando orden...');
-      const result = await crearOrden(payload);
-      if (result?.offline) {
-        payload._offline = true;
-      } else {
-        if (form.fotosAntes.length > 0 || form.fotosDespues.length > 0) {
-          setSendingText('Subiendo fotos...');
-        }
-        setSendingText('Procesando...');
+      if (editMode && editRecordId) {
+        setSendingText('Actualizando orden...');
+        const result = await actualizarOrden(editRecordId, payload);
         if (result?.data?.webhookOk === false) {
           payload._webhookError = result.data.webhookError || 'Error desconocido en webhook';
         }
@@ -259,7 +308,31 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
           payload._recordId = result.data.recordId;
         }
         if (result?.success === false) {
-          payload._submitError = result.error || 'Error al enviar la orden';
+          payload._submitError = result.error || 'Error al actualizar la orden';
+        }
+      } else {
+        if (!form.clienteRecordId && form.clienteRut) {
+          setSendingText('Registrando cliente...');
+        }
+        setSendingText('Guardando orden...');
+        const result = await crearOrden(payload);
+        if (result?.offline) {
+          payload._offline = true;
+        } else {
+          if (form.fotosAntes.length > 0 || form.fotosDespues.length > 0) {
+            setSendingText('Subiendo fotos...');
+          }
+          setSendingText('Procesando...');
+          if (result?.data?.webhookOk === false) {
+            payload._webhookError = result.data.webhookError || 'Error desconocido en webhook';
+          }
+          if (result?.data?.airtableOk) {
+            payload._airtableOk = true;
+            payload._recordId = result.data.recordId;
+          }
+          if (result?.success === false) {
+            payload._submitError = result.error || 'Error al enviar la orden';
+          }
         }
       }
     } catch (err) {
@@ -269,6 +342,17 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
     setSendingText('');
     onOrdenEnviada(payload);
   };
+
+  if (editLoading) {
+    return (
+      <div className="min-h-[calc(100vh-56px)] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 size={32} className="animate-spin text-condor-400" />
+          <p className="text-sm text-gray-400">Cargando orden...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-[calc(100vh-56px)]">
@@ -805,7 +889,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
         {step === 4 && (
           <div className="space-y-5">
             <h2 className="font-heading font-bold text-xl text-condor-900">
-              Resumen y Firma
+              {editMode ? 'Editar y Reenviar' : 'Resumen y Firma'}
             </h2>
 
             <Summary data={{ ...form, personal: form.personal.map((p) => p.nombre) }} onEdit={(s) => { setConfirmado(false); goToStep(s); }} />
@@ -849,7 +933,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
               ) : (
                 <>
                   <Send size={20} />
-                  Enviar Orden de Trabajo
+                  {editMode ? 'Actualizar y Reenviar' : 'Enviar Orden de Trabajo'}
                 </>
               )}
             </button>

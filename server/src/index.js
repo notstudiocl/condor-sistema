@@ -171,6 +171,53 @@ app.get('/api/clientes/buscar', async (req, res) => {
   }
 });
 
+// GET ordenes — historial
+app.get('/api/ordenes', async (req, res) => {
+  try {
+    const Airtable = (await import('airtable')).default;
+    const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
+
+    const records = await base('Ordenes de Trabajo').select({
+      sort: [{ field: 'Fecha', direction: 'desc' }],
+      maxRecords: 50,
+    }).firstPage();
+
+    const data = records.map(r => ({
+      recordId: r.id,
+      numeroOrden: r.get('Numero orden') || '',
+      fecha: r.get('Fecha') || '',
+      estado: r.get('Estado') || 'Enviada',
+      cliente: r.get('Cliente') || '',
+      clienteRut: r.get('Cliente RUT') || '',
+      direccion: r.get('Direccion') || '',
+      comuna: r.get('Comuna') || '',
+      total: r.get('Total') || 0,
+      metodoPago: r.get('Metodo pago') || '',
+      trabajos: r.get('Trabajos realizados') || '[]',
+      descripcion: r.get('Descripcion trabajo') || '',
+      observaciones: r.get('Observaciones') || '',
+      supervisor: r.get('Supervisor') || '',
+      horaInicio: r.get('Hora inicio') || '',
+      horaTermino: r.get('Hora termino') || '',
+      patente: r.get('Patente vehiculo') || '',
+      requiereFactura: r.get('Requiere factura') || 'No',
+      ordenCompra: r.get('Orden compra') || '',
+      email: r.get('Cliente email') || '',
+      telefono: r.get('Cliente telefono') || '',
+      empleados: r.get('Empleados') || [],
+      fotosAntes: (r.get('Fotos Antes') || []).map(f => ({ url: f.url, filename: f.filename })),
+      fotosDespues: (r.get('Fotos Despues') || []).map(f => ({ url: f.url, filename: f.filename })),
+      firma: (r.get('Firma') || []).map(f => ({ url: f.url })),
+      creada: r.get('Creada') || '',
+    }));
+
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error listando ordenes:', error);
+    res.json({ success: false, error: error.message, data: [] });
+  }
+});
+
 // POST ordenes — Airtable + webhook
 app.post('/api/ordenes', async (req, res) => {
   try {
@@ -240,10 +287,12 @@ app.post('/api/ordenes', async (req, res) => {
     const ordenRecordId = ordenRecord.id;
     console.log('2b. Orden creada:', ordenRecordId);
 
-    // --- PASO 3: Subir fotos como attachments ---
+    // --- PASO 3: Subir fotos y firma como attachments ---
     const hasFotos = (data.fotosAntes && data.fotosAntes.length > 0) || (data.fotosDespues && data.fotosDespues.length > 0);
-    if (hasFotos) {
-      console.log('3. Subiendo fotos...');
+    const hasFirma = data.firmaBase64 && data.firmaBase64.startsWith('data:');
+
+    if (hasFotos || hasFirma) {
+      console.log('3. Subiendo archivos...');
       const baseUrl = process.env.SERVER_URL || 'https://clientes-condor-api.f8ihph.easypanel.host';
 
       const guardarFoto = (base64, prefix, index) => {
@@ -257,26 +306,31 @@ app.post('/api/ordenes', async (req, res) => {
           writeFileSync(filepath, buffer);
           return { url: `${baseUrl}/uploads/${filename}` };
         } catch (e) {
-          console.error('Error guardando foto:', e.message);
+          console.error('Error guardando archivo:', e.message);
           return null;
         }
       };
 
-      const fotoFields = {};
+      const attachFields = {};
 
       if (data.fotosAntes && data.fotosAntes.length > 0) {
         const urls = data.fotosAntes.map((f, i) => guardarFoto(f, 'antes', i)).filter(Boolean);
-        if (urls.length > 0) fotoFields['Fotos Antes'] = urls;
+        if (urls.length > 0) attachFields['Fotos Antes'] = urls;
       }
 
       if (data.fotosDespues && data.fotosDespues.length > 0) {
         const urls = data.fotosDespues.map((f, i) => guardarFoto(f, 'despues', i)).filter(Boolean);
-        if (urls.length > 0) fotoFields['Fotos Despues'] = urls;
+        if (urls.length > 0) attachFields['Fotos Despues'] = urls;
       }
 
-      if (Object.keys(fotoFields).length > 0) {
-        await base('Ordenes de Trabajo').update(ordenRecordId, fotoFields);
-        console.log('3b. Fotos subidas');
+      if (hasFirma) {
+        const firmaFile = guardarFoto(data.firmaBase64, 'firma', 0);
+        if (firmaFile) attachFields['Firma'] = [firmaFile];
+      }
+
+      if (Object.keys(attachFields).length > 0) {
+        await base('Ordenes de Trabajo').update(ordenRecordId, attachFields);
+        console.log('3b. Archivos subidos');
       }
     }
 
@@ -324,6 +378,111 @@ app.post('/api/ordenes', async (req, res) => {
     });
   } catch (error) {
     console.error('ERROR GENERAL:', error.message);
+    res.json({ success: false, error: error.message });
+  }
+});
+
+// PUT ordenes — actualizar y reenviar
+app.put('/api/ordenes/:recordId', async (req, res) => {
+  try {
+    const { recordId } = req.params;
+    const data = req.body;
+    console.log('=== ACTUALIZANDO ORDEN ===', recordId);
+
+    const Airtable = (await import('airtable')).default;
+    const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
+
+    const ordenFields = {
+      'Estado': 'Enviada',
+      'Cliente': data.clienteNombre || '',
+      'Cliente email': data.clienteEmail || '',
+      'Cliente telefono': data.clienteTelefono || '',
+      'Direccion': data.direccion || '',
+      'Comuna': data.comuna || '',
+      'Orden compra': data.ordenCompra || '',
+      'Supervisor': data.supervisor || '',
+      'Hora inicio': data.horaInicio || '',
+      'Hora termino': data.horaTermino || '',
+      'Trabajos realizados': typeof data.trabajos === 'string' ? data.trabajos : JSON.stringify(data.trabajos || []),
+      'Descripcion trabajo': data.descripcion || '',
+      'Observaciones': data.observaciones || '',
+      'Patente vehiculo': data.patenteVehiculo || '',
+      'Total': Number(data.total) || 0,
+      'Metodo pago': data.metodoPago || '',
+      'Requiere factura': data.requiereFactura || 'No',
+    };
+
+    if (data.clienteRecordId) {
+      ordenFields['Cliente RUT'] = [data.clienteRecordId];
+    }
+    if (data.empleadosRecordIds && data.empleadosRecordIds.length > 0) {
+      ordenFields['Empleados'] = data.empleadosRecordIds;
+    }
+
+    await base('Ordenes de Trabajo').update(recordId, ordenFields, { typecast: true });
+    console.log('Orden actualizada en Airtable');
+
+    // Archivos (fotos + firma)
+    const baseUrl = process.env.SERVER_URL || 'https://clientes-condor-api.f8ihph.easypanel.host';
+    const guardarFoto = (base64, prefix, index) => {
+      try {
+        const matches = base64.match(/^data:image\/(.*?);base64,(.*)$/);
+        if (!matches) return null;
+        const ext = matches[1] === 'png' ? 'png' : 'jpg';
+        const buffer = Buffer.from(matches[2], 'base64');
+        const filename = `${recordId}_${prefix}_${index}_${Date.now()}.${ext}`;
+        const filepath = join(uploadsDir, filename);
+        writeFileSync(filepath, buffer);
+        return { url: `${baseUrl}/uploads/${filename}` };
+      } catch (e) { return null; }
+    };
+
+    const attachFields = {};
+    if (data.fotosAntes && data.fotosAntes.length > 0 && typeof data.fotosAntes[0] === 'string' && data.fotosAntes[0].startsWith('data:')) {
+      const urls = data.fotosAntes.map((f, i) => guardarFoto(f, 'antes', i)).filter(Boolean);
+      if (urls.length > 0) attachFields['Fotos Antes'] = urls;
+    }
+    if (data.fotosDespues && data.fotosDespues.length > 0 && typeof data.fotosDespues[0] === 'string' && data.fotosDespues[0].startsWith('data:')) {
+      const urls = data.fotosDespues.map((f, i) => guardarFoto(f, 'despues', i)).filter(Boolean);
+      if (urls.length > 0) attachFields['Fotos Despues'] = urls;
+    }
+    if (data.firmaBase64 && data.firmaBase64.startsWith('data:')) {
+      const firmaFile = guardarFoto(data.firmaBase64, 'firma', 0);
+      if (firmaFile) attachFields['Firma'] = [firmaFile];
+    }
+    if (Object.keys(attachFields).length > 0) {
+      await base('Ordenes de Trabajo').update(recordId, attachFields);
+    }
+
+    // Webhook
+    let webhookOk = false;
+    let webhookError = null;
+    const webhookUrl = process.env.WEBHOOK_OT_N8N_URL;
+    if (webhookUrl) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000);
+        const webhookPayload = { ...data, airtableRecordId: recordId, accion: 'actualizar' };
+        delete webhookPayload.fotosAntes;
+        delete webhookPayload.fotosDespues;
+        delete webhookPayload.firmaBase64;
+        const response = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(webhookPayload),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        webhookOk = response.ok;
+        if (!response.ok) webhookError = `Status ${response.status}: ${await response.text()}`;
+      } catch (err) {
+        webhookError = err.message;
+      }
+    }
+
+    res.json({ success: true, data: { airtableOk: true, recordId, webhookOk, webhookError } });
+  } catch (error) {
+    console.error('Error actualizando orden:', error);
     res.json({ success: false, error: error.message });
   }
 });

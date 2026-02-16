@@ -76,3 +76,19 @@ export async function crearOrden(orden) {
 export async function healthCheck() {
   return request('/health');
 }
+
+export async function getOrdenes() {
+  const baseUrl = (import.meta.env.VITE_API_URL || 'https://clientes-condor-api.f8ihph.easypanel.host/api').replace(/\/api\/?$/, '');
+  const res = await fetch(`${baseUrl}/api/ordenes`);
+  return res.json();
+}
+
+export async function actualizarOrden(recordId, orden) {
+  const baseUrl = (import.meta.env.VITE_API_URL || 'https://clientes-condor-api.f8ihph.easypanel.host/api').replace(/\/api\/?$/, '');
+  const res = await fetch(`${baseUrl}/api/ordenes/${recordId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(orden),
+  });
+  return res.json();
+}
