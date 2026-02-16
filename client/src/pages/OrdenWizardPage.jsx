@@ -80,6 +80,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState(initialFormData);
   const [sending, setSending] = useState(false);
+  const [confirmado, setConfirmado] = useState(false);
 
   // RUT search with debounce
   const [searchResults, setSearchResults] = useState([]);
@@ -781,21 +782,38 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
               Resumen y Firma
             </h2>
 
-            <Summary data={{ ...form, personal: form.personal.map((p) => p.nombre) }} onEdit={(s) => goToStep(s)} />
+            <Summary data={{ ...form, personal: form.personal.map((p) => p.nombre) }} onEdit={(s) => { setConfirmado(false); goToStep(s); }} />
 
             <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm">
-              <p className="text-sm text-gray-500 mb-1">Supervisor</p>
+              <p className="text-sm text-gray-500 mb-1">Firma del Supervisor</p>
               <p className="text-sm font-medium mb-3">{form.supervisor || '—'}</p>
               <SignaturePad
                 onSignatureChange={(data) => updateField('firmaBase64', data)}
               />
             </div>
 
+            {/* Confirmación obligatoria */}
+            <label className="flex items-start gap-3 bg-white rounded-2xl p-4 border border-gray-200 shadow-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={confirmado}
+                onChange={(e) => setConfirmado(e.target.checked)}
+                className="accent-accent-600 w-5 h-5 mt-0.5 shrink-0"
+              />
+              <span className="text-sm text-gray-700">
+                Confirmo que los datos de esta orden de trabajo son correctos y deseo enviarla.
+              </span>
+            </label>
+
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={sending}
-              className="w-full bg-accent-600 hover:bg-accent-700 disabled:opacity-50 text-white font-bold rounded-2xl py-4 text-base transition-colors flex items-center justify-center gap-2 shadow-lg"
+              disabled={!confirmado || sending}
+              className={`w-full font-bold rounded-2xl py-4 text-base transition-colors flex items-center justify-center gap-2 shadow-lg ${
+                confirmado
+                  ? 'bg-accent-600 hover:bg-accent-700 text-white'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              }`}
             >
               {sending ? (
                 <>
