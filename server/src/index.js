@@ -25,6 +25,25 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+// Test webhook (no auth, diagnostic)
+app.get('/api/test-webhook', async (req, res) => {
+  try {
+    const webhookUrl = process.env.WEBHOOK_OT_N8N_URL;
+    if (!webhookUrl) return res.json({ success: false, error: 'WEBHOOK_OT_N8N_URL no está configurada' });
+
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ test: true, timestamp: new Date().toISOString(), mensaje: 'Test desde condor-api' }),
+    });
+
+    const text = await response.text();
+    res.json({ success: true, webhookUrl, status: response.status, response: text });
+  } catch (error) {
+    res.json({ success: false, webhookUrl: process.env.WEBHOOK_OT_N8N_URL, error: error.message });
+  }
+});
+
 // Public technicians list (no auth)
 app.get('/api/tecnicos-lista', async (_req, res) => {
   try {
