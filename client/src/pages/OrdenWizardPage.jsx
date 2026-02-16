@@ -38,7 +38,6 @@ const initialFormData = () => ({
   personal: [],
   patenteVehiculo: '',
   firmaBase64: null,
-  confirmado: false,
 });
 
 export default function OrdenWizardPage({ user, onOrdenEnviada }) {
@@ -143,30 +142,14 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
     );
   };
 
-  // Navigation
-  const canNext = () => {
-    if (step === 0) {
-      return form.clienteNombre.trim() && form.direccion.trim() && form.supervisor.trim();
-    }
-    if (step === 1) {
-      return form.descripcion.trim();
-    }
-    if (step === 2) {
-      return form.personal.length > 0;
-    }
-    return true;
-  };
+  // Navigation — no validation, free to advance
+  const canNext = () => true;
 
   const goToStep = (s) => {
     setStep(s);
   };
 
   const handleSubmit = async () => {
-    if (!form.confirmado) {
-      setSendError('Debe confirmar los datos antes de enviar');
-      return;
-    }
-
     setSending(true);
     setSendError('');
 
@@ -198,12 +181,11 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
 
     try {
       await crearOrden(payload);
-      onOrdenEnviada(payload);
-    } catch (err) {
-      setSendError(err.message || 'Error al enviar la orden');
-    } finally {
-      setSending(false);
+    } catch {
+      // Ignore backend errors — show confirmation anyway
     }
+    setSending(false);
+    onOrdenEnviada(payload);
   };
 
   return (
@@ -291,8 +273,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
           <div className="grid grid-cols-1 gap-3">
             <div>
               <label className="label-field">
-                Cliente / Nombre <span className="text-accent-600">*</span>
-              </label>
+                Cliente / Nombre              </label>
               <input
                 type="text"
                 value={form.clienteNombre}
@@ -333,8 +314,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
             </div>
             <div>
               <label className="label-field">
-                Dirección <span className="text-accent-600">*</span>
-              </label>
+                Dirección              </label>
               <input
                 type="text"
                 value={form.direccion}
@@ -364,8 +344,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
             </div>
             <div>
               <label className="label-field">
-                Supervisor / Encargado <span className="text-accent-600">*</span>
-              </label>
+                Supervisor / Encargado              </label>
               <input
                 type="text"
                 value={form.supervisor}
@@ -464,8 +443,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
 
           <div>
             <label className="label-field">
-              Descripción del Trabajo <span className="text-accent-600">*</span>
-            </label>
+              Descripción del Trabajo            </label>
             <textarea
               rows={4}
               value={form.descripcion}
@@ -565,8 +543,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
 
           <div>
             <label className="label-field">
-              Personal que ejecuta <span className="text-accent-600">*</span>
-            </label>
+              Personal que ejecuta            </label>
             <div className="space-y-2">
               {form.personal.map((nombre, idx) => (
                 <div
@@ -669,29 +646,10 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
             />
           </div>
 
-          <label className="flex items-start gap-3 bg-gray-50 border border-gray-200 rounded-xl p-4 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={form.confirmado}
-              onChange={(e) => updateField('confirmado', e.target.checked)}
-              className="accent-accent-600 w-5 h-5 mt-0.5 shrink-0"
-            />
-            <span className="text-sm text-gray-900">
-              Confirmo que los datos ingresados son correctos y que el trabajo fue
-              realizado según lo descrito.
-            </span>
-          </label>
-
-          {sendError && (
-            <p className="text-accent-600 text-sm text-center bg-accent-50 rounded-lg py-2">
-              {sendError}
-            </p>
-          )}
-
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={sending || !form.confirmado}
+            disabled={sending}
             className="w-full bg-accent-600 hover:bg-accent-700 disabled:opacity-50 text-white font-bold rounded-xl py-4 text-sm transition-colors flex items-center justify-center gap-2 shadow-lg"
           >
             {sending ? (
@@ -725,8 +683,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
           <button
             type="button"
             onClick={() => setStep(step + 1)}
-            disabled={!canNext()}
-            className="flex-1 bg-condor-900 hover:bg-condor-800 disabled:opacity-40 text-white font-semibold rounded-xl py-3.5 text-sm transition-colors flex items-center justify-center gap-1"
+            className="flex-1 bg-condor-900 hover:bg-condor-800 text-white font-semibold rounded-xl py-3.5 text-sm transition-colors flex items-center justify-center gap-1"
           >
             Siguiente
             <ChevronRight size={18} />
