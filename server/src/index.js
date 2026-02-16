@@ -205,7 +205,7 @@ app.get('/api/ordenes', async (req, res) => {
       numeroOrden: r.get('Numero orden') || '',
       fecha: r.get('Fecha') || '',
       estado: r.get('Estado') || 'Enviada',
-      cliente: r.get('Cliente') || '',
+      clienteEmpresa: r.get('Cliente / Empresa') || '',
       clienteRut: r.get('Cliente RUT') || '',
       direccion: r.get('Direccion') || '',
       comuna: r.get('Comuna') || '',
@@ -254,13 +254,13 @@ app.post('/api/ordenes', async (req, res) => {
       try {
         const clienteRecord = await base('Clientes').create({
           'RUT': data.clienteRut || '',
-          'Nombre': data.clienteNombre || '',
+          'Nombre': data.supervisor || '',
           'Email': data.clienteEmail || '',
           'Telefono': data.clienteTelefono || '',
           'Direccion': data.direccion || '',
           'Comuna': data.comuna || '',
           'Tipo': 'Particular',
-          'Empresa': '',
+          'Empresa': data.clienteEmpresa || '',
         }, { typecast: true });
         clienteRecordId = clienteRecord.id;
         console.log('1b. Cliente creado:', clienteRecordId);
@@ -275,7 +275,7 @@ app.post('/api/ordenes', async (req, res) => {
     const ordenFields = {
       'Fecha': data.fecha || new Date().toISOString().split('T')[0],
       'Estado': 'Enviada',
-      'Cliente': data.clienteNombre || '',
+      'Cliente / Empresa': data.clienteEmpresa || data.clienteNombre || '',
       'Cliente email': data.clienteEmail || '',
       'Cliente telefono': data.clienteTelefono || '',
       'Direccion': data.direccion || '',
@@ -420,7 +420,7 @@ app.put('/api/ordenes/:recordId', async (req, res) => {
 
     const ordenFields = {
       'Estado': 'Enviada',
-      'Cliente': data.clienteNombre || '',
+      'Cliente / Empresa': data.clienteEmpresa || data.clienteNombre || '',
       'Cliente email': data.clienteEmail || '',
       'Cliente telefono': data.clienteTelefono || '',
       'Direccion': data.direccion || '',

@@ -24,7 +24,7 @@ const MAX_DIMENSION = 1200;
 
 const initialFormData = () => ({
   clienteRut: '',
-  clienteNombre: '',
+  clienteEmpresa: '',
   clienteEmail: '',
   clienteTelefono: '',
   direccion: '',
@@ -129,7 +129,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
 
           setForm({
             clienteRut: typeof orden.clienteRut === 'object' ? '' : (orden.clienteRut || ''),
-            clienteNombre: orden.cliente || '',
+            clienteEmpresa: orden.clienteEmpresa || '',
             clienteEmail: orden.email || '',
             clienteTelefono: orden.telefono || '',
             direccion: orden.direccion || '',
@@ -193,7 +193,8 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
     setForm((prev) => ({
       ...prev,
       clienteRut: cliente.rut || '',
-      clienteNombre: cliente.nombre || '',
+      clienteEmpresa: cliente.empresa || cliente.tipo || '',
+      supervisor: cliente.nombre || '',
       clienteEmail: cliente.email || '',
       clienteTelefono: cliente.telefono || '',
       direccion: cliente.direccion || '',
@@ -268,7 +269,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
     setSendingText('Preparando orden...');
     const payload = {
       fecha: todayISO(),
-      clienteNombre: form.clienteNombre,
+      clienteEmpresa: form.clienteEmpresa,
       clienteRut: form.clienteRut,
       clienteEmail: form.clienteEmail,
       clienteTelefono: form.clienteTelefono,
@@ -429,8 +430,8 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
                       onClick={() => selectCliente(c)}
                       className="w-full text-left px-4 py-3 hover:bg-condor-50 border-b border-gray-100 last:border-0"
                     >
-                      <p className="text-sm font-medium text-gray-900">{c.nombre}</p>
-                      <p className="text-xs text-gray-500">{c.rut} — {c.direccion}</p>
+                      <p className="text-sm font-medium text-gray-900">{c.empresa || c.nombre}</p>
+                      <p className="text-xs text-gray-500">{c.rut} — {c.nombre}{c.direccion ? ` — ${c.direccion}` : ''}</p>
                     </button>
                   ))}
                 </div>
@@ -439,11 +440,20 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
 
             <div className="space-y-4">
               <div>
-                <label className="label-field">Cliente / Nombre</label>
+                <label className="label-field">Cliente / Empresa</label>
                 <input
                   type="text"
-                  value={form.clienteNombre}
-                  onChange={(e) => updateField('clienteNombre', e.target.value)}
+                  value={form.clienteEmpresa}
+                  onChange={(e) => updateField('clienteEmpresa', e.target.value)}
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="label-field">Supervisor / Encargado</label>
+                <input
+                  type="text"
+                  value={form.supervisor}
+                  onChange={(e) => updateField('supervisor', e.target.value)}
                   className="input-field"
                 />
               </div>
@@ -496,15 +506,6 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
                     className="input-field"
                   />
                 </div>
-              </div>
-              <div>
-                <label className="label-field">Supervisor / Encargado</label>
-                <input
-                  type="text"
-                  value={form.supervisor}
-                  onChange={(e) => updateField('supervisor', e.target.value)}
-                  className="input-field"
-                />
               </div>
               <div>
                 <label className="label-field">Fecha y Hora Inicio</label>

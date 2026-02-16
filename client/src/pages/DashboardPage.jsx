@@ -99,7 +99,7 @@ export default function DashboardPage() {
                       <ChevronRight size={16} className="text-gray-300" />
                     </div>
                   </div>
-                  <p className="text-sm text-gray-700 font-medium">{o.cliente || 'Sin cliente'}</p>
+                  <p className="text-sm text-gray-700 font-medium">{o.clienteEmpresa || 'Sin cliente'}</p>
                   <p className="text-xs text-gray-400">{o.direccion}{o.comuna ? `, ${o.comuna}` : ''}</p>
                   {trabajosActivos.length > 0 && (
                     <p className="text-xs text-gray-400 mt-1">

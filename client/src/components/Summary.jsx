@@ -44,14 +44,14 @@ export default function Summary({ data, onEdit }) {
       {/* Cliente */}
       <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm">
         <SectionHeader title="Datos del Cliente" stepIndex={0} onEdit={onEdit} />
-        <Field label="Cliente" value={data.clienteNombre} required />
+        <Field label="Cliente / Empresa" value={data.clienteEmpresa} required />
+        <Field label="Supervisor / Encargado" value={data.supervisor} required />
         <Field label="RUT" value={data.clienteRut} required />
         <Field label="Email" value={data.clienteEmail} />
         <Field label="Teléfono" value={data.clienteTelefono} />
         <Field label="Dirección" value={data.direccion} required />
         <Field label="Comuna" value={data.comuna} required />
         <Field label="Orden de Compra" value={data.ordenCompra} />
-        <Field label="Supervisor" value={data.supervisor} />
         <Field label="Inicio" value={data.horaInicio} required />
         <Field label="Término" value={data.horaTermino} required />
       </div>

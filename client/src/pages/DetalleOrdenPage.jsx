@@ -61,7 +61,7 @@ export default function DetalleOrdenPage() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          clienteNombre: orden.cliente,
+          clienteEmpresa: orden.clienteEmpresa,
           clienteEmail: orden.email,
           clienteTelefono: orden.telefono,
           direccion: orden.direccion,
@@ -125,14 +125,14 @@ export default function DetalleOrdenPage() {
         {/* Cliente */}
         <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm mb-4">
           <h3 className="font-heading font-semibold text-condor-900 mb-2">Cliente</h3>
-          <Field label="Nombre" value={orden.cliente} />
+          <Field label="Cliente / Empresa" value={orden.clienteEmpresa} />
           <Field label="RUT" value={typeof orden.clienteRut === 'object' ? '' : orden.clienteRut} />
           <Field label="Email" value={orden.email} />
           <Field label="Telefono" value={orden.telefono} />
           <Field label="Direccion" value={orden.direccion} />
           <Field label="Comuna" value={orden.comuna} />
           <Field label="Orden de Compra" value={orden.ordenCompra} />
-          <Field label="Supervisor" value={orden.supervisor} />
+          <Field label="Supervisor / Encargado" value={orden.supervisor} />
           <Field label="Inicio" value={orden.horaInicio} />
           <Field label="Termino" value={orden.horaTermino} />
         </div>

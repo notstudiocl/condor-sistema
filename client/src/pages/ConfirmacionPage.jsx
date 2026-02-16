@@ -105,10 +105,10 @@ export default function ConfirmacionPage({ orden, onNuevaOrden, onReintentar, on
         {/* Summary card */}
         <div className="bg-white/10 backdrop-blur rounded-2xl p-5 space-y-3 mb-6">
           <Row label="Fecha" value={todayFormatted()} />
-          <Row label="Cliente" value={orden.clienteNombre} />
+          <Row label="Cliente / Empresa" value={orden.clienteEmpresa} />
+          <Row label="Supervisor / Encargado" value={orden.supervisor} />
           <Row label="RUT" value={orden.clienteRut} />
           <Row label="Dirección" value={orden.direccion} />
-          <Row label="Supervisor" value={orden.supervisor} />
 
           {trabajosActivos.length > 0 && (
             <div className="border-t border-white/20 pt-3">
