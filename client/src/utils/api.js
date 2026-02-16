@@ -32,7 +32,8 @@ export async function login(email, pin) {
 }
 
 export async function buscarClientes(query) {
-  return request(`/clientes/buscar?q=${encodeURIComponent(query)}`);
+  const res = await fetch(`${API_URL}/clientes/buscar?q=${encodeURIComponent(query)}`);
+  return res.json();
 }
 
 export async function getTecnicos() {

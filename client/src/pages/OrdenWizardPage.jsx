@@ -113,7 +113,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
     updateField('clienteRut', formatted);
     clearTimeout(debounceRef.current);
     const raw = value.replace(/[^0-9kK]/g, '');
-    if (raw.length < 3) {
+    if (raw.length < 2) {
       setSearchResults([]);
       return;
     }
