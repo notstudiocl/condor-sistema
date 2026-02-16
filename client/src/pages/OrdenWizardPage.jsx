@@ -569,59 +569,20 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
               Personal y Vehículo
             </h2>
 
-            {/* Técnicos Disponibles from Airtable */}
-            {tecnicos.length > 0 && (
-              <div>
-                <label className="label-field">Técnicos Disponibles</label>
-                <div className="flex flex-wrap gap-2">
-                  {tecnicos.map((t) => {
-                    const isSelected = form.personal.some((p) => p.nombre === t.nombre);
-                    return (
-                      <button
-                        key={t.id || t.nombre}
-                        type="button"
-                        onClick={() => !isSelected && addTecnicoToPersonal(t)}
-                        className={`rounded-full px-4 py-2 border transition-colors flex items-center gap-1.5 ${
-                          isSelected
-                            ? 'bg-blue-50 border-blue-500 text-blue-800 cursor-default'
-                            : 'bg-white border-gray-300 text-gray-700 hover:border-blue-500 cursor-pointer'
-                        }`}
-                      >
-                        {isSelected && <Check size={14} className="text-blue-600" />}
-                        <span className="text-sm font-medium">{t.nombre}</span>
-                        {t.especialidad && (
-                          <span className="text-[10px] text-gray-400">{t.especialidad}</span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Agregar persona manual */}
+            {/* 1. Patente Vehículo */}
             <div>
-              <label className="label-field">Agregar persona externa</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={nuevoPersonal}
-                  onChange={(e) => setNuevoPersonal(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addPersonal())}
-                  placeholder="Nombre completo"
-                  className="input-field flex-1"
-                />
-                <button
-                  type="button"
-                  onClick={addPersonal}
-                  className="btn-secondary px-3"
-                >
-                  <Plus size={18} />
-                </button>
-              </div>
+              <label className="label-field">Patente Vehículo</label>
+              <input
+                type="text"
+                value={form.patenteVehiculo}
+                onChange={(e) => updateField('patenteVehiculo', e.target.value.toUpperCase())}
+                placeholder="ABCD-12"
+                className="input-field uppercase"
+                maxLength={7}
+              />
             </div>
 
-            {/* Personal asignado */}
+            {/* 2. Personal asignado */}
             {form.personal.length > 0 && (
               <div>
                 <label className="label-field">Personal asignado ({form.personal.length})</label>
@@ -661,16 +622,56 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
               </div>
             )}
 
+            {/* 3. Técnicos Disponibles */}
+            {tecnicos.length > 0 && (
+              <div>
+                <label className="label-field">Técnicos Disponibles</label>
+                <div className="flex flex-wrap gap-2">
+                  {tecnicos.map((t) => {
+                    const isSelected = form.personal.some((p) => p.nombre === t.nombre);
+                    return (
+                      <button
+                        key={t.id || t.nombre}
+                        type="button"
+                        onClick={() => !isSelected && addTecnicoToPersonal(t)}
+                        className={`rounded-full px-4 py-2 border transition-colors flex items-center gap-1.5 ${
+                          isSelected
+                            ? 'bg-blue-50 border-blue-500 text-blue-800 cursor-default'
+                            : 'bg-white border-gray-300 text-gray-700 hover:border-blue-500 cursor-pointer'
+                        }`}
+                      >
+                        {isSelected && <Check size={14} className="text-blue-600" />}
+                        <span className="text-sm font-medium">{t.nombre}</span>
+                        {t.especialidad && (
+                          <span className="text-[10px] text-gray-400">{t.especialidad}</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* 4. Agregar persona externa */}
             <div>
-              <label className="label-field">Patente Vehículo</label>
-              <input
-                type="text"
-                value={form.patenteVehiculo}
-                onChange={(e) => updateField('patenteVehiculo', e.target.value.toUpperCase())}
-                placeholder="ABCD-12"
-                className="input-field uppercase"
-                maxLength={7}
-              />
+              <label className="label-field">Agregar persona externa</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={nuevoPersonal}
+                  onChange={(e) => setNuevoPersonal(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addPersonal())}
+                  placeholder="Nombre completo"
+                  className="input-field flex-1"
+                />
+                <button
+                  type="button"
+                  onClick={addPersonal}
+                  className="btn-secondary px-3"
+                >
+                  <Plus size={18} />
+                </button>
+              </div>
             </div>
           </div>
         )}
