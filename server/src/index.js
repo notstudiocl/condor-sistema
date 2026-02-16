@@ -7,7 +7,8 @@ import clientesRoutes from './routes/clientes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync, renameSync } from 'fs';
+import multer from 'multer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -22,6 +23,8 @@ const uploadsDir = join(__dirname, '..', 'uploads');
 if (!existsSync(uploadsDir)) mkdirSync(uploadsDir, { recursive: true });
 app.use('/uploads', express.static(uploadsDir));
 
+const uploadMulter = multer({ dest: uploadsDir });
+
 setInterval(() => {
   try {
     const files = readdirSync(uploadsDir);
@@ -33,6 +36,21 @@ setInterval(() => {
     });
   } catch (e) {}
 }, 1800000);
+
+// Upload PDF from n8n
+app.post('/api/upload-pdf', uploadMulter.single('file'), (req, res) => {
+  try {
+    const newName = req.file.filename + '.pdf';
+    const newPath = join(req.file.destination, newName);
+    renameSync(req.file.path, newPath);
+    const url = `https://clientes-condor-api.f8ihph.easypanel.host/uploads/${newName}`;
+    console.log('PDF subido:', url);
+    res.json({ success: true, url });
+  } catch (e) {
+    console.error('Error subiendo PDF:', e);
+    res.json({ success: false, error: e.message });
+  }
+});
 
 // Health check
 app.get('/api/health', (_req, res) => {
