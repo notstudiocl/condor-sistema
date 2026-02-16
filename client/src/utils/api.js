@@ -41,6 +41,12 @@ export async function getTecnicos() {
   return request('/tecnicos');
 }
 
+export async function getTecnicosPublic() {
+  const baseUrl = (import.meta.env.VITE_API_URL || 'https://clientes-condor-api.f8ihph.easypanel.host/api').replace(/\/api\/?$/, '');
+  const res = await fetch(`${baseUrl}/api/tecnicos-lista`);
+  return res.json();
+}
+
 export async function crearOrden(orden) {
   // If offline, save to IndexedDB directly
   if (!navigator.onLine) {

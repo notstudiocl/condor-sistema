@@ -11,11 +11,10 @@ import {
   Check,
   Camera,
   X,
-  UserPlus,
 } from 'lucide-react';
 import { TRABAJOS, METODOS_PAGO, GARANTIAS, WIZARD_STEPS } from '../utils/constants';
 import { formatRut, formatCLP, parseCLP, todayISO } from '../utils/helpers';
-import { buscarClientes, getTecnicos, crearOrden } from '../utils/api';
+import { buscarClientes, getTecnicosPublic, crearOrden } from '../utils/api';
 import SignaturePad from '../components/SignaturePad';
 import Summary from '../components/Summary';
 
@@ -96,7 +95,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
   const fotosDespuesRef = useRef(null);
 
   useEffect(() => {
-    getTecnicos()
+    getTecnicosPublic()
       .then((res) => setTecnicos(res.data || []))
       .catch(() => {});
     setForm((prev) => ({ ...prev, personal: [{ nombre: user.nombre, esEmpleado: true }] }));
@@ -582,18 +581,17 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
                         key={t.id || t.nombre}
                         type="button"
                         onClick={() => !isSelected && addTecnicoToPersonal(t)}
-                        className={`text-xs rounded-full px-3.5 py-2 border transition-colors flex items-center gap-1.5 ${
+                        className={`rounded-full px-4 py-2 border transition-colors flex items-center gap-1.5 ${
                           isSelected
-                            ? 'bg-condor-100 border-condor-300 text-condor-800 cursor-default'
-                            : 'bg-white border-gray-200 text-gray-700 hover:border-condor-400 hover:bg-condor-50 cursor-pointer'
+                            ? 'bg-blue-50 border-blue-500 text-blue-800 cursor-default'
+                            : 'bg-white border-gray-300 text-gray-700 hover:border-blue-500 cursor-pointer'
                         }`}
                       >
-                        {isSelected ? (
-                          <Check size={13} className="text-condor-600" />
-                        ) : (
-                          <UserPlus size={13} className="text-gray-400" />
+                        {isSelected && <Check size={14} className="text-blue-600" />}
+                        <span className="text-sm font-medium">{t.nombre}</span>
+                        {t.especialidad && (
+                          <span className="text-[10px] text-gray-400">{t.especialidad}</span>
                         )}
-                        {t.nombre}
                       </button>
                     );
                   })}

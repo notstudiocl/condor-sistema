@@ -25,6 +25,33 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+// Public technicians list (no auth)
+app.get('/api/tecnicos-lista', async (_req, res) => {
+  try {
+    if (process.env.MOCK_MODE === 'true') {
+      return res.json({ success: true, data: [
+        { id: '1', nombre: 'Carlos Méndez', especialidad: 'Hidrojet' },
+        { id: '2', nombre: 'Laura Torres', especialidad: 'Varillaje' },
+        { id: '3', nombre: 'Diego Silva', especialidad: 'Evacuación' },
+        { id: '4', nombre: 'Camila Rojas', especialidad: 'Mantención' },
+      ]});
+    }
+    const Airtable = (await import('airtable')).default;
+    const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
+    const records = await base('Empleados')
+      .select({ filterByFormula: `{Estado} = 'Activo'` })
+      .firstPage();
+    const data = records.map(r => ({
+      id: r.get('ID') || r.id,
+      nombre: r.get('Nombre'),
+      especialidad: r.get('Especialidad') || '',
+    }));
+    res.json({ success: true, data });
+  } catch (error) {
+    res.json({ success: false, error: error.message, data: [] });
+  }
+});
+
 // Public client search (no auth, direct Airtable query)
 app.get('/api/clientes/buscar', async (req, res) => {
   try {
