@@ -39,6 +39,7 @@ const initialFormData = () => ({
   metodoPago: 'Efectivo',
   garantia: 'Sin garantía',
   requiereFactura: 'No',
+  clienteRecordId: null,
   personal: [],
   patenteVehiculo: '',
   fotosAntes: [],
@@ -80,6 +81,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState(initialFormData);
   const [sending, setSending] = useState(false);
+  const [sendingText, setSendingText] = useState('');
   const [confirmado, setConfirmado] = useState(false);
 
   // RUT search with debounce
@@ -99,7 +101,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
     getTecnicosPublic()
       .then((res) => setTecnicos(res.data || []))
       .catch(() => {});
-    setForm((prev) => ({ ...prev, personal: [{ nombre: user.nombre, esEmpleado: true }] }));
+    setForm((prev) => ({ ...prev, personal: [{ nombre: user.nombre, esEmpleado: true, recordId: user.recordId || null }] }));
   }, [user.nombre]);
 
   const updateField = (field, value) => {
@@ -138,6 +140,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
       clienteTelefono: cliente.telefono || '',
       direccion: cliente.direccion || '',
       comuna: cliente.comuna || '',
+      clienteRecordId: cliente.recordId || null,
     }));
     setSearchResults([]);
   };
@@ -176,7 +179,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
 
   const addTecnicoToPersonal = (tecnico) => {
     if (form.personal.some((p) => p.nombre === tecnico.nombre)) return;
-    updateField('personal', [...form.personal, { nombre: tecnico.nombre, esEmpleado: true }]);
+    updateField('personal', [...form.personal, { nombre: tecnico.nombre, esEmpleado: true, recordId: tecnico.recordId || null }]);
   };
 
   const removePersonal = (idx) => {
@@ -204,6 +207,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
 
   const handleSubmit = async () => {
     setSending(true);
+    setSendingText('Preparando orden...');
     const payload = {
       fecha: todayISO(),
       clienteNombre: form.clienteNombre,
@@ -230,18 +234,39 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
       fotosAntes: form.fotosAntes,
       fotosDespues: form.fotosDespues,
       firmaBase64: form.firmaBase64,
+      clienteRecordId: form.clienteRecordId,
+      empleadosRecordIds: form.personal.filter(p => p.esEmpleado && p.recordId).map(p => p.recordId),
     };
 
     try {
+      if (!form.clienteRecordId && form.clienteRut) {
+        setSendingText('Registrando cliente...');
+      }
+      setSendingText('Guardando orden...');
       const result = await crearOrden(payload);
-      if (result?.offline) payload._offline = true;
-      if (result?.data?.webhookOk === false) {
-        payload._webhookError = result.data.webhookError || 'Error desconocido en webhook';
+      if (result?.offline) {
+        payload._offline = true;
+      } else {
+        if (form.fotosAntes.length > 0 || form.fotosDespues.length > 0) {
+          setSendingText('Subiendo fotos...');
+        }
+        setSendingText('Procesando...');
+        if (result?.data?.webhookOk === false) {
+          payload._webhookError = result.data.webhookError || 'Error desconocido en webhook';
+        }
+        if (result?.data?.airtableOk) {
+          payload._airtableOk = true;
+          payload._recordId = result.data.recordId;
+        }
+        if (result?.success === false) {
+          payload._submitError = result.error || 'Error al enviar la orden';
+        }
       }
     } catch (err) {
       payload._submitError = err.message || 'Error al enviar la orden';
     }
     setSending(false);
+    setSendingText('');
     onOrdenEnviada(payload);
   };
 
@@ -580,10 +605,11 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
                 type="text"
                 value={form.patenteVehiculo}
                 onChange={(e) => updateField('patenteVehiculo', e.target.value.toUpperCase())}
-                placeholder="ABCD-12"
+                placeholder="AB-CD-12"
                 className="input-field uppercase"
-                maxLength={7}
+                maxLength={8}
               />
+              <p className="text-xs text-gray-400 mt-1">Formato: AB-CD-12 (letras-letras-números)</p>
             </div>
 
             {/* 2. Personal asignado */}
@@ -818,7 +844,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
               {sending ? (
                 <>
                   <Loader2 size={20} className="animate-spin" />
-                  Enviando...
+                  {sendingText || 'Enviando...'}
                 </>
               ) : (
                 <>

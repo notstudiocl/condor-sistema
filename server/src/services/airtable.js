@@ -4,10 +4,10 @@ const MOCK_MODE = process.env.MOCK_MODE === 'true';
 
 // Mock data
 const mockTecnicos = [
-  { id: '1', nombre: 'Carlos Méndez', email: 'carlos.mendez@condor.cl', pin: '1234', telefono: '+56 9 1111 1111', especialidad: 'Hidrojet', estado: 'Activo' },
-  { id: '2', nombre: 'Laura Torres', email: 'laura.torres@condor.cl', pin: '1234', telefono: '+56 9 2222 2222', especialidad: 'Varillaje', estado: 'Activo' },
-  { id: '3', nombre: 'Diego Silva', email: 'diego.silva@condor.cl', pin: '1234', telefono: '+56 9 3333 3333', especialidad: 'Evacuación', estado: 'Activo' },
-  { id: '4', nombre: 'Camila Rojas', email: 'camila.rojas@condor.cl', pin: '1234', telefono: '+56 9 4444 4444', especialidad: 'Mantención', estado: 'Activo' },
+  { id: '1', recordId: 'mock_rec_1', nombre: 'Carlos Méndez', email: 'carlos.mendez@condor.cl', pin: '1234', telefono: '+56 9 1111 1111', especialidad: 'Hidrojet', estado: 'Activo' },
+  { id: '2', recordId: 'mock_rec_2', nombre: 'Laura Torres', email: 'laura.torres@condor.cl', pin: '1234', telefono: '+56 9 2222 2222', especialidad: 'Varillaje', estado: 'Activo' },
+  { id: '3', recordId: 'mock_rec_3', nombre: 'Diego Silva', email: 'diego.silva@condor.cl', pin: '1234', telefono: '+56 9 3333 3333', especialidad: 'Evacuación', estado: 'Activo' },
+  { id: '4', recordId: 'mock_rec_4', nombre: 'Camila Rojas', email: 'camila.rojas@condor.cl', pin: '1234', telefono: '+56 9 4444 4444', especialidad: 'Mantención', estado: 'Activo' },
 ];
 
 const mockClientes = [
@@ -35,6 +35,7 @@ export async function findTecnicoByEmail(email) {
   const r = records[0];
   return {
     id: r.get('ID') || r.id,
+    recordId: r.id,
     nombre: r.get('Nombre'),
     email: r.get('Email'),
     pin: String(r.get('Pin Acceso') || ''),

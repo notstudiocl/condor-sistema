@@ -5,12 +5,34 @@ import authRoutes from './routes/auth.js';
 import tecnicosRoutes from './routes/tecnicos.js';
 import clientesRoutes from './routes/clientes.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'fs';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+
+const uploadsDir = join(__dirname, '..', 'uploads');
+if (!existsSync(uploadsDir)) mkdirSync(uploadsDir, { recursive: true });
+app.use('/uploads', express.static(uploadsDir));
+
+setInterval(() => {
+  try {
+    const files = readdirSync(uploadsDir);
+    const now = Date.now();
+    files.forEach(file => {
+      const filepath = join(uploadsDir, file);
+      const stat = statSync(filepath);
+      if (now - stat.mtimeMs > 3600000) unlinkSync(filepath);
+    });
+  } catch (e) {}
+}, 1800000);
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -90,10 +112,10 @@ app.get('/api/tecnicos-lista', async (_req, res) => {
   try {
     if (process.env.MOCK_MODE === 'true') {
       return res.json({ success: true, data: [
-        { id: '1', nombre: 'Carlos Méndez', especialidad: 'Hidrojet' },
-        { id: '2', nombre: 'Laura Torres', especialidad: 'Varillaje' },
-        { id: '3', nombre: 'Diego Silva', especialidad: 'Evacuación' },
-        { id: '4', nombre: 'Camila Rojas', especialidad: 'Mantención' },
+        { recordId: 'mock_rec_1', id: '1', nombre: 'Carlos Méndez', especialidad: 'Hidrojet' },
+        { recordId: 'mock_rec_2', id: '2', nombre: 'Laura Torres', especialidad: 'Varillaje' },
+        { recordId: 'mock_rec_3', id: '3', nombre: 'Diego Silva', especialidad: 'Evacuación' },
+        { recordId: 'mock_rec_4', id: '4', nombre: 'Camila Rojas', especialidad: 'Mantención' },
       ]});
     }
     const Airtable = (await import('airtable')).default;
@@ -102,6 +124,7 @@ app.get('/api/tecnicos-lista', async (_req, res) => {
       .select({ filterByFormula: `{Estado} = 'Activo'` })
       .firstPage();
     const data = records.map(r => ({
+      recordId: r.id,
       id: r.get('ID') || r.id,
       nombre: r.get('Nombre'),
       especialidad: r.get('Especialidad') || '',
@@ -131,6 +154,7 @@ app.get('/api/clientes/buscar', async (req, res) => {
         return rut.includes(qLimpio) || nombre.includes(qLimpio);
       })
       .map(r => ({
+        recordId: r.id,
         rut: r.get('RUT'),
         nombre: r.get('Nombre'),
         tipo: r.get('Tipo'),
@@ -147,32 +171,159 @@ app.get('/api/clientes/buscar', async (req, res) => {
   }
 });
 
-// POST ordenes — solo webhook, no Airtable
+// POST ordenes — Airtable + webhook
 app.post('/api/ordenes', async (req, res) => {
   try {
     const data = req.body;
     console.log('=== NUEVA ORDEN ===');
-    console.log('Recibiendo orden:', JSON.stringify(data).substring(0, 300));
+    console.log('1. Recibiendo orden...');
 
-    const webhookUrl = process.env.WEBHOOK_OT_N8N_URL;
-    if (!webhookUrl) {
-      console.log('WEBHOOK_OT_N8N_URL no configurada');
-      return res.json({ success: true, data: { webhookOk: false, webhookError: 'WEBHOOK_OT_N8N_URL no configurada' } });
+    const Airtable = (await import('airtable')).default;
+    const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
+
+    // --- PASO 1: Cliente ---
+    let clienteRecordId = data.clienteRecordId;
+
+    if (!clienteRecordId && data.clienteRut) {
+      console.log('1a. Creando cliente nuevo...');
+      try {
+        const clienteRecord = await base('Clientes').create({
+          'RUT': data.clienteRut || '',
+          'Nombre': data.clienteNombre || '',
+          'Email': data.clienteEmail || '',
+          'Telefono': data.clienteTelefono || '',
+          'Direccion': data.direccion || '',
+          'Comuna': data.comuna || '',
+          'Tipo': 'Particular',
+          'Empresa': '',
+        }, { typecast: true });
+        clienteRecordId = clienteRecord.id;
+        console.log('1b. Cliente creado:', clienteRecordId);
+      } catch (err) {
+        console.error('Error creando cliente:', err.message);
+      }
     }
 
-    console.log('Enviando a webhook:', webhookUrl);
-    const response = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+    // --- PASO 2: Crear Orden en Airtable ---
+    console.log('2. Creando orden en Airtable...');
+
+    const ordenFields = {
+      'Fecha': data.fecha || new Date().toISOString().split('T')[0],
+      'Estado': 'Enviada',
+      'Cliente': data.clienteNombre || '',
+      'Cliente email': data.clienteEmail || '',
+      'Cliente telefono': data.clienteTelefono || '',
+      'Direccion': data.direccion || '',
+      'Comuna': data.comuna || '',
+      'Orden compra': data.ordenCompra || '',
+      'Supervisor': data.supervisor || '',
+      'Hora inicio': data.horaInicio || '',
+      'Hora termino': data.horaTermino || '',
+      'Trabajos realizados': typeof data.trabajos === 'string' ? data.trabajos : JSON.stringify(data.trabajos || []),
+      'Descripcion trabajo': data.descripcion || '',
+      'Observaciones': data.observaciones || '',
+      'Patente vehiculo': data.patenteVehiculo || '',
+      'Total': Number(data.total) || 0,
+      'Metodo pago': data.metodoPago || '',
+      'Requiere factura': data.requiereFactura || 'No',
+    };
+
+    if (clienteRecordId) {
+      ordenFields['Cliente RUT'] = [clienteRecordId];
+    }
+
+    if (data.empleadosRecordIds && data.empleadosRecordIds.length > 0) {
+      ordenFields['Empleados'] = data.empleadosRecordIds;
+    }
+
+    const ordenRecord = await base('Ordenes de Trabajo').create(ordenFields, { typecast: true });
+    const ordenRecordId = ordenRecord.id;
+    console.log('2b. Orden creada:', ordenRecordId);
+
+    // --- PASO 3: Subir fotos como attachments ---
+    const hasFotos = (data.fotosAntes && data.fotosAntes.length > 0) || (data.fotosDespues && data.fotosDespues.length > 0);
+    if (hasFotos) {
+      console.log('3. Subiendo fotos...');
+      const baseUrl = process.env.SERVER_URL || 'https://clientes-condor-api.f8ihph.easypanel.host';
+
+      const guardarFoto = (base64, prefix, index) => {
+        try {
+          const matches = base64.match(/^data:image\/(.*?);base64,(.*)$/);
+          if (!matches) return null;
+          const ext = matches[1] === 'png' ? 'png' : 'jpg';
+          const buffer = Buffer.from(matches[2], 'base64');
+          const filename = `${ordenRecordId}_${prefix}_${index}_${Date.now()}.${ext}`;
+          const filepath = join(uploadsDir, filename);
+          writeFileSync(filepath, buffer);
+          return { url: `${baseUrl}/uploads/${filename}` };
+        } catch (e) {
+          console.error('Error guardando foto:', e.message);
+          return null;
+        }
+      };
+
+      const fotoFields = {};
+
+      if (data.fotosAntes && data.fotosAntes.length > 0) {
+        const urls = data.fotosAntes.map((f, i) => guardarFoto(f, 'antes', i)).filter(Boolean);
+        if (urls.length > 0) fotoFields['Fotos Antes'] = urls;
+      }
+
+      if (data.fotosDespues && data.fotosDespues.length > 0) {
+        const urls = data.fotosDespues.map((f, i) => guardarFoto(f, 'despues', i)).filter(Boolean);
+        if (urls.length > 0) fotoFields['Fotos Despues'] = urls;
+      }
+
+      if (Object.keys(fotoFields).length > 0) {
+        await base('Ordenes de Trabajo').update(ordenRecordId, fotoFields);
+        console.log('3b. Fotos subidas');
+      }
+    }
+
+    // --- PASO 4: Webhook ---
+    let webhookOk = false;
+    let webhookError = null;
+    const webhookUrl = process.env.WEBHOOK_OT_N8N_URL;
+
+    if (webhookUrl) {
+      console.log('4. Enviando webhook...');
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000);
+
+        const webhookPayload = { ...data, airtableRecordId: ordenRecordId, clienteRecordId };
+        delete webhookPayload.fotosAntes;
+        delete webhookPayload.fotosDespues;
+        delete webhookPayload.firmaBase64;
+
+        const response = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(webhookPayload),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+
+        const responseText = await response.text();
+        console.log('4b. Webhook respuesta:', response.status, responseText);
+        webhookOk = response.ok;
+        if (!response.ok) webhookError = `Status ${response.status}: ${responseText}`;
+      } catch (err) {
+        console.error('4. Webhook error:', err.message);
+        webhookError = err.message;
+      }
+    } else {
+      webhookError = 'WEBHOOK_OT_N8N_URL no configurada';
+    }
+
+    // --- RESPUESTA ---
+    console.log('5. Respondiendo - airtableOk: true, webhookOk:', webhookOk);
+    res.json({
+      success: true,
+      data: { airtableOk: true, recordId: ordenRecordId, webhookOk, webhookError },
     });
-
-    const text = await response.text();
-    console.log('Webhook respuesta:', response.status, text);
-
-    res.json({ success: true, data: { webhookOk: response.ok, webhookStatus: response.status, webhookResponse: text } });
   } catch (error) {
-    console.error('Error enviando orden:', error.message);
+    console.error('ERROR GENERAL:', error.message);
     res.json({ success: false, error: error.message });
   }
 });

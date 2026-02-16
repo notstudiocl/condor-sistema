@@ -39,6 +39,7 @@ router.post('/login', async (req, res, next) => {
 
     const user = {
       id: tecnico.id,
+      recordId: tecnico.recordId || null,
       nombre: tecnico.nombre,
       email: tecnico.email,
       especialidad: tecnico.especialidad,

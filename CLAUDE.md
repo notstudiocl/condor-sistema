@@ -4,7 +4,7 @@
 
 Sistema de digitalización de órdenes de trabajo para **Condor Alcantarillados**, empresa chilena de soluciones sanitarias, transporte de residuos e hidrojet.
 
-Reemplaza formularios en papel que los técnicos llenan en terreno. El flujo es: técnico llega al sitio → abre la app en su celular → llena el formulario → marca trabajos realizados → captura firma del supervisor y fotos antes/después → envía → el sistema guarda en Airtable, y notifica al administrador vía webhook n8n.
+Reemplaza formularios en papel que los técnicos llenan en terreno. El flujo es: técnico llega al sitio → abre la app en su celular → llena el formulario → marca trabajos realizados → captura firma del supervisor y fotos antes/después → envía → el sistema guarda en Airtable (con linked records), sube fotos como attachments, y notifica vía webhook n8n.
 
 ## Datos de la empresa
 
@@ -29,7 +29,7 @@ Reemplaza formularios en papel que los técnicos llenan en terreno. El flujo es:
 | Botón acción importante (enviar, nueva orden) | Rojo `#DC2626` |
 | Estados activos / checks | Azul `#2563EB` |
 
-El logo es textual: "CONDOR" grande con línea roja debajo y "Alcantarillados" debajo. No hay archivo de imagen de logo — generar un SVG inline en el componente de Login.
+El logo es un archivo PNG en `client/public/condor-logo.png`.
 
 ## Arquitectura
 
@@ -37,49 +37,68 @@ El logo es textual: "CONDOR" grande con línea roja debajo y "Alcantarillados" d
 condor-sistema/
 ├── client/          # React + Vite (PWA mobile-first)
 │   ├── src/
-│   │   ├── components/   # SignaturePad, Summary, CondorLogo
+│   │   ├── components/   # SignaturePad, Summary, Header, OfflineIndicator
 │   │   ├── pages/        # LoginPage, OrdenWizardPage, ConfirmacionPage
-│   │   └── utils/        # api.js, constants.js, helpers.js
+│   │   └── utils/        # api.js, constants.js, helpers.js, offlineStorage.js, syncManager.js
 │   └── ...
 ├── server/          # Node.js + Express (API REST)
-│   └── src/
-│       ├── middleware/    # auth.js, errorHandler.js
-│       ├── routes/        # auth.js, ordenes.js, tecnicos.js, clientes.js
-│       └── services/      # airtable.js, webhook.js
+│   ├── src/
+│   │   ├── middleware/    # auth.js, errorHandler.js
+│   │   ├── routes/        # auth.js, tecnicos.js, clientes.js
+│   │   ├── services/      # airtable.js (read-only: clientes, empleados, login)
+│   │   └── index.js       # Main server + ordenes endpoint + public endpoints
+│   └── uploads/           # Temp photo storage (auto-cleaned every 30min)
 ├── CLAUDE.md        # Este archivo
 └── package.json     # Scripts raíz del monorepo
 ```
 
 **Stack:**
-- Frontend: React 18, Vite, Tailwind CSS 3, React Router, Lucide React icons
+- Frontend: React 18, Vite, Tailwind CSS 3, React Router (HashRouter), Lucide React icons
 - Backend: Express, Airtable API, JWT auth simple
-- DB: Airtable (no SQL)
+- DB: Airtable (linked records)
 - Automatización: n8n vía webhooks
-- Deploy: GitHub Pages (frontend) + Railway o Render (backend)
+- Deploy: GitHub Pages (frontend) + EasyPanel/Docker (backend)
+
+## Flujo de envío de órdenes
+
+Al presionar "Enviar Orden":
+1. Si es cliente nuevo (no vino de búsqueda), crear cliente en Airtable tabla "Clientes"
+2. Guardar orden en Airtable tabla "Ordenes de Trabajo" (con linked records)
+3. Subir fotos como attachments en Airtable (base64 → archivo → URL → Airtable attachment)
+4. Enviar webhook a n8n con todos los datos + recordId de Airtable (sin fotos/firma base64)
+5. Esperar respuesta del webhook (timeout 30s)
+6. Responder al frontend con resultado de todo
+
+### Linked Records (IMPORTANTE)
+
+- **"Cliente RUT"** en Ordenes de Trabajo es un LINKED RECORD a tabla Clientes → se pasa como `[recordId]`
+- **"Empleados"** en Ordenes de Trabajo es un LINKED RECORD a tabla Empleados → se pasa como `[recordId1, recordId2, ...]`
+- Los record IDs de Airtable se obtienen al buscar clientes, listar técnicos, y al hacer login
+
+### Campos que NO se envían a Airtable
+
+"Numero orden", "ID", "Creada" son campos computados/automáticos en Airtable. No incluirlos en el create.
 
 ## Campos de la Orden de Trabajo (según formulario PDF real)
 
 ### Encabezado
-- Número de orden (auto-generado o correlativo)
 - Fecha de la orden (auto: hoy)
 
 ### Datos del cliente
 - Correo electrónico
 - Teléfono
-- Dirección (required)
-- Cliente / Nombre (required)
+- Dirección
+- Cliente / Nombre
 - RUT (formato chileno: 12.345.678-9, con búsqueda autocompletado desde Airtable)
 - Comuna
 - Orden de Compra (opcional, para clientes empresa)
-- Supervisor / Encargado (required — persona que recibe el trabajo en terreno)
+- Supervisor / Encargado
 
 ### Horarios
-- Hora Inicio (input type="time")
-- Hora Término (input type="time")
+- Hora Inicio (datetime-local)
+- Hora Término (datetime-local)
 
 ### Trabajos Realizados (checklist con cantidad)
-
-Esto es una tabla con checkbox + cantidad numérica para cada tipo de trabajo:
 
 | Trabajo | Ejemplo cantidad |
 |---|---|
@@ -94,16 +113,13 @@ Esto es una tabla con checkbox + cantidad numérica para cada tipo de trabajo:
 | Mantención aguas servidas | 0 |
 | Mantención aguas grasas | 0 |
 
-UI: cada fila tiene un checkbox. Al activar aparece un counter +/- para cantidad. Si cantidad > 0 la fila se resalta en azul claro.
-
-### Descripción del Trabajo (textarea, required)
-Texto libre donde el técnico detalla lo que hizo.
-
+### Descripción del Trabajo (textarea)
 ### Observaciones (textarea, opcional)
 
 ### Personal y vehículo
-- Personal que ejecuta el trabajo: lista dinámica de nombres (mínimo 1, el técnico logueado va primero)
-- Patente vehículo (ej: "ABCD-12")
+- Patente vehículo (formato: "AB-CD-12")
+- Personal asignado: lista con técnicos de Airtable (con recordId) + externos manuales
+- Badge azul "Técnico" para empleados de Airtable, badge gris "Externo" para manuales
 
 ### Pago
 - Total a pagar (CLP, formateado con separador de miles)
@@ -111,95 +127,109 @@ Texto libre donde el técnico detalla lo que hizo.
 - Garantía: Sin garantía / 3 meses / 6 meses / 1 año
 - Requiere Factura: Sí / No
 
+### Evidencia fotográfica
+- Fotos ANTES (upload múltiple, max 5, resize a 1200px, PNG base64)
+- Fotos DESPUÉS (upload múltiple, max 5, resize a 1200px, PNG base64)
+
 ### Firma y cierre
-- Nombre supervisor o encargado (prellenado del paso 1)
-- Fecha (auto: hoy)
 - Firma digital del supervisor (canvas touch)
+- Checkbox obligatorio "Confirmo que los datos son correctos"
 
-### Evidencia fotográfica (Fase 2)
-- Fotos ANTES (upload múltiple)
-- Fotos DESPUÉS (upload múltiple)
+## Flujo del Wizard (5 pasos)
 
-## Flujo del Wizard (4 pasos)
-
-1. **Cliente**: RUT (con búsqueda), nombre, email, teléfono, dirección, comuna, OC, supervisor, horarios
-2. **Trabajos**: Checklist de trabajos con cantidad, descripción del trabajo, observaciones, pago
-3. **Personal**: Lista de técnicos que ejecutaron, patente vehículo
-4. **Firma**: Firma digital del supervisor, resumen completo de la OT con opción de editar cada sección, checkbox de confirmación, botón Enviar
+1. **Cliente**: RUT (con búsqueda pública, sin auth), nombre, email, teléfono, dirección, comuna, OC, supervisor, horarios
+2. **Trabajos**: Checklist de trabajos con cantidad, descripción, observaciones, pago
+3. **Personal**: Patente vehículo, personal asignado, chips de técnicos de Airtable, agregar persona externa
+4. **Fotos**: Fotos antes y después (camera o galería)
+5. **Firma**: Resumen completo con "No especificado" en naranja para campos vacíos, firma digital, checkbox de confirmación, botón Enviar
 
 ## API Endpoints
 
 ```
-POST   /api/auth/login          # Login con email + PIN
-GET    /api/tecnicos             # Listar técnicos activos
-GET    /api/clientes/buscar?q=   # Buscar clientes por RUT (autocompletado)
-POST   /api/ordenes              # Crear orden → envía a webhook n8n
+POST   /api/auth/login          # Login con email + PIN (devuelve recordId del empleado)
+GET    /api/tecnicos-lista       # Listar técnicos activos (público, sin auth, incluye recordId)
+GET    /api/clientes/buscar?q=   # Buscar clientes por RUT/nombre (público, sin auth, incluye recordId)
+POST   /api/ordenes              # Crear orden → Airtable + fotos + webhook n8n (público)
 GET    /api/health               # Health check
+GET    /api/test-webhook         # Diagnóstico: test webhook connectivity
+POST   /api/test-envio           # Diagnóstico: simula envío completo
+GET    /api/clientes/test        # Diagnóstico: test Airtable clientes
 ```
 
 ## Variables de entorno
 
 ### Server (.env)
 ```
-PORT=3001
+PORT=3000
 AIRTABLE_API_KEY=pat_xxxxx
 AIRTABLE_BASE_ID=appXXXXXX
 WEBHOOK_OT_N8N_URL=https://tu-n8n.com/webhook/ordenes-condor
 JWT_SECRET=condor_secret_seguro
 CORS_ORIGIN=https://tu-usuario.github.io
-MOCK_MODE=true
+SERVER_URL=https://clientes-condor-api.f8ihph.easypanel.host
+MOCK_MODE=false
 ```
 
 ### Client (.env)
 ```
 VITE_API_URL=http://localhost:3001/api
-VITE_DEV_MODE=true
 ```
 
 ## Airtable — Estructura de tablas
 
-### Tabla "Ordenes"
-Campos: Numero orden, Fecha, Estado (Pendiente/Completada/Facturada), Cliente nombre, Cliente RUT, Cliente email, Cliente telefono, Direccion, Comuna, Orden compra, Supervisor, Hora inicio, Hora termino, Trabajos realizados (JSON string), Descripcion trabajo, Observaciones, Personal (JSON string), Patente vehiculo, Total, Metodo pago, Garantia, Requiere factura, Firma supervisor (attachment), Fotos antes (attachment), Fotos despues (attachment)
+### Tabla "Ordenes de Trabajo"
+Campos: Fecha, Estado (Enviada/Completada/Facturada), Cliente, Cliente RUT (LINKED RECORD → Clientes), Cliente email, Cliente telefono, Direccion, Comuna, Orden compra, Supervisor, Hora inicio, Hora termino, Trabajos realizados (JSON string), Descripcion trabajo, Observaciones, Empleados (LINKED RECORD → Empleados), Patente vehiculo, Total, Metodo pago, Requiere factura, Fotos Antes (attachment), Fotos Despues (attachment)
 
-### Tabla "Tecnicos"
+Campos automáticos (NO enviar): Numero orden, ID, Creada
+
+### Tabla "Empleados"
 Campos: ID, Nombre, Email, Pin Acceso, Telefono, Especialidad, Estado (Activo/Inactivo)
 
 ### Tabla "Clientes"
-Campos: RUT, Nombre, Email, Telefono, Direccion, Comuna, Empresa
+Campos: RUT, Nombre, Email, Telefono, Direccion, Comuna, Tipo, Empresa
 
 ## Webhook payload (n8n)
 
-Al crear una orden se envía POST al webhook:
+Al crear una orden se envía POST al webhook (sin fotos/firma base64 para no hacerlo pesado):
 ```json
 {
-  "Fecha": "2026-02-16",
-  "Estado": "Completada",
-  "Cliente": "Juan Pérez",
-  "Cliente RUT": "12.345.678-9",
-  "Cliente Email": "juan@mail.com",
-  "Cliente Telefono": "+56 9 1234 5678",
-  "Cliente Direccion": "Av. Los Leones 1234",
-  "Cliente Comuna": "Providencia",
-  "Orden de Compra": "OC-001",
-  "Supervisor": "María González",
-  "Hora Inicio": "08:30",
-  "Hora Termino": "12:00",
-  "Trabajos Realizados": [
+  "fecha": "2026-02-16",
+  "clienteNombre": "Juan Pérez",
+  "clienteRut": "12.345.678-9",
+  "clienteEmail": "juan@mail.com",
+  "clienteTelefono": "+56 9 1234 5678",
+  "direccion": "Av. Los Leones 1234",
+  "comuna": "Providencia",
+  "ordenCompra": "OC-001",
+  "supervisor": "María González",
+  "horaInicio": "2026-02-16T08:30",
+  "horaTermino": "2026-02-16T12:00",
+  "trabajos": [
     { "trabajo": "Hora Camión Hidrojet", "cantidad": 2 },
     { "trabajo": "Evacuación de fosas", "cantidad": 1 }
   ],
-  "Descripcion Trabajo": "Se realizó hidrojet en cámaras...",
-  "Observaciones": "Cliente solicita visita de seguimiento",
-  "Personal": ["Carlos Méndez", "Diego Silva"],
-  "Patente Vehiculo": "ABCD-12",
-  "Total": 350000,
-  "Metodo Pago": "Transferencia",
-  "Garantia": "3 meses",
-  "Requiere Factura": "Sí",
-  "Firma Supervisor": "data:image/png;base64,...",
-  "Fecha Envio": "2026-02-16T15:30:00.000Z"
+  "descripcion": "Se realizó hidrojet en cámaras...",
+  "observaciones": "Cliente solicita visita de seguimiento",
+  "personal": ["Carlos Méndez", "Diego Silva"],
+  "patenteVehiculo": "AB-CD-12",
+  "total": 350000,
+  "metodoPago": "Transferencia",
+  "garantia": "3 meses",
+  "requiereFactura": "Sí",
+  "airtableRecordId": "recXXXXXX",
+  "clienteRecordId": "recYYYYYY",
+  "empleadosRecordIds": ["recAAA", "recBBB"]
 }
 ```
+
+## Pantalla de Confirmación
+
+| Estado | Color fondo | Icono | Título | Botones |
+|---|---|---|---|---|
+| Airtable OK + Webhook OK | Verde `#10B981` | CheckCircle | "Orden Registrada" | Nueva Orden |
+| Airtable OK + Webhook FALLÓ | Amarillo `#F59E0B` | AlertTriangle | "Orden Guardada" | Reintentar + Nueva Orden |
+| Offline | Amarillo `#F59E0B` | Clock | "Orden Guardada" | Nueva Orden |
+| Error total | Rojo `#DC2626` | XCircle | "Error al Enviar" | Reintentar + Nueva Orden |
 
 ## Técnicos de prueba (modo mock)
 
@@ -210,13 +240,6 @@ Al crear una orden se envía POST al webhook:
 | diego.silva@condor.cl | 1234 | Diego Silva |
 | camila.rojas@condor.cl | 1234 | Camila Rojas |
 
-## Clientes de prueba (modo mock)
-
-| RUT | Nombre | Dirección |
-|---|---|---|
-| 12.345.678-9 | Condominio Vista Hermosa | Av. Principal 1000, Providencia |
-| 9.876.543-2 | Restaurant El Buen Sabor | Calle Comercio 456, Santiago |
-
 ## Convenciones de código
 
 - JavaScript/JSX (no TypeScript)
@@ -225,56 +248,22 @@ Al crear una orden se envía POST al webhook:
 - Componentes funcionales con hooks
 - Nombres: PascalCase para componentes, camelCase para utils
 - API responses: `{ success: true, data: ... }` o `{ success: false, error: "mensaje" }`
-- Validación en frontend Y backend
 - Mensajes de error en español
 
 ## Consideraciones UX importantes
 
-1. **Mobile-first**: Los técnicos usan esto en terreno, con guantes. Botones grandes (min 44px touch target), inputs generosos.
-2. **Chile-specific**: RUT formatting con puntos y guión, comunas, precios en CLP con separador de miles, teléfonos +56.
-3. **Firmas digitales**: Canvas touch que funcione bien en celulares. El pad de firma debe ser ancho y con borde punteado.
-4. **Checklist de trabajos**: Es el core de la OT. Cada trabajo tiene checkbox + counter. Visual claro de qué se hizo y cuánto.
-5. **Resumen antes de enviar**: En el paso final, mostrar TODO lo que se va a enviar con opción de volver a editar cada sección.
-6. **Login simple**: Email + PIN de 4 dígitos. Sin sistema de usuarios complejo.
-7. **Header con logo**: Barra superior azul oscuro con mini logo "CA" (Condor Alcantarillados) + nombre del técnico logueado.
-8. **Confirmación**: Pantalla de éxito con gradiente azul y resumen de lo enviado. Botón rojo "Nueva Orden".
-
-## Dependencias frontend
-
-```json
-{
-  "react": "^18.3.1",
-  "react-dom": "^18.3.1",
-  "react-router-dom": "^6.28.0",
-  "lucide-react": "^0.460.0"
-}
-```
-
-DevDeps: vite, @vitejs/plugin-react, tailwindcss, postcss, autoprefixer
-
-## Dependencias backend
-
-```json
-{
-  "express": "^4.21.1",
-  "cors": "^2.8.5",
-  "dotenv": "^16.4.5",
-  "jsonwebtoken": "^9.0.2",
-  "airtable": "^0.12.2",
-  "multer": "^1.4.5-lts.1"
-}
-```
-
-## Tailwind custom theme
-
-Extender el tema con:
-- `condor` color palette (blues: 50-950 basado en #1E3A8A)
-- `accent` color palette (reds: 50-900 basado en #DC2626)
-- Font families: heading (DM Sans), body (IBM Plex Sans), mono (JetBrains Mono)
-- Google Fonts importados en index.html
+1. **Mobile-first**: Botones grandes (min 44px touch target), inputs generosos.
+2. **Chile-specific**: RUT formatting, precios en CLP, teléfonos +56.
+3. **Firmas digitales**: Canvas touch ancho con borde punteado.
+4. **Checklist de trabajos**: Checkbox + counter. Visual claro.
+5. **Resumen antes de enviar**: Campos vacíos en naranja "No especificado". Checkbox obligatorio de confirmación.
+6. **Login simple**: Email + PIN de 4 dígitos.
+7. **Progreso de envío**: Mensajes de estado durante el envío (registrando cliente, guardando orden, subiendo fotos, procesando).
+8. **Sin validaciones bloqueantes**: Libre para probar, sin campos required que bloqueen.
 
 ## Deploy
 
 - **Frontend**: GitHub Pages con `base: '/condor-sistema/'` en vite.config.js, usando HashRouter
-- **Backend**: Railway o Render, variable CORS_ORIGIN apuntando al dominio de GitHub Pages
-- **Base path**: Todas las rutas de assets usan `/condor-sistema/` como base
+- **Backend**: EasyPanel con Docker, variable CORS_ORIGIN apuntando al dominio de GitHub Pages
+- **Fotos**: Se guardan temporalmente en `/uploads/` del server, se limpian cada 30 min (1 hora de vida)
+- **Repo**: https://github.com/notstudiocl/condor-sistema

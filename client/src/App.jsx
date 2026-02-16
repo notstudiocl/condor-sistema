@@ -64,6 +64,7 @@ export default function App() {
                   <ConfirmacionPage
                     orden={ordenEnviada}
                     onNuevaOrden={handleNuevaOrden}
+                    onReintentar={() => setOrdenEnviada(null)}
                   />
                 ) : (
                   <OrdenWizardPage
