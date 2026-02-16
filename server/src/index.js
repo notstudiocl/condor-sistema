@@ -2,7 +2,6 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import authRoutes from './routes/auth.js';
-import ordenesRoutes from './routes/ordenes.js';
 import tecnicosRoutes from './routes/tecnicos.js';
 import clientesRoutes from './routes/clientes.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -148,9 +147,38 @@ app.get('/api/clientes/buscar', async (req, res) => {
   }
 });
 
+// POST ordenes — solo webhook, no Airtable
+app.post('/api/ordenes', async (req, res) => {
+  try {
+    const data = req.body;
+    console.log('=== NUEVA ORDEN ===');
+    console.log('Recibiendo orden:', JSON.stringify(data).substring(0, 300));
+
+    const webhookUrl = process.env.WEBHOOK_OT_N8N_URL;
+    if (!webhookUrl) {
+      console.log('WEBHOOK_OT_N8N_URL no configurada');
+      return res.json({ success: true, data: { webhookOk: false, webhookError: 'WEBHOOK_OT_N8N_URL no configurada' } });
+    }
+
+    console.log('Enviando a webhook:', webhookUrl);
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+
+    const text = await response.text();
+    console.log('Webhook respuesta:', response.status, text);
+
+    res.json({ success: true, data: { webhookOk: response.ok, webhookStatus: response.status, webhookResponse: text } });
+  } catch (error) {
+    console.error('Error enviando orden:', error.message);
+    res.json({ success: false, error: error.message });
+  }
+});
+
 // Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/ordenes', ordenesRoutes);
 app.use('/api/tecnicos', tecnicosRoutes);
 app.use('/api/clientes', clientesRoutes);
 

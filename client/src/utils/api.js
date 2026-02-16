@@ -54,12 +54,16 @@ export async function crearOrden(orden) {
     return { success: true, offline: true };
   }
 
-  // Online: try to send, fallback to offline storage on network error
+  const baseUrl = (import.meta.env.VITE_API_URL || 'https://clientes-condor-api.f8ihph.easypanel.host/api').replace(/\/api\/?$/, '');
+
+  // Online: send to webhook via backend (no auth needed)
   try {
-    return await request('/ordenes', {
+    const res = await fetch(`${baseUrl}/api/ordenes`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(orden),
     });
+    return await res.json();
   } catch (err) {
     if (err instanceof TypeError || err.message?.includes('fetch') || err.message?.includes('network') || err.message?.includes('Failed')) {
       await savePendingOrder(orden);
