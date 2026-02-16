@@ -19,6 +19,11 @@ function AppRoutes({ user, onLogout }) {
 
   const handleNuevaOrden = () => {
     setOrdenEnviada(null);
+    navigate('/orden/nueva');
+  };
+
+  const handleIrAlInicio = () => {
+    setOrdenEnviada(null);
     navigate('/');
   };
 
@@ -50,6 +55,7 @@ function AppRoutes({ user, onLogout }) {
                   orden={ordenEnviada}
                   onNuevaOrden={handleNuevaOrden}
                   onReintentar={handleReintentar}
+                  onInicio={handleIrAlInicio}
                 />
               ) : (
                 <Navigate to="/" replace />

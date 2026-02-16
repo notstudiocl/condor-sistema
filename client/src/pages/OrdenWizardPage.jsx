@@ -307,6 +307,9 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
           payload._airtableOk = true;
           payload._recordId = result.data.recordId;
         }
+        if (result?.data?.webhookData) {
+          payload._webhookData = result.data.webhookData;
+        }
         if (result?.success === false) {
           payload._submitError = result.error || 'Error al actualizar la orden';
         }
@@ -329,6 +332,9 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
           if (result?.data?.airtableOk) {
             payload._airtableOk = true;
             payload._recordId = result.data.recordId;
+          }
+          if (result?.data?.webhookData) {
+            payload._webhookData = result.data.webhookData;
           }
           if (result?.success === false) {
             payload._submitError = result.error || 'Error al enviar la orden';
