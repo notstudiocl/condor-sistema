@@ -234,8 +234,11 @@ export default function OrdenWizardPage({ user, onOrdenEnviada }) {
     try {
       const result = await crearOrden(payload);
       if (result?.offline) payload._offline = true;
-    } catch {
-      // Show confirmation anyway
+      if (result?.data?.webhookOk === false) {
+        payload._webhookError = result.data.webhookError || 'Error desconocido en webhook';
+      }
+    } catch (err) {
+      payload._submitError = err.message || 'Error al enviar la orden';
     }
     setSending(false);
     onOrdenEnviada(payload);

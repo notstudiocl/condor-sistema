@@ -1,16 +1,30 @@
-import { CheckCircle2, Clock, Plus } from 'lucide-react';
+import { CheckCircle2, Clock, Plus, AlertTriangle, XCircle } from 'lucide-react';
 import { formatCLP, todayFormatted } from '../utils/helpers';
 
 export default function ConfirmacionPage({ orden, onNuevaOrden }) {
   const trabajosActivos = (orden.trabajos || []).filter((t) => t.cantidad > 0);
   const isOffline = orden._offline === true;
+  const webhookError = orden._webhookError;
+  const submitError = orden._submitError;
 
   return (
     <div className="min-h-[calc(100vh-56px)] bg-white p-4 pb-8">
       <div className="max-w-md mx-auto pt-8">
-        {/* Success / Offline icon */}
+        {/* Success / Offline / Error icon */}
         <div className="flex flex-col items-center mb-6">
-          {isOffline ? (
+          {submitError ? (
+            <>
+              <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                <XCircle size={48} className="text-red-500" />
+              </div>
+              <h1 className="text-gray-900 font-heading font-bold text-2xl">
+                Error al Enviar
+              </h1>
+              <p className="text-gray-500 text-sm mt-1 text-center">
+                La orden no se pudo enviar al servidor
+              </p>
+            </>
+          ) : isOffline ? (
             <>
               <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mb-4">
                 <Clock size={48} className="text-amber-500" />
@@ -36,6 +50,26 @@ export default function ConfirmacionPage({ orden, onNuevaOrden }) {
             </>
           )}
         </div>
+
+        {/* Error banners */}
+        {submitError && (
+          <div className="mb-4 bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3">
+            <XCircle size={20} className="text-red-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-red-800">Error del servidor</p>
+              <p className="text-xs text-red-600 mt-0.5">{submitError}</p>
+            </div>
+          </div>
+        )}
+        {webhookError && !submitError && (
+          <div className="mb-4 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
+            <AlertTriangle size={20} className="text-amber-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-amber-800">Webhook no recibido</p>
+              <p className="text-xs text-amber-600 mt-0.5">{webhookError}</p>
+            </div>
+          </div>
+        )}
 
         {/* Resumen */}
         <div className="bg-white border border-condor-200 rounded-2xl p-5 space-y-3 shadow-sm">
