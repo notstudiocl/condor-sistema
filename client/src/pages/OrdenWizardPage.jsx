@@ -36,12 +36,6 @@ const formatPatente = (value) => {
 
 const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-const validatePatente = (patente) => {
-  if (!patente) return false;
-  const match = patente.match(/^([A-Z]{2})-([A-Z]{2})-(\d{2})$/);
-  return !!match;
-};
-
 const initialFormData = () => ({
   clienteRut: '',
   clienteEmpresa: '',
@@ -350,7 +344,6 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
 
     if (stepIdx === 2) {
       if (!form.patenteVehiculo.trim()) errs.patenteVehiculo = 'La patente es obligatoria';
-      else if (!validatePatente(form.patenteVehiculo.trim())) errs.patenteVehiculo = 'El formato de patente debe ser XX-XX-00';
     }
 
     // Step 3 (Fotos) - no required fields
