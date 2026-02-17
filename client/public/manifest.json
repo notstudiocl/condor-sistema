@@ -1,0 +1,21 @@
+{
+  "name": "Condor Alcantarillados - Órdenes",
+  "short_name": "Condor OT",
+  "description": "Sistema de Órdenes de Trabajo",
+  "start_url": "/condor-sistema/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1E3A8A",
+  "icons": [
+    {
+      "src": "condor-logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "condor-logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
