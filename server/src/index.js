@@ -484,7 +484,7 @@ app.post('/api/ordenes', async (req, res) => {
       data: { airtableOk: true, recordId: ordenRecordId, webhookOk, webhookError, webhookData },
     });
   } catch (error) {
-    if (data.idempotencyKey) procesandoOrdenes.delete(data.idempotencyKey);
+    if (req.body?.idempotencyKey) procesandoOrdenes.delete(req.body.idempotencyKey);
     console.error('ERROR GENERAL:', error.message);
     res.json({ success: false, error: error.message });
   }
