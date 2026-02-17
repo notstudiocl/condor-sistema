@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, RefreshCw, Loader2, ClipboardList, ChevronRight, Search, X } from 'lucide-react';
+import { Plus, RefreshCw, Loader2, ClipboardList, ChevronRight, Search, X, WifiOff } from 'lucide-react';
+import { clearWizardSession } from './OrdenWizardPage';
 
 const API_URL = (import.meta.env.VITE_API_URL || 'https://clientes-condor-api.f8ihph.easypanel.host/api').replace(/\/api\/?$/, '');
 
@@ -19,7 +20,7 @@ function EstadoBadge({ estado }) {
   );
 }
 
-export default function DashboardPage() {
+export default function DashboardPage({ pendingCount = 0 }) {
   const navigate = useNavigate();
   const [ordenes, setOrdenes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -73,9 +74,19 @@ export default function DashboardPage() {
   return (
     <div className="min-h-[calc(100vh-56px)] bg-gray-50">
       <div className="max-w-lg mx-auto px-4 pt-6 pb-8">
+        {/* Pending offline orders banner */}
+        {pendingCount > 0 && (
+          <div className="bg-amber-50 border border-amber-300 rounded-2xl px-4 py-3 mb-4 flex items-center gap-3">
+            <WifiOff size={20} className="text-amber-600 shrink-0" />
+            <p className="text-sm text-amber-800 font-medium">
+              {pendingCount} {pendingCount === 1 ? 'orden pendiente' : 'órdenes pendientes'} de envío
+            </p>
+          </div>
+        )}
+
         {/* Boton Nueva Orden */}
         <button
-          onClick={() => navigate('/orden/nueva')}
+          onClick={() => { clearWizardSession(); navigate('/orden/nueva'); }}
           className="w-full bg-accent-600 hover:bg-accent-700 active:bg-accent-800 text-white font-bold rounded-2xl py-5 text-lg transition-colors flex items-center justify-center gap-2 shadow-lg mb-6"
         >
           <Plus size={24} strokeWidth={3} />

@@ -13,9 +13,8 @@ import {
   Camera,
   X,
   AlertCircle,
-  RotateCcw,
 } from 'lucide-react';
-import { METODOS_PAGO, GARANTIAS, WIZARD_STEPS } from '../utils/constants';
+import { METODOS_PAGO, GARANTIAS, WIZARD_STEPS, SERVICIOS_FALLBACK } from '../utils/constants';
 import { formatRut, formatCLP, parseCLP, todayISO } from '../utils/helpers';
 import { buscarClientes, getTecnicosPublic, crearOrden, actualizarOrden, getServicios } from '../utils/api';
 import SignaturePad from '../components/SignaturePad';
@@ -102,9 +101,32 @@ function FieldError({ message }) {
   );
 }
 
+const SESSION_KEY = 'condor_wizard_state';
+
+function loadSessionState() {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return null;
+}
+
+function saveSessionState(form, step, idempotencyKey) {
+  try {
+    // Exclude photos and firma (too large for sessionStorage)
+    const { fotosAntes, fotosDespues, firmaBase64, ...rest } = form;
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ form: rest, step, idempotencyKey }));
+  } catch { /* ignore quota errors */ }
+}
+
+export function clearWizardSession() {
+  sessionStorage.removeItem(SESSION_KEY);
+}
+
 export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
-  const [step, setStep] = useState(0);
-  const [form, setForm] = useState(initialFormData);
+  const saved = useRef(editMode ? null : loadSessionState());
+  const [step, setStep] = useState(saved.current?.step || 0);
+  const [form, setForm] = useState(() => saved.current?.form ? { ...initialFormData(), ...saved.current.form } : initialFormData());
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);
   const [sendingText, setSendingText] = useState('');
@@ -112,12 +134,11 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
   const [errors, setErrors] = useState({});
 
   // Idempotency key — generated once per wizard session, reused on retry
-  const [idempotencyKey] = useState(() => crypto.randomUUID());
+  const [idempotencyKey] = useState(() => saved.current?.idempotencyKey || crypto.randomUUID());
 
   // Dynamic services from Airtable
   const [servicios, setServicios] = useState([]);
   const [serviciosLoading, setServiciosLoading] = useState(true);
-  const [serviciosError, setServiciosError] = useState(null);
 
   // RUT search with debounce
   const [searchResults, setSearchResults] = useState([]);
@@ -137,7 +158,6 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
   // Load services from Airtable
   const cargarServicios = async () => {
     setServiciosLoading(true);
-    setServiciosError(null);
     try {
       const res = await getServicios();
       const lista = res.data || [];
@@ -150,8 +170,17 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
           trabajos: lista.map((s) => ({ nombre: s.nombre, checked: false, cantidad: 0 })),
         };
       });
-    } catch (err) {
-      setServiciosError(err.message || 'Error al cargar servicios');
+    } catch {
+      // Offline or error: use fallback list
+      const fallback = SERVICIOS_FALLBACK.map((nombre) => ({ nombre }));
+      setServicios(fallback);
+      setForm((prev) => {
+        if (prev.trabajos.length > 0) return prev;
+        return {
+          ...prev,
+          trabajos: fallback.map((s) => ({ nombre: s.nombre, checked: false, cantidad: 0 })),
+        };
+      });
     } finally {
       setServiciosLoading(false);
     }
@@ -220,6 +249,12 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
     };
     loadOrden();
   }, [editMode, editRecordId, user.nombre, user.recordId]);
+
+  // Persist form state to sessionStorage on changes (not in edit mode)
+  useEffect(() => {
+    if (editMode) return;
+    saveSessionState(form, step, idempotencyKey);
+  }, [form, step, idempotencyKey, editMode]);
 
   const updateField = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -319,53 +354,45 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
     updateField(field, form[field].filter((_, i) => i !== idx));
   };
 
-  // --- VALIDATION ---
-  const validateStep = (stepIdx) => {
+  // --- VALIDATION (only at submit) ---
+  const validateAll = () => {
     const errs = {};
 
-    if (stepIdx === 0) {
-      if (!form.clienteRut.trim()) errs.clienteRut = 'Debe buscar y seleccionar un cliente por RUT';
-      if (!form.clienteEmpresa.trim()) errs.clienteEmpresa = 'El campo Cliente / Empresa es obligatorio';
-      if (!form.supervisor.trim()) errs.supervisor = 'El campo Supervisor / Encargado es obligatorio';
-      if (!form.clienteEmail.trim()) errs.clienteEmail = 'El email es obligatorio';
-      else if (!validateEmail(form.clienteEmail.trim())) errs.clienteEmail = 'El formato del email no es válido';
-      if (!form.clienteTelefono.trim()) errs.clienteTelefono = 'El teléfono es obligatorio';
-      if (!form.direccion.trim()) errs.direccion = 'La dirección es obligatoria';
-      if (!form.comuna.trim()) errs.comuna = 'La comuna es obligatoria';
-    }
+    // Step 0: Cliente
+    if (!form.clienteRut.trim()) errs.clienteRut = 'Debe buscar y seleccionar un cliente por RUT';
+    if (!form.clienteEmpresa.trim()) errs.clienteEmpresa = 'El campo Cliente / Empresa es obligatorio';
+    if (!form.supervisor.trim()) errs.supervisor = 'El campo Supervisor / Encargado es obligatorio';
+    if (!form.clienteEmail.trim()) errs.clienteEmail = 'El email es obligatorio';
+    else if (!validateEmail(form.clienteEmail.trim())) errs.clienteEmail = 'El formato del email no es válido';
+    if (!form.clienteTelefono.trim()) errs.clienteTelefono = 'El teléfono es obligatorio';
+    if (!form.direccion.trim()) errs.direccion = 'La dirección es obligatoria';
+    if (!form.comuna.trim()) errs.comuna = 'La comuna es obligatoria';
 
-    if (stepIdx === 1) {
-      if (!form.horaInicio) errs.horaInicio = 'La hora de inicio es obligatoria';
-      if (!form.horaTermino) errs.horaTermino = 'La hora de término es obligatoria';
-      const tieneTrabajos = form.trabajos.some((t) => t.cantidad > 0);
-      if (!tieneTrabajos) errs.trabajos = 'Debe seleccionar al menos un trabajo realizado';
-      if (!form.descripcion.trim()) errs.descripcion = 'La descripción del trabajo es obligatoria';
-    }
+    // Step 1: Trabajos
+    if (!form.horaInicio) errs.horaInicio = 'La hora de inicio es obligatoria';
+    if (!form.horaTermino) errs.horaTermino = 'La hora de término es obligatoria';
+    const tieneTrabajos = form.trabajos.some((t) => t.cantidad > 0);
+    if (!tieneTrabajos) errs.trabajos = 'Debe seleccionar al menos un trabajo realizado';
+    if (!form.descripcion.trim()) errs.descripcion = 'La descripción del trabajo es obligatoria';
 
-    if (stepIdx === 2) {
-      if (!form.patenteVehiculo.trim()) errs.patenteVehiculo = 'La patente es obligatoria';
-    }
+    // Step 2: Personal
+    if (!form.patenteVehiculo.trim()) errs.patenteVehiculo = 'La patente es obligatoria';
 
-    // Step 3 (Fotos) - no required fields
-    // Step 4 (Firma) - validated at submit
-    if (stepIdx === 4) {
-      if (!form.firmaBase64) errs.firmaBase64 = 'La firma es obligatoria para enviar la orden';
-    }
+    // Step 4: Firma
+    if (!form.firmaBase64) errs.firmaBase64 = 'La firma es obligatoria para enviar la orden';
 
     return errs;
   };
 
+  // Map field names to their step index
+  const fieldToStep = {
+    clienteRut: 0, clienteEmpresa: 0, supervisor: 0, clienteEmail: 0, clienteTelefono: 0, direccion: 0, comuna: 0,
+    horaInicio: 1, horaTermino: 1, trabajos: 1, descripcion: 1,
+    patenteVehiculo: 2,
+    firmaBase64: 4,
+  };
+
   const handleNext = () => {
-    const errs = validateStep(step);
-    if (Object.keys(errs).length > 0) {
-      setErrors(errs);
-      // Scroll to first error
-      setTimeout(() => {
-        const firstErr = document.querySelector('[data-error="true"]');
-        if (firstErr) firstErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 50);
-      return;
-    }
     setErrors({});
     setStep(step + 1);
   };
@@ -374,10 +401,20 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
   const goToStep = (s) => { setErrors({}); setStep(s); };
 
   const handleSubmit = async () => {
-    // Validate step 5 (firma)
-    const errs = validateStep(4);
+    // Validate ALL steps at once
+    const errs = validateAll();
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
+      // Navigate to the first step that has errors
+      const firstErrField = Object.keys(errs)[0];
+      const targetStep = fieldToStep[firstErrField] ?? 0;
+      if (targetStep !== step) {
+        setStep(targetStep);
+      }
+      setTimeout(() => {
+        const el = document.querySelector('[data-error="true"]');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
       return;
     }
 
@@ -471,6 +508,9 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
     if (payload._submitError) {
       // Allow retry on error
       sendingRef.current = false;
+    } else {
+      // Clear sessionStorage on success
+      clearWizardSession();
     }
     setSending(false);
     setSendingText('');
@@ -505,13 +545,13 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
               )}
               <button
                 type="button"
-                onClick={() => i < step && goToStep(i)}
-                className={`relative z-10 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                onClick={() => i !== step && goToStep(i)}
+                className={`relative z-10 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all cursor-pointer ${
                   i === step
                     ? 'bg-accent-600 text-white ring-4 ring-accent-100'
                     : i < step
-                      ? 'bg-condor-900 text-white cursor-pointer'
-                      : 'bg-gray-100 text-gray-400'
+                      ? 'bg-condor-900 text-white'
+                      : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
                 }`}
               >
                 {i < step ? <Check size={14} strokeWidth={3} /> : s.id}
@@ -681,18 +721,6 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
               <div className="flex flex-col items-center justify-center py-8">
                 <Loader2 size={24} className="animate-spin text-condor-400 mb-2" />
                 <p className="text-sm text-gray-400">Cargando servicios...</p>
-              </div>
-            ) : serviciosError ? (
-              <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-center">
-                <p className="text-sm text-red-600 mb-3">{serviciosError}</p>
-                <button
-                  type="button"
-                  onClick={cargarServicios}
-                  className="inline-flex items-center gap-2 text-sm font-medium text-red-700 bg-white border border-red-300 rounded-xl px-4 py-2 hover:bg-red-50"
-                >
-                  <RotateCcw size={14} />
-                  Reintentar
-                </button>
               </div>
             ) : (
               <>

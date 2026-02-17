@@ -13,6 +13,19 @@ export const GARANTIAS = [
   '1 año',
 ];
 
+export const SERVICIOS_FALLBACK = [
+  'Destape de alcantarillado',
+  'Destape de cañería',
+  'Inspección con cámara CCTV',
+  'Limpieza de fosa séptica',
+  'Mantención preventiva',
+  'Reparación de cañería',
+  'Instalación de cañería nueva',
+  'Hidro-jet alta presión',
+  'Excavación y reparación',
+  'Otro',
+];
+
 export const WIZARD_STEPS = [
   { id: 1, label: 'Cliente' },
   { id: 2, label: 'Trabajos' },
