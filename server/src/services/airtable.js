@@ -4,10 +4,10 @@ const MOCK_MODE = process.env.MOCK_MODE === 'true';
 
 // Mock data
 const mockTecnicos = [
-  { id: '1', recordId: 'mock_rec_1', nombre: 'Carlos Méndez', email: 'carlos.mendez@condor.cl', pin: '1234', telefono: '+56 9 1111 1111', especialidad: 'Hidrojet', estado: 'Activo' },
-  { id: '2', recordId: 'mock_rec_2', nombre: 'Laura Torres', email: 'laura.torres@condor.cl', pin: '1234', telefono: '+56 9 2222 2222', especialidad: 'Varillaje', estado: 'Activo' },
-  { id: '3', recordId: 'mock_rec_3', nombre: 'Diego Silva', email: 'diego.silva@condor.cl', pin: '1234', telefono: '+56 9 3333 3333', especialidad: 'Evacuación', estado: 'Activo' },
-  { id: '4', recordId: 'mock_rec_4', nombre: 'Camila Rojas', email: 'camila.rojas@condor.cl', pin: '1234', telefono: '+56 9 4444 4444', especialidad: 'Mantención', estado: 'Activo' },
+  { id: '1', recordId: 'mock_rec_1', nombre: 'Carlos Méndez', email: 'carlos.mendez@condor.cl', pin: '1234', telefono: '+56 9 1111 1111', especialidad: 'Hidrojet', activo: true },
+  { id: '2', recordId: 'mock_rec_2', nombre: 'Laura Torres', email: 'laura.torres@condor.cl', pin: '1234', telefono: '+56 9 2222 2222', especialidad: 'Varillaje', activo: true },
+  { id: '3', recordId: 'mock_rec_3', nombre: 'Diego Silva', email: 'diego.silva@condor.cl', pin: '1234', telefono: '+56 9 3333 3333', especialidad: 'Evacuación', activo: true },
+  { id: '4', recordId: 'mock_rec_4', nombre: 'Camila Rojas', email: 'camila.rojas@condor.cl', pin: '1234', telefono: '+56 9 4444 4444', especialidad: 'Mantención', activo: true },
 ];
 
 const mockClientes = [
@@ -41,7 +41,7 @@ export async function findTecnicoByEmail(email) {
     pin: String(r.get('Pin Acceso') || ''),
     telefono: r.get('Telefono'),
     especialidad: r.get('Especialidad'),
-    estado: r.get('Estado'),
+    activo: r.get('Activo') === true,
   };
 }
 
@@ -50,7 +50,7 @@ export async function getTecnicos() {
     return mockTecnicos.map(({ pin, ...rest }) => rest);
   }
   const records = await base('Empleados')
-    .select({ filterByFormula: `{Estado} = 'Activo'` })
+    .select({ filterByFormula: `{Activo} = TRUE()` })
     .firstPage();
   return records.map((r) => ({
     id: r.get('ID') || r.id,

@@ -23,7 +23,7 @@ router.post('/login', async (req, res, next) => {
       });
     }
 
-    if (tecnico.estado !== 'Activo') {
+    if (tecnico.activo !== true) {
       return res.status(403).json({
         success: false,
         error: 'Usuario inactivo. Contacte al administrador.',
