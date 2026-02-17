@@ -353,7 +353,7 @@ app.post('/api/ordenes', async (req, res) => {
     const ordenFields = {
       'Fecha': data.fecha || new Date().toISOString().split('T')[0],
       'Estado': 'Enviada',
-      'Cliente / Empresa': data.clienteEmpresa || data.clienteNombre || '',
+      'Cliente / Empresa': data.clienteEmpresa || '',
       'Cliente email': data.clienteEmail || '',
       'Cliente telefono': data.clienteTelefono || '',
       'Direccion': data.direccion || '',
@@ -502,7 +502,7 @@ app.put('/api/ordenes/:recordId', async (req, res) => {
 
     const ordenFields = {
       'Estado': 'Enviada',
-      'Cliente / Empresa': data.clienteEmpresa || data.clienteNombre || '',
+      'Cliente / Empresa': data.clienteEmpresa || '',
       'Cliente email': data.clienteEmail || '',
       'Cliente telefono': data.clienteTelefono || '',
       'Direccion': data.direccion || '',

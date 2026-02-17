@@ -256,7 +256,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
     setForm((prev) => ({
       ...prev,
       clienteRut: cliente.rut || '',
-      clienteEmpresa: cliente.empresa || cliente.tipo || '',
+      clienteEmpresa: cliente.empresa && cliente.empresa.trim() ? cliente.empresa : (cliente.nombre || ''),
       supervisor: cliente.nombre || '',
       clienteEmail: cliente.email || '',
       clienteTelefono: cliente.telefono || '',
