@@ -242,6 +242,7 @@ app.get('/api/ordenes', async (req, res) => {
       horaTermino: r.get('Hora termino') || '',
       patente: r.get('Patente vehiculo') || '',
       requiereFactura: r.get('Requiere factura') || 'No',
+      garantia: r.get('Garantia') || 'Sin garantía',
       ordenCompra: r.get('Orden compra') || '',
       email: r.get('Cliente email') || '',
       telefono: r.get('Cliente telefono') || '',
@@ -368,6 +369,7 @@ app.post('/api/ordenes', async (req, res) => {
       'Total': Number(data.total) || 0,
       'Metodo pago': data.metodoPago || '',
       'Requiere factura': data.requiereFactura || 'No',
+      'Garantia': data.garantia || 'Sin garantía',
       'Idempotency Key': idempotencyKey || '',
     };
 
@@ -516,6 +518,7 @@ app.put('/api/ordenes/:recordId', async (req, res) => {
       'Total': Number(data.total) || 0,
       'Metodo pago': data.metodoPago || '',
       'Requiere factura': data.requiereFactura || 'No',
+      'Garantia': data.garantia || 'Sin garantía',
     };
 
     if (data.clienteRecordId) {
@@ -634,6 +637,7 @@ app.post('/api/ordenes/:recordId/reenviar', async (req, res) => {
       total: record.get('Total'),
       metodoPago: record.get('Metodo pago'),
       requiereFactura: record.get('Requiere factura'),
+      garantia: record.get('Garantia') || 'Sin garantía',
       personal: record.get('Empleados') || [],
     };
 

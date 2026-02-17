@@ -202,7 +202,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
             observaciones: orden.observaciones || '',
             total: orden.total ? String(orden.total) : '',
             metodoPago: orden.metodoPago || 'Efectivo',
-            garantia: 'Sin garantía',
+            garantia: orden.garantia || 'Sin garantía',
             requiereFactura: orden.requiereFactura || 'No',
             personal: [{ nombre: user.nombre, esEmpleado: true, recordId: user.recordId || null }],
             patenteVehiculo: orden.patente || '',
