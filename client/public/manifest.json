@@ -4,18 +4,20 @@
   "description": "Sistema de Órdenes de Trabajo",
   "start_url": "/condor-sistema/",
   "display": "standalone",
-  "background_color": "#ffffff",
+  "background_color": "#1E3A8A",
   "theme_color": "#1E3A8A",
   "icons": [
     {
-      "src": "condor-logo.png",
+      "src": "icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
-      "src": "condor-logo.png",
+      "src": "icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
