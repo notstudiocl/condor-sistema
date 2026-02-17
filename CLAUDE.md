@@ -4,7 +4,7 @@
 
 Sistema de digitalización de órdenes de trabajo para **Condor Alcantarillados**, empresa chilena de soluciones sanitarias, transporte de residuos e hidrojet.
 
-Reemplaza formularios en papel que los técnicos llenan en terreno. El flujo es: técnico llega al sitio → abre la app en su celular → llena el formulario → marca trabajos realizados → captura firma del supervisor y fotos antes/después → envía → el sistema guarda en Airtable (con linked records), sube fotos y firma como attachments, y notifica vía webhook n8n. El técnico puede ver historial de órdenes, ver detalles, y editar/reenviar órdenes existentes.
+Reemplaza formularios en papel que los técnicos llenan en terreno. El flujo es: técnico llega al sitio → abre la app en su celular → llena el formulario → marca trabajos realizados → captura firma del supervisor y fotos antes/después → envía → el sistema guarda en Airtable (con linked records), sube fotos y firma como attachments, y notifica vía webhook n8n. El técnico puede ver historial de órdenes, ver detalles, y reenviar órdenes con error.
 
 ## Datos de la empresa
 
@@ -101,62 +101,86 @@ El `idempotencyKey` se genera una vez al montar el wizard (`useState(() => crypt
 ### Encabezado
 - Fecha de la orden (auto: hoy)
 
-### Datos del cliente
-- Cliente / Empresa (nombre de la empresa)
-- Supervisor / Encargado (nombre de la persona de contacto)
-- RUT (formato chileno: 12.345.678-9, con búsqueda autocompletado desde Airtable)
-- Correo electrónico
-- Teléfono
-- Dirección
-- Comuna
+### Datos del cliente (Paso 1)
+- RUT (formato chileno: 12.345.678-9, con búsqueda autocompletado desde Airtable) **obligatorio**
+- Cliente / Empresa (nombre de la empresa) **obligatorio**
+- Supervisor / Encargado (nombre de la persona de contacto) **obligatorio**
+- Email **obligatorio** (validación de formato)
+- Teléfono **obligatorio**
+- Dirección **obligatorio**
+- Comuna **obligatorio**
 - Orden de Compra (opcional, para clientes empresa)
 
-### Horarios
-- Hora Inicio (datetime-local)
-- Hora Término (datetime-local)
-
-### Trabajos Realizados (checklist con cantidad)
-
-| Trabajo | Ejemplo cantidad |
-|---|---|
-| Varillaje y destape de cámaras | 3 |
-| Horizontal – Vertical Descarga General | 1 |
-| Limpieza Manual de fosas | 0 |
-| Hora Camión Hidrojet | 2 |
-| Visita en Terreno | 1 |
-| Varillaje Restaurant Operativo | 0 |
-| Trasvasije | 0 |
-| Evacuación de fosas | 1 |
-| Mantención aguas servidas | 0 |
-| Mantención aguas grasas | 0 |
-
-### Descripción del Trabajo (textarea)
-### Observaciones (textarea, opcional)
-
-### Personal y vehículo
-- Patente vehículo (formato: "AB-CD-12")
-- Personal asignado: lista con técnicos de Airtable (con recordId) + externos manuales
-- Badge azul "Técnico" para empleados de Airtable, badge gris "Externo" para manuales
-
-### Pago
-- Total a pagar (CLP, formateado con separador de miles)
+### Horarios y Trabajos (Paso 2)
+- Hora Inicio (datetime-local) **obligatorio**
+- Hora Término (datetime-local) **obligatorio**
+- Trabajos Realizados (checklist dinámica desde Airtable tabla "Servicios") **al menos 1 obligatorio**
+- Descripción del Trabajo (textarea) **obligatorio**
+- Observaciones (textarea, opcional)
+- Total a Pagar (CLP)
 - Método de Pago: Efectivo / Transferencia / Débito / Crédito / Por pagar
 - Garantía: Sin garantía / 3 meses / 6 meses / 1 año
 - Requiere Factura: Sí / No
 
-### Evidencia fotográfica
+### Personal y vehículo (Paso 3)
+- Patente vehículo (formato auto: XX-XX-00, letras-letras-números) **obligatorio**
+- Personal asignado: solo técnicos de Airtable (con recordId), badge azul "Técnico"
+- NO hay personas externas (eliminado)
+
+### Evidencia fotográfica (Paso 4)
 - Fotos ANTES (upload múltiple, max 5, resize a 1200px, PNG base64)
 - Fotos DESPUÉS (upload múltiple, max 5, resize a 1200px, PNG base64)
 
-### Firma y cierre
-- Firma digital del supervisor (canvas touch, guardada como attachment en Airtable campo "Firma")
+### Firma y cierre (Paso 5)
+- Firma digital del supervisor (canvas touch, guardada como attachment en Airtable campo "Firma") **obligatorio**
 - Checkbox obligatorio "Confirmo que los datos son correctos"
+
+## Servicios dinámicos (desde Airtable)
+
+Los servicios/trabajos ya NO son una lista estática en el frontend. Se cargan dinámicamente desde la tabla "Servicios" en Airtable mediante `GET /api/servicios`.
+
+- El frontend hace fetch al montar el wizard
+- Si falla, muestra error con botón "Reintentar"
+- El array `TRABAJOS` fue eliminado de `constants.js`
+- Solo se muestran servicios con `Activo = TRUE()` en Airtable
+
+## Validación de campos obligatorios
+
+Validación por paso del wizard. Al presionar "Siguiente" se validan los campos del paso actual. Si hay errores:
+- No avanza al siguiente paso
+- Campos con error tienen borde rojo + mensaje de error debajo
+- Auto-scroll al primer campo con error
+- Errores se limpian al corregir el campo
+
+### Paso 1 (Cliente)
+- RUT, Cliente/Empresa, Supervisor, Email (formato), Teléfono, Dirección, Comuna
+
+### Paso 2 (Trabajos)
+- Hora Inicio, Hora Término, al menos 1 trabajo seleccionado, Descripción
+
+### Paso 3 (Personal)
+- Patente (formato XX-XX-00: 2 letras, guión, 2 letras, guión, 2 números)
+
+### Paso 4 (Fotos)
+- Sin campos obligatorios
+
+### Paso 5 (Firma)
+- Firma obligatoria para enviar
+
+## Formato de patente
+
+Auto-formato mientras el usuario escribe:
+- Convierte a mayúsculas automáticamente
+- Inserta guiones después de cada par de caracteres
+- Máximo 8 caracteres (XX-XX-00)
+- Validación: primeros 4 son letras, últimos 2 son números
+- Placeholder: "XX-XX-00"
 
 ## Flujo del Wizard (5 pasos)
 
-1. **Cliente**: RUT (con búsqueda pública, sin auth), cliente/empresa, supervisor/encargado, email, teléfono, dirección, comuna, OC, horarios
-2. **Trabajos**: Checklist de trabajos con cantidad, descripción, observaciones, pago
-3. **Personal**: Patente vehículo, personal asignado, chips de técnicos de Airtable, agregar persona externa
+1. **Cliente**: RUT (con búsqueda pública, sin auth), cliente/empresa, supervisor/encargado, email, teléfono, dirección, comuna, OC
+2. **Trabajos**: Hora inicio/término, checklist dinámica de servicios con cantidad, descripción, observaciones, pago
+3. **Personal**: Patente vehículo (formato XX-XX-00), personal asignado (solo técnicos de Airtable)
 4. **Fotos**: Fotos antes y después (camera o galería)
 5. **Firma**: Resumen completo con "No especificado" en naranja para campos vacíos, firma digital, checkbox de confirmación, botón Enviar
 
@@ -164,11 +188,11 @@ El `idempotencyKey` se genera una vez al montar el wizard (`useState(() => crypt
 
 | Ruta | Componente | Descripción |
 |---|---|---|
-| `/` | DashboardPage | Pantalla principal: botón "Nueva Orden" + historial de órdenes con cards |
+| `/` | DashboardPage | Pantalla principal: botón "Nueva Orden" + buscador + historial de órdenes con cards |
 | `/orden/nueva` | OrdenWizardPage | Wizard de 5 pasos para crear nueva orden |
-| `/orden/:recordId` | DetalleOrdenPage | Detalle completo de una orden (fotos, firma, personal, etc.) |
+| `/orden/:recordId` | DetalleOrdenPage | Detalle completo de una orden (fotos, firma, PDF, reenviar) |
 | `/orden/:recordId/editar` | OrdenWizardPage (editMode) | Editar y reenviar una orden existente |
-| `/confirmacion` | ConfirmacionPage | Resultado del envío con colores según estado |
+| `/confirmacion` | ConfirmacionPage | Resultado del envío con checks detallados |
 
 ### Navegación
 - **Header**: Logo (link al dashboard) + botón "← Inicio" + nombre usuario + cerrar sesión
@@ -176,19 +200,22 @@ El `idempotencyKey` se genera una vez al montar el wizard (`useState(() => crypt
 
 ### DashboardPage
 - Botón rojo "Nueva Orden de Trabajo" en la parte superior
+- **Buscador**: Input con lupa, busca en numeroOrden, clienteEmpresa, supervisor, direccion, comuna, clienteRut, descripcion, estado. Case-insensitive, debounce 300ms, botón X para limpiar. Muestra "N órdenes encontradas" o "No se encontraron órdenes para '...'"
 - Lista de órdenes desde Airtable (`GET /api/ordenes`)
-- Cards con: número de orden, fecha, estado (badge de color), cliente/empresa, trabajos, total
+- Cards con: número de orden, badge estado (colores sólidos), cliente/empresa + fecha, dirección/comuna
+- Badges: Completada=verde, Enviada=azul, Error=rojo, Pendiente=amarillo, Facturada=púrpura
 - Click en card navega al detalle (`/orden/:recordId`)
 - Botón de refresh, estados de carga y vacío
 
 ### DetalleOrdenPage
-- Vista completa de todos los campos de la orden
-- Labels: "Cliente / Empresa", "Supervisor / Encargado"
-- Fotos antes/después como thumbnails (URLs de Airtable)
-- Firma del supervisor (URL de Airtable)
-- Botón "Reintentar Envío" para órdenes con estado Error/Pendiente (PUT request)
-- Botón "Editar y Reenviar" navega a `/orden/:recordId/editar`
-- Botón volver al dashboard
+- Header: "← Volver" + número orden + badge estado
+- Secciones: Info cliente, Trabajo (con hora badges), Equipo, Pago
+- Fotos antes/después: grid de thumbnails, click abre PhotoViewer modal (fullscreen negro, navegación prev/next)
+- Firma del supervisor
+- Botón "Ver PDF de la Orden" → window.open (o gris "PDF pendiente de generar" si no hay)
+- Botón "Reintentar Envío" para órdenes con estado Error/Pendiente o sin PDF (POST /api/ordenes/:recordId/reenviar)
+- Botón "Volver al Inicio"
+- NO tiene botón de editar (diferido para después)
 
 ### OrdenWizardPage (modo edición)
 - Acepta prop `editMode` y usa `useParams` para obtener `recordId`
@@ -214,17 +241,29 @@ El `idempotencyKey` se genera una vez al montar el wizard (`useState(() => crypt
 ## API Endpoints
 
 ```
-POST   /api/auth/login          # Login con email + PIN (devuelve recordId del empleado)
-GET    /api/tecnicos-lista       # Listar técnicos activos (público, sin auth, incluye recordId)
-GET    /api/clientes/buscar?q=   # Buscar clientes por RUT/nombre (público, sin auth, incluye recordId, nombre, empresa)
-GET    /api/ordenes              # Listar todas las órdenes (público, con attachments URLs, campo clienteEmpresa)
-POST   /api/ordenes              # Crear orden → idempotency check → Airtable + fotos + firma + webhook n8n
-PUT    /api/ordenes/:recordId    # Actualizar orden → Airtable + re-upload attachments + webhook con accion:'actualizar'
-POST   /api/upload-pdf           # Recibir PDF desde n8n (multipart, multer) y servir públicamente
-GET    /api/health               # Health check
-GET    /api/test-webhook         # Diagnóstico: test webhook connectivity
-POST   /api/test-envio           # Diagnóstico: simula envío completo
-GET    /api/clientes/test        # Diagnóstico: test Airtable clientes
+POST   /api/auth/login              # Login con email + PIN (verifica Activo === true)
+GET    /api/tecnicos-lista           # Listar técnicos activos (público, filterByFormula: {Activo} = TRUE())
+GET    /api/servicios                # Listar servicios activos desde Airtable tabla "Servicios"
+GET    /api/clientes/buscar?q=       # Buscar clientes por RUT/nombre (público, sin auth)
+GET    /api/ordenes                  # Listar órdenes (sort by Creada desc, max 50, con PDF field)
+POST   /api/ordenes                  # Crear orden → idempotency check → Airtable + fotos + firma + webhook
+PUT    /api/ordenes/:recordId        # Actualizar orden → Airtable + re-upload attachments + webhook
+POST   /api/ordenes/:recordId/reenviar  # Reenviar orden al webhook (lee datos de Airtable)
+POST   /api/upload-pdf               # Recibir PDF desde n8n (multipart, multer) y servir públicamente
+GET    /api/health                   # Health check
+GET    /api/test-webhook             # Diagnóstico: test webhook connectivity
+POST   /api/test-envio               # Diagnóstico: simula envío completo
+```
+
+### GET /api/servicios (NUEVO)
+```json
+{
+  "success": true,
+  "data": [
+    { "id": "recXXX", "nombre": "Varillaje y destape de cámaras" },
+    { "id": "recYYY", "nombre": "Hora Camión Hidrojet" }
+  ]
+}
 ```
 
 ### Respuesta de POST /api/ordenes
@@ -271,22 +310,29 @@ VITE_API_URL=http://localhost:3001/api
 ## Airtable — Estructura de tablas
 
 ### Tabla "Ordenes de Trabajo"
-Campos: Fecha, Estado (Enviada/Completada/Facturada), Cliente / Empresa, Cliente RUT (LINKED RECORD → Clientes), Cliente email, Cliente telefono, Direccion, Comuna, Orden compra, Supervisor, Hora inicio, Hora termino, Trabajos realizados (JSON string), Descripcion trabajo, Observaciones, Empleados (LINKED RECORD → Empleados), Patente vehiculo, Total, Metodo pago, Requiere factura, Garantia, Fotos Antes (attachment), Fotos Despues (attachment), Firma (attachment), Idempotency Key (single line text)
+Campos: Fecha, Estado (Enviada/Completada/Facturada), Cliente / Empresa, Cliente RUT (LINKED RECORD → Clientes), Cliente email, Cliente telefono, Direccion, Comuna, Orden compra, Supervisor, Hora inicio, Hora termino, Trabajos realizados (JSON string), Descripcion trabajo, Observaciones, Empleados (LINKED RECORD → Empleados), Patente vehiculo, Total, Metodo pago, Requiere factura, Garantia, Fotos Antes (attachment), Fotos Despues (attachment), Firma (attachment), PDF (attachment), Idempotency Key (single line text)
 
 Campos automáticos (NO enviar): Numero orden, ID, Creada
 
 ### Tabla "Empleados"
-Campos: ID, Nombre, Email, Pin Acceso, Telefono, Especialidad, Estado (Activo/Inactivo)
+Campos: ID, Nombre, Email, Pin Acceso, Telefono, Especialidad, Activo (checkbox booleano — TRUE/FALSE, NO texto)
+
+**IMPORTANTE**: El campo "Activo" es un checkbox (booleano), NO un campo de texto. Filtrar con `{Activo} = TRUE()` en Airtable y comparar con `=== true` en JavaScript. El campo anterior "Estado" (texto "Activo"/"Inactivo") fue reemplazado.
 
 ### Tabla "Clientes"
 Campos: RUT, Nombre (persona de contacto), Email, Telefono, Direccion, Comuna, Tipo, Empresa (nombre empresa)
+
+### Tabla "Servicios" (NUEVA)
+Campos: Nombre (texto), Activo (checkbox booleano)
+
+Los servicios se cargan dinámicamente en el wizard via `GET /api/servicios`. Ya NO existe una lista estática en el frontend.
 
 ## Webhook payload (n8n)
 
 Al crear una orden se envía POST al webhook (sin fotos/firma base64 para no hacerlo pesado):
 ```json
 {
-  "fecha": "2026-02-16",
+  "fecha": "2026-02-17",
   "clienteEmpresa": "Burger King",
   "clienteRut": "12.345.678-9",
   "clienteEmail": "contacto@bk.cl",
@@ -295,8 +341,8 @@ Al crear una orden se envía POST al webhook (sin fotos/firma base64 para no hac
   "comuna": "Providencia",
   "ordenCompra": "OC-001",
   "supervisor": "Carla Curififil",
-  "horaInicio": "2026-02-16T08:30",
-  "horaTermino": "2026-02-16T12:00",
+  "horaInicio": "2026-02-17T08:30",
+  "horaTermino": "2026-02-17T12:00",
   "trabajos": [
     { "trabajo": "Hora Camión Hidrojet", "cantidad": 2 },
     { "trabajo": "Evacuación de fosas", "cantidad": 1 }
@@ -350,15 +396,17 @@ Al crear una orden se envía POST al webhook (sin fotos/firma base64 para no hac
 1. **Mobile-first**: Botones grandes (min 44px touch target), inputs generosos.
 2. **Chile-specific**: RUT formatting, precios en CLP, teléfonos +56.
 3. **Firmas digitales**: Canvas touch ancho con borde punteado, guardada como attachment en Airtable.
-4. **Checklist de trabajos**: Checkbox + counter. Visual claro.
+4. **Servicios dinámicos**: Se cargan desde Airtable tabla "Servicios". Checkbox + counter. Loading state + reintentar si falla.
 5. **Resumen antes de enviar**: Campos vacíos en naranja "No especificado". Checkbox obligatorio de confirmación.
-6. **Login simple**: Email + PIN de 4 dígitos.
+6. **Login simple**: Email + PIN de 4 dígitos. Verifica campo `Activo` (checkbox booleano).
 7. **Progreso de envío**: Mensajes de estado durante el envío (registrando cliente, guardando orden, subiendo fotos, procesando).
-8. **Sin validaciones bloqueantes**: Libre para probar, sin campos required que bloqueen.
-9. **Dashboard**: Historial de órdenes con cards clickeables, refresh manual, estados de carga/vacío.
-10. **Detalle de orden**: Vista completa con fotos, firma, botones de editar y reintentar.
+8. **Validación por paso**: Campos obligatorios con bordes rojos y mensajes de error. No avanza sin completar.
+9. **Dashboard**: Historial de órdenes con cards clickeables, buscador con debounce, refresh manual, estados de carga/vacío.
+10. **Detalle de orden**: Vista completa con fotos (visor fullscreen), firma, PDF, botón reenviar.
 11. **Edición de órdenes**: Carga datos existentes en el wizard, permite editar y reenviar.
 12. **Anti-duplicados**: Idempotency key + ref guard + in-memory Set. El usuario nunca ve duplicados.
+13. **Patente auto-formato**: XX-XX-00, mayúsculas automáticas, guiones automáticos.
+14. **Solo técnicos de Airtable**: No hay opción de "persona externa" en el personal.
 
 ## Deploy
 
