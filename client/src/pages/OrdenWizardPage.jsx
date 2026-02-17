@@ -12,15 +12,35 @@ import {
   Check,
   Camera,
   X,
+  AlertCircle,
+  RotateCcw,
 } from 'lucide-react';
-import { TRABAJOS, METODOS_PAGO, GARANTIAS, WIZARD_STEPS } from '../utils/constants';
+import { METODOS_PAGO, GARANTIAS, WIZARD_STEPS } from '../utils/constants';
 import { formatRut, formatCLP, parseCLP, todayISO } from '../utils/helpers';
-import { buscarClientes, getTecnicosPublic, crearOrden, actualizarOrden } from '../utils/api';
+import { buscarClientes, getTecnicosPublic, crearOrden, actualizarOrden, getServicios } from '../utils/api';
 import SignaturePad from '../components/SignaturePad';
 import Summary from '../components/Summary';
 
 const MAX_FOTOS = 5;
 const MAX_DIMENSION = 1200;
+
+const formatPatente = (value) => {
+  const clean = value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  let result = '';
+  for (let i = 0; i < clean.length && i < 6; i++) {
+    if (i === 2 || i === 4) result += '-';
+    result += clean[i];
+  }
+  return result;
+};
+
+const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+const validatePatente = (patente) => {
+  if (!patente) return false;
+  const match = patente.match(/^([A-Z]{2})-([A-Z]{2})-(\d{2})$/);
+  return !!match;
+};
 
 const initialFormData = () => ({
   clienteRut: '',
@@ -33,7 +53,7 @@ const initialFormData = () => ({
   supervisor: '',
   horaInicio: '',
   horaTermino: '',
-  trabajos: TRABAJOS.map((nombre) => ({ nombre, checked: false, cantidad: 0 })),
+  trabajos: [],
   descripcion: '',
   observaciones: '',
   total: '',
@@ -78,6 +98,16 @@ function processImage(file) {
   });
 }
 
+function FieldError({ message }) {
+  if (!message) return null;
+  return (
+    <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+      <AlertCircle size={12} />
+      {message}
+    </p>
+  );
+}
+
 export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState(initialFormData);
@@ -85,9 +115,15 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
   const sendingRef = useRef(false);
   const [sendingText, setSendingText] = useState('');
   const [confirmado, setConfirmado] = useState(false);
+  const [errors, setErrors] = useState({});
 
   // Idempotency key — generated once per wizard session, reused on retry
   const [idempotencyKey] = useState(() => crypto.randomUUID());
+
+  // Dynamic services from Airtable
+  const [servicios, setServicios] = useState([]);
+  const [serviciosLoading, setServiciosLoading] = useState(true);
+  const [serviciosError, setServiciosError] = useState(null);
 
   // RUT search with debounce
   const [searchResults, setSearchResults] = useState([]);
@@ -96,7 +132,6 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
 
   // Tecnicos
   const [tecnicos, setTecnicos] = useState([]);
-  const [nuevoPersonal, setNuevoPersonal] = useState('');
 
   // Photo refs
   const fotosAntesRef = useRef(null);
@@ -105,7 +140,31 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
   const { recordId: editRecordId } = editMode ? useParams() : { recordId: null };
   const [editLoading, setEditLoading] = useState(!!editMode);
 
+  // Load services from Airtable
+  const cargarServicios = async () => {
+    setServiciosLoading(true);
+    setServiciosError(null);
+    try {
+      const res = await getServicios();
+      const lista = res.data || [];
+      setServicios(lista);
+      setForm((prev) => {
+        // Only set trabajos if not already loaded (edit mode may have set them)
+        if (prev.trabajos.length > 0) return prev;
+        return {
+          ...prev,
+          trabajos: lista.map((s) => ({ nombre: s.nombre, checked: false, cantidad: 0 })),
+        };
+      });
+    } catch (err) {
+      setServiciosError(err.message || 'Error al cargar servicios');
+    } finally {
+      setServiciosLoading(false);
+    }
+  };
+
   useEffect(() => {
+    cargarServicios();
     getTecnicosPublic()
       .then((res) => setTecnicos(res.data || []))
       .catch(() => {});
@@ -125,10 +184,12 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
           let trabajos = [];
           try { trabajos = typeof orden.trabajos === 'string' ? JSON.parse(orden.trabajos) : orden.trabajos || []; } catch { trabajos = []; }
 
-          const { TRABAJOS } = await import('../utils/constants');
-          const mappedTrabajos = TRABAJOS.map(nombre => {
-            const found = trabajos.find(t => (t.trabajo || t.nombre) === nombre);
-            return { nombre, checked: found ? found.cantidad > 0 : false, cantidad: found ? found.cantidad : 0 };
+          // Wait for servicios to be loaded to map correctly
+          const srvRes = await getServicios();
+          const srvList = srvRes.data || [];
+          const mappedTrabajos = srvList.map(s => {
+            const found = trabajos.find(t => (t.trabajo || t.nombre) === s.nombre);
+            return { nombre: s.nombre, checked: found ? found.cantidad > 0 : false, cantidad: found ? found.cantidad : 0 };
           });
 
           setForm({
@@ -168,6 +229,10 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
 
   const updateField = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+    // Clear error for this field when user types
+    if (errors[field]) {
+      setErrors((prev) => { const next = { ...prev }; delete next[field]; return next; });
+    }
   };
 
   // Debounced RUT search
@@ -206,6 +271,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
       clienteRecordId: cliente.recordId || null,
     }));
     setSearchResults([]);
+    setErrors({});
   };
 
   // Trabajos
@@ -218,6 +284,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
       trabajos[idx] = t;
       return { ...prev, trabajos };
     });
+    if (errors.trabajos) setErrors((prev) => { const next = { ...prev }; delete next.trabajos; return next; });
   };
 
   const updateCantidad = (idx, delta) => {
@@ -233,13 +300,6 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
   };
 
   // Personal
-  const addPersonal = () => {
-    const name = nuevoPersonal.trim();
-    if (!name || form.personal.some((p) => p.nombre === name)) return;
-    updateField('personal', [...form.personal, { nombre: name, esEmpleado: false }]);
-    setNuevoPersonal('');
-  };
-
   const addTecnicoToPersonal = (tecnico) => {
     if (form.personal.some((p) => p.nombre === tecnico.nombre)) return;
     updateField('personal', [...form.personal, { nombre: tecnico.nombre, esEmpleado: true, recordId: tecnico.recordId || null }]);
@@ -265,10 +325,69 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
     updateField(field, form[field].filter((_, i) => i !== idx));
   };
 
+  // --- VALIDATION ---
+  const validateStep = (stepIdx) => {
+    const errs = {};
+
+    if (stepIdx === 0) {
+      if (!form.clienteRut.trim()) errs.clienteRut = 'Debe buscar y seleccionar un cliente por RUT';
+      if (!form.clienteEmpresa.trim()) errs.clienteEmpresa = 'El campo Cliente / Empresa es obligatorio';
+      if (!form.supervisor.trim()) errs.supervisor = 'El campo Supervisor / Encargado es obligatorio';
+      if (!form.clienteEmail.trim()) errs.clienteEmail = 'El email es obligatorio';
+      else if (!validateEmail(form.clienteEmail.trim())) errs.clienteEmail = 'El formato del email no es válido';
+      if (!form.clienteTelefono.trim()) errs.clienteTelefono = 'El teléfono es obligatorio';
+      if (!form.direccion.trim()) errs.direccion = 'La dirección es obligatoria';
+      if (!form.comuna.trim()) errs.comuna = 'La comuna es obligatoria';
+    }
+
+    if (stepIdx === 1) {
+      if (!form.horaInicio) errs.horaInicio = 'La hora de inicio es obligatoria';
+      if (!form.horaTermino) errs.horaTermino = 'La hora de término es obligatoria';
+      const tieneTrabajos = form.trabajos.some((t) => t.cantidad > 0);
+      if (!tieneTrabajos) errs.trabajos = 'Debe seleccionar al menos un trabajo realizado';
+      if (!form.descripcion.trim()) errs.descripcion = 'La descripción del trabajo es obligatoria';
+    }
+
+    if (stepIdx === 2) {
+      if (!form.patenteVehiculo.trim()) errs.patenteVehiculo = 'La patente es obligatoria';
+      else if (!validatePatente(form.patenteVehiculo.trim())) errs.patenteVehiculo = 'El formato de patente debe ser XX-XX-00';
+    }
+
+    // Step 3 (Fotos) - no required fields
+    // Step 4 (Firma) - validated at submit
+    if (stepIdx === 4) {
+      if (!form.firmaBase64) errs.firmaBase64 = 'La firma es obligatoria para enviar la orden';
+    }
+
+    return errs;
+  };
+
+  const handleNext = () => {
+    const errs = validateStep(step);
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs);
+      // Scroll to first error
+      setTimeout(() => {
+        const firstErr = document.querySelector('[data-error="true"]');
+        if (firstErr) firstErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 50);
+      return;
+    }
+    setErrors({});
+    setStep(step + 1);
+  };
+
   // Navigation
-  const goToStep = (s) => setStep(s);
+  const goToStep = (s) => { setErrors({}); setStep(s); };
 
   const handleSubmit = async () => {
+    // Validate step 5 (firma)
+    const errs = validateStep(4);
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs);
+      return;
+    }
+
     if (sendingRef.current) return;
     sendingRef.current = true;
     setSending(true);
@@ -423,19 +542,20 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
             </h2>
 
             {/* RUT unified search */}
-            <div className="relative">
-              <label className="label-field">RUT</label>
+            <div className="relative" data-error={!!errors.clienteRut}>
+              <label className="label-field">RUT <span className="text-red-400">*</span></label>
               <input
                 type="text"
                 value={form.clienteRut}
                 onChange={(e) => handleRutChange(e.target.value)}
                 placeholder="12.345.678-9"
-                className="input-field"
+                className={`input-field ${errors.clienteRut ? 'border-red-400 ring-1 ring-red-200' : ''}`}
                 autoComplete="off"
               />
               {searching && (
                 <Loader2 size={16} className="absolute right-3 top-9 animate-spin text-gray-400" />
               )}
+              <FieldError message={errors.clienteRut} />
               {searchResults.length > 0 && (
                 <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-2xl shadow-lg overflow-hidden">
                   {searchResults.map((c) => (
@@ -454,63 +574,69 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
             </div>
 
             <div className="space-y-4">
-              <div>
-                <label className="label-field">Cliente / Empresa</label>
+              <div data-error={!!errors.clienteEmpresa}>
+                <label className="label-field">Cliente / Empresa <span className="text-red-400">*</span></label>
                 <input
                   type="text"
                   value={form.clienteEmpresa}
                   onChange={(e) => updateField('clienteEmpresa', e.target.value)}
-                  className="input-field"
+                  className={`input-field ${errors.clienteEmpresa ? 'border-red-400 ring-1 ring-red-200' : ''}`}
                 />
+                <FieldError message={errors.clienteEmpresa} />
               </div>
-              <div>
-                <label className="label-field">Supervisor / Encargado</label>
+              <div data-error={!!errors.supervisor}>
+                <label className="label-field">Supervisor / Encargado <span className="text-red-400">*</span></label>
                 <input
                   type="text"
                   value={form.supervisor}
                   onChange={(e) => updateField('supervisor', e.target.value)}
-                  className="input-field"
+                  className={`input-field ${errors.supervisor ? 'border-red-400 ring-1 ring-red-200' : ''}`}
                 />
+                <FieldError message={errors.supervisor} />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label-field">Email</label>
+                <div data-error={!!errors.clienteEmail}>
+                  <label className="label-field">Email <span className="text-red-400">*</span></label>
                   <input
                     type="email"
                     value={form.clienteEmail}
                     onChange={(e) => updateField('clienteEmail', e.target.value)}
-                    className="input-field"
+                    className={`input-field ${errors.clienteEmail ? 'border-red-400 ring-1 ring-red-200' : ''}`}
                   />
+                  <FieldError message={errors.clienteEmail} />
                 </div>
-                <div>
-                  <label className="label-field">Teléfono</label>
+                <div data-error={!!errors.clienteTelefono}>
+                  <label className="label-field">Teléfono <span className="text-red-400">*</span></label>
                   <input
                     type="tel"
                     value={form.clienteTelefono}
                     onChange={(e) => updateField('clienteTelefono', e.target.value)}
                     placeholder="+56 9"
-                    className="input-field"
+                    className={`input-field ${errors.clienteTelefono ? 'border-red-400 ring-1 ring-red-200' : ''}`}
                   />
+                  <FieldError message={errors.clienteTelefono} />
                 </div>
               </div>
-              <div>
-                <label className="label-field">Dirección</label>
+              <div data-error={!!errors.direccion}>
+                <label className="label-field">Dirección <span className="text-red-400">*</span></label>
                 <input
                   type="text"
                   value={form.direccion}
                   onChange={(e) => updateField('direccion', e.target.value)}
-                  className="input-field"
+                  className={`input-field ${errors.direccion ? 'border-red-400 ring-1 ring-red-200' : ''}`}
                 />
+                <FieldError message={errors.direccion} />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label-field">Comuna</label>
+                <div data-error={!!errors.comuna}>
+                  <label className="label-field">Comuna <span className="text-red-400">*</span></label>
                   <input
                     type="text"
                     value={form.comuna}
                     onChange={(e) => updateField('comuna', e.target.value)}
-                    className="input-field"
+                    className={`input-field ${errors.comuna ? 'border-red-400 ring-1 ring-red-200' : ''}`}
                   />
+                  <FieldError message={errors.comuna} />
                 </div>
                 <div>
                   <label className="label-field">Orden de Compra</label>
@@ -521,24 +647,6 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
                     className="input-field"
                   />
                 </div>
-              </div>
-              <div>
-                <label className="label-field">Fecha y Hora Inicio</label>
-                <input
-                  type="datetime-local"
-                  value={form.horaInicio}
-                  onChange={(e) => updateField('horaInicio', e.target.value)}
-                  className="input-field"
-                />
-              </div>
-              <div>
-                <label className="label-field">Fecha y Hora Término</label>
-                <input
-                  type="datetime-local"
-                  value={form.horaTermino}
-                  onChange={(e) => updateField('horaTermino', e.target.value)}
-                  className="input-field"
-                />
               </div>
             </div>
           </div>
@@ -551,73 +659,121 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
               Trabajos Realizados
             </h2>
 
-            <div className="space-y-2">
-              {form.trabajos.map((t, idx) => (
-                <div
-                  key={t.nombre}
-                  className={`rounded-2xl border-2 transition-colors shadow-sm ${
-                    t.checked
-                      ? 'border-accent-200 bg-accent-50'
-                      : 'border-gray-200 bg-white'
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => toggleTrabajo(idx)}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left"
-                  >
-                    {t.checked ? (
-                      <CheckSquare size={22} className="text-accent-600 shrink-0" />
-                    ) : (
-                      <Square size={22} className="text-gray-300 shrink-0" />
-                    )}
-                    <span
-                      className={`text-sm font-medium flex-1 ${
-                        t.checked ? 'text-gray-900' : 'text-gray-600'
-                      }`}
-                    >
-                      {t.nombre}
-                    </span>
-                    {t.checked && (
-                      <span className="text-xs font-bold text-white bg-accent-600 px-2.5 py-0.5 rounded-full">
-                        {t.cantidad}
-                      </span>
-                    )}
-                  </button>
-                  {t.checked && (
-                    <div className="flex items-center justify-end gap-3 px-4 pb-3">
-                      <button
-                        type="button"
-                        onClick={() => updateCantidad(idx, -1)}
-                        className="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center active:bg-gray-100"
-                      >
-                        <Minus size={16} />
-                      </button>
-                      <span className="text-lg font-bold text-accent-700 w-8 text-center">
-                        {t.cantidad}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => updateCantidad(idx, 1)}
-                        className="w-10 h-10 rounded-xl bg-accent-600 text-white flex items-center justify-center active:bg-accent-700"
-                      >
-                        <Plus size={16} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
+            {/* Horarios */}
+            <div className="grid grid-cols-2 gap-3">
+              <div data-error={!!errors.horaInicio}>
+                <label className="label-field">Fecha y Hora Inicio <span className="text-red-400">*</span></label>
+                <input
+                  type="datetime-local"
+                  value={form.horaInicio}
+                  onChange={(e) => updateField('horaInicio', e.target.value)}
+                  className={`input-field ${errors.horaInicio ? 'border-red-400 ring-1 ring-red-200' : ''}`}
+                />
+                <FieldError message={errors.horaInicio} />
+              </div>
+              <div data-error={!!errors.horaTermino}>
+                <label className="label-field">Fecha y Hora Término <span className="text-red-400">*</span></label>
+                <input
+                  type="datetime-local"
+                  value={form.horaTermino}
+                  onChange={(e) => updateField('horaTermino', e.target.value)}
+                  className={`input-field ${errors.horaTermino ? 'border-red-400 ring-1 ring-red-200' : ''}`}
+                />
+                <FieldError message={errors.horaTermino} />
+              </div>
             </div>
 
-            <div>
-              <label className="label-field">Descripción del Trabajo</label>
+            {/* Services list */}
+            {serviciosLoading ? (
+              <div className="flex flex-col items-center justify-center py-8">
+                <Loader2 size={24} className="animate-spin text-condor-400 mb-2" />
+                <p className="text-sm text-gray-400">Cargando servicios...</p>
+              </div>
+            ) : serviciosError ? (
+              <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-center">
+                <p className="text-sm text-red-600 mb-3">{serviciosError}</p>
+                <button
+                  type="button"
+                  onClick={cargarServicios}
+                  className="inline-flex items-center gap-2 text-sm font-medium text-red-700 bg-white border border-red-300 rounded-xl px-4 py-2 hover:bg-red-50"
+                >
+                  <RotateCcw size={14} />
+                  Reintentar
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-2" data-error={!!errors.trabajos}>
+                  {form.trabajos.map((t, idx) => (
+                    <div
+                      key={t.nombre}
+                      className={`rounded-2xl border-2 transition-colors shadow-sm ${
+                        t.checked
+                          ? 'border-accent-200 bg-accent-50'
+                          : 'border-gray-200 bg-white'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleTrabajo(idx)}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-left"
+                      >
+                        {t.checked ? (
+                          <CheckSquare size={22} className="text-accent-600 shrink-0" />
+                        ) : (
+                          <Square size={22} className="text-gray-300 shrink-0" />
+                        )}
+                        <span
+                          className={`text-sm font-medium flex-1 ${
+                            t.checked ? 'text-gray-900' : 'text-gray-600'
+                          }`}
+                        >
+                          {t.nombre}
+                        </span>
+                        {t.checked && (
+                          <span className="text-xs font-bold text-white bg-accent-600 px-2.5 py-0.5 rounded-full">
+                            {t.cantidad}
+                          </span>
+                        )}
+                      </button>
+                      {t.checked && (
+                        <div className="flex items-center justify-end gap-3 px-4 pb-3">
+                          <button
+                            type="button"
+                            onClick={() => updateCantidad(idx, -1)}
+                            className="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center active:bg-gray-100"
+                          >
+                            <Minus size={16} />
+                          </button>
+                          <span className="text-lg font-bold text-accent-700 w-8 text-center">
+                            {t.cantidad}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => updateCantidad(idx, 1)}
+                            className="w-10 h-10 rounded-xl bg-accent-600 text-white flex items-center justify-center active:bg-accent-700"
+                          >
+                            <Plus size={16} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <FieldError message={errors.trabajos} />
+              </>
+            )}
+
+            <div data-error={!!errors.descripcion}>
+              <label className="label-field">Descripción del Trabajo <span className="text-red-400">*</span></label>
               <textarea
                 rows={4}
                 value={form.descripcion}
                 onChange={(e) => updateField('descripcion', e.target.value)}
                 placeholder="Detalle de lo realizado..."
-                className="input-field resize-none"
+                className={`input-field resize-none ${errors.descripcion ? 'border-red-400 ring-1 ring-red-200' : ''}`}
               />
+              <FieldError message={errors.descripcion} />
             </div>
 
             <div>
@@ -705,17 +861,17 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
             </h2>
 
             {/* 1. Patente Vehículo */}
-            <div>
-              <label className="label-field">Patente Vehículo</label>
+            <div data-error={!!errors.patenteVehiculo}>
+              <label className="label-field">Patente Vehículo <span className="text-red-400">*</span></label>
               <input
                 type="text"
                 value={form.patenteVehiculo}
-                onChange={(e) => updateField('patenteVehiculo', e.target.value.toUpperCase())}
-                placeholder="AB-CD-12"
-                className="input-field uppercase"
+                onChange={(e) => updateField('patenteVehiculo', formatPatente(e.target.value))}
+                placeholder="XX-XX-00"
+                className={`input-field uppercase ${errors.patenteVehiculo ? 'border-red-400 ring-1 ring-red-200' : ''}`}
                 maxLength={8}
               />
-              <p className="text-xs text-gray-400 mt-1">Formato: AB-CD-12 (letras-letras-números)</p>
+              <FieldError message={errors.patenteVehiculo} />
             </div>
 
             {/* 2. Personal asignado */}
@@ -730,15 +886,9 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
                     >
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-gray-900">{p.nombre}</span>
-                        {p.esEmpleado ? (
-                          <span className="text-[10px] font-semibold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
-                            Técnico
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-semibold text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">
-                            Externo
-                          </span>
-                        )}
+                        <span className="text-[10px] font-semibold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+                          Técnico
+                        </span>
                         {idx === 0 && (
                           <span className="text-[10px] text-gray-400">(responsable)</span>
                         )}
@@ -787,28 +937,6 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
                 </div>
               </div>
             )}
-
-            {/* 4. Agregar persona externa */}
-            <div>
-              <label className="label-field">Agregar persona externa</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={nuevoPersonal}
-                  onChange={(e) => setNuevoPersonal(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addPersonal())}
-                  placeholder="Nombre completo"
-                  className="input-field flex-1"
-                />
-                <button
-                  type="button"
-                  onClick={addPersonal}
-                  className="btn-secondary px-3"
-                >
-                  <Plus size={18} />
-                </button>
-              </div>
-            </div>
           </div>
         )}
 
@@ -855,7 +983,6 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
                 ref={fotosAntesRef}
                 type="file"
                 accept="image/*"
-
                 multiple
                 className="hidden"
                 onChange={(e) => handleFotoUpload(e, 'fotosAntes')}
@@ -898,7 +1025,6 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
                 ref={fotosDespuesRef}
                 type="file"
                 accept="image/*"
-
                 multiple
                 className="hidden"
                 onChange={(e) => handleFotoUpload(e, 'fotosDespues')}
@@ -916,12 +1042,13 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
 
             <Summary data={{ ...form, personal: form.personal.map((p) => p.nombre) }} onEdit={(s) => { setConfirmado(false); goToStep(s); }} />
 
-            <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm">
-              <p className="text-sm text-gray-500 mb-1">Firma del Supervisor</p>
+            <div className={`bg-white rounded-2xl p-4 border shadow-sm ${errors.firmaBase64 ? 'border-red-400' : 'border-gray-200'}`} data-error={!!errors.firmaBase64}>
+              <p className="text-sm text-gray-500 mb-1">Firma del Supervisor <span className="text-red-400">*</span></p>
               <p className="text-sm font-medium mb-3">{form.supervisor || '—'}</p>
               <SignaturePad
                 onSignatureChange={(data) => updateField('firmaBase64', data)}
               />
+              <FieldError message={errors.firmaBase64} />
             </div>
 
             {/* Confirmación obligatoria */}
@@ -970,7 +1097,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
             {step > 0 && (
               <button
                 type="button"
-                onClick={() => setStep(step - 1)}
+                onClick={() => { setErrors({}); setStep(step - 1); }}
                 className="flex-1 btn-secondary py-3.5 flex items-center justify-center gap-1 rounded-2xl"
               >
                 <ChevronLeft size={18} />
@@ -979,7 +1106,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
             )}
             <button
               type="button"
-              onClick={() => setStep(step + 1)}
+              onClick={handleNext}
               className="flex-1 bg-condor-900 hover:bg-condor-800 text-white font-semibold rounded-2xl py-3.5 text-sm transition-colors flex items-center justify-center gap-1"
             >
               Siguiente
@@ -993,7 +1120,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
           <div className="max-w-lg mx-auto">
             <button
               type="button"
-              onClick={() => setStep(step - 1)}
+              onClick={() => { setErrors({}); setStep(step - 1); }}
               className="w-full btn-secondary py-3 flex items-center justify-center gap-1 rounded-2xl"
             >
               <ChevronLeft size={18} />

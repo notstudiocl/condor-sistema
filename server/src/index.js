@@ -142,7 +142,7 @@ app.get('/api/tecnicos-lista', async (_req, res) => {
     const Airtable = (await import('airtable')).default;
     const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
     const records = await base('Empleados')
-      .select({ filterByFormula: `{Estado} = 'Activo'` })
+      .select({ filterByFormula: `{Activo} = TRUE()` })
       .firstPage();
     const data = records.map(r => ({
       recordId: r.id,
@@ -152,6 +152,26 @@ app.get('/api/tecnicos-lista', async (_req, res) => {
     }));
     res.json({ success: true, data });
   } catch (error) {
+    res.json({ success: false, error: error.message, data: [] });
+  }
+});
+
+// Servicios activos desde Airtable
+app.get('/api/servicios', async (_req, res) => {
+  try {
+    const Airtable = (await import('airtable')).default;
+    const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
+    const records = await base('Servicios').select({
+      filterByFormula: '{Activo} = TRUE()',
+      sort: [{ field: 'Nombre', direction: 'asc' }],
+    }).firstPage();
+    const data = records.map(r => ({
+      id: r.id,
+      nombre: r.get('Nombre') || '',
+    }));
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error listando servicios:', error);
     res.json({ success: false, error: error.message, data: [] });
   }
 });

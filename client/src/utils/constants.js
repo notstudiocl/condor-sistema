@@ -1,16 +1,3 @@
-export const TRABAJOS = [
-  'Varillaje y destape de cámaras',
-  'Horizontal – Vertical Descarga General',
-  'Limpieza Manual de fosas',
-  'Hora Camión Hidrojet',
-  'Visita en Terreno',
-  'Varillaje Restaurant Operativo',
-  'Trasvasije',
-  'Evacuación de fosas',
-  'Mantención aguas servidas',
-  'Mantención aguas grasas',
-];
-
 export const METODOS_PAGO = [
   'Efectivo',
   'Transferencia',
