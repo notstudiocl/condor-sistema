@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { findTecnicoByUsuario } from '../services/airtable.js';
+import { findTecnicoByCredencial } from '../services/airtable.js';
 import { generateToken } from '../middleware/auth.js';
 
 const router = Router();
@@ -16,8 +16,7 @@ router.post('/login', async (req, res, next) => {
       });
     }
 
-    const usuarioInput = rawInput.trim().toLowerCase();
-    const tecnico = await findTecnicoByUsuario(usuarioInput);
+    const tecnico = await findTecnicoByCredencial(rawInput);
     if (!tecnico) {
       return res.status(401).json({
         success: false,

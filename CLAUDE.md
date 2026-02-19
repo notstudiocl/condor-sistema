@@ -91,7 +91,7 @@ Se muestra en:
 - La tabla Empleados en Airtable usa el campo **"Usuario"** (antes era "Email")
 - El login acepta un **input de texto libre** (type="text"), no restringido a email
 - Backend (`routes/auth.js`) acepta tanto `email` como `usuario` en el body: `const rawInput = email || usuario || ''`
-- Búsqueda case-insensitive via `LOWER({Usuario})` en Airtable (`services/airtable.js`)
+- Login acepta **Usuario O RUT** (con o sin puntos y guiones): `findTecnicoByCredencial` busca con `OR(LOWER({Usuario}), SUBSTITUTE({RUT}))` en Airtable
 - El frontend (`api.js`) envía `{ email, pin }` (mantiene key `email` por compatibilidad)
 
 ### JWT Token
@@ -403,10 +403,12 @@ Campos: Fecha, Estado (Enviada/Completada/Facturada), Cliente / Empresa, Cliente
 Campos automáticos (NO enviar): Numero orden, ID, Creada
 
 ### Tabla "Empleados"
-Campos: ID, Nombre, **Usuario** (texto libre, antes era "Email"), Pin Acceso, Telefono, Activo (checkbox booleano — TRUE/FALSE, NO texto)
+Campos: ID, Nombre, **Usuario** (texto libre, antes era "Email"), **RUT** (single line text — RUT del empleado, se puede usar para login), Pin Acceso, Telefono, Activo (checkbox booleano — TRUE/FALSE, NO texto)
 
 **IMPORTANTE**:
 - El campo "Usuario" reemplazó al antiguo "Email". Se busca via `LOWER({Usuario})`.
+- El campo "RUT" permite login alternativo con RUT (con o sin puntos y guiones). Se normaliza quitando puntos y guiones para comparar.
+- Login acepta **Usuario O RUT** — la función `findTecnicoByCredencial` busca en ambos campos con `OR()` en Airtable.
 - El campo "Especialidad" fue **eliminado** — ya no existe en la tabla ni en el código.
 - El campo "Activo" es un checkbox (booleano), NO un campo de texto. Filtrar con `{Activo} = TRUE()` en Airtable y comparar con `=== true` en JavaScript.
 

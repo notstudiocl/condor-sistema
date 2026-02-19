@@ -24,14 +24,34 @@ if (!MOCK_MODE) {
 
 // --- Empleados ---
 
-export async function findTecnicoByUsuario(input) {
+// Normalizar RUT: quitar puntos y guión, lowercase
+function normalizeRut(rut) {
+  return rut.replace(/\./g, '').replace(/-/g, '').toLowerCase().trim();
+}
+
+export async function findTecnicoByCredencial(input) {
+  const normalizedInput = input.trim().toLowerCase();
+  const normalizedRut = normalizeRut(input);
+
   if (MOCK_MODE) {
-    return mockTecnicos.find((t) => t.usuario.toLowerCase() === input.toLowerCase()) || null;
+    return mockTecnicos.find((t) =>
+      t.usuario.toLowerCase() === normalizedInput ||
+      (t.rut && normalizeRut(t.rut) === normalizedRut)
+    ) || null;
   }
+
   // Sanitize input against Airtable formula injection
-  const sanitized = input.replace(/'/g, "\\'");
+  const sanitizedInput = normalizedInput.replace(/'/g, "\\'");
+  const sanitizedRut = normalizedRut.replace(/'/g, "\\'");
+
   const records = await base('Empleados')
-    .select({ filterByFormula: `LOWER({Usuario}) = '${sanitized}'`, maxRecords: 1 })
+    .select({
+      filterByFormula: `OR(
+        LOWER({Usuario}) = '${sanitizedInput}',
+        SUBSTITUTE(SUBSTITUTE(LOWER({RUT}), ".", ""), "-", "") = '${sanitizedRut}'
+      )`,
+      maxRecords: 1,
+    })
     .firstPage();
   if (records.length === 0) return null;
   const r = records[0];
@@ -40,6 +60,7 @@ export async function findTecnicoByUsuario(input) {
     recordId: r.id,
     nombre: r.get('Nombre'),
     usuario: r.get('Usuario'),
+    rut: r.get('RUT') || '',
     pin: String(r.get('Pin Acceso') || ''),
     telefono: r.get('Telefono'),
     activo: r.get('Activo') === true,
