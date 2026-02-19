@@ -335,6 +335,7 @@ PUT    /api/ordenes/:recordId          # Actualizar orden (sin auth middleware, 
 POST   /api/ordenes/:recordId/reenviar # Reenviar orden al webhook (lee datos de Airtable)
 POST   /api/upload-pdf                 # Recibir PDF desde n8n (multipart, multer) y servir públicamente
 GET    /api/health                     # Health check
+GET    /api/diagnostico-webhook        # Diagnóstico completo: DNS resolution + fetch con timeout
 GET    /api/test-webhook               # Diagnóstico: test webhook connectivity
 POST   /api/test-envio                 # Diagnóstico: simula envío completo
 ```

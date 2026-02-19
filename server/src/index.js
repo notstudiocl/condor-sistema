@@ -55,6 +55,47 @@ app.post('/api/upload-pdf', uploadMulter.single('file'), (req, res) => {
   }
 });
 
+// Diagnóstico completo de webhook (DNS + fetch)
+app.get('/api/diagnostico-webhook', async (req, res) => {
+  const webhookUrl = process.env.WEBHOOK_OT_N8N_URL;
+  const resultados = {
+    webhookUrl,
+    timestamp: new Date().toISOString(),
+    tests: {}
+  };
+
+  // Test 1: DNS resolution
+  try {
+    const url = new URL(webhookUrl);
+    const dns = await import('dns');
+    const addresses = await dns.promises.resolve4(url.hostname);
+    resultados.tests.dns = { ok: true, addresses };
+  } catch (e) {
+    resultados.tests.dns = { ok: false, error: e.message };
+  }
+
+  // Test 2: Fetch con timeout
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    const start = Date.now();
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ test: true, diagnostico: true, timestamp: new Date().toISOString() }),
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+    const elapsed = Date.now() - start;
+    const text = await response.text();
+    resultados.tests.fetch = { ok: response.ok, status: response.status, elapsed: elapsed + 'ms', response: text };
+  } catch (e) {
+    resultados.tests.fetch = { ok: false, error: e.message, cause: e.cause?.message || null };
+  }
+
+  res.json(resultados);
+});
+
 // Health check
 app.get('/api/health', (_req, res) => {
   res.json({
