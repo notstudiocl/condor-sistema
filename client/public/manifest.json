@@ -1,6 +1,6 @@
 {
-  "name": "Condor Alcantarillados - Órdenes",
-  "short_name": "Condor OT",
+  "name": "Condor 360 - Órdenes de Trabajo",
+  "short_name": "Condor 360",
   "description": "Sistema de Órdenes de Trabajo",
   "start_url": "/condor-sistema/",
   "display": "standalone",

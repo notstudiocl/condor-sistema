@@ -16,11 +16,11 @@ export default function Header({ user, onLogout }) {
         <Link to="/" className="flex items-center gap-2 shrink-0">
           <img
             src={logoUrl}
-            alt="Condor Alcantarillados"
+            alt="Condor 360"
             className="h-8 w-auto brightness-0 invert"
           />
           <p className="font-heading font-semibold text-sm leading-tight hidden sm:block truncate max-w-[140px]">
-            Condor Alcantarillados
+            Condor 360
           </p>
         </Link>
       </div>

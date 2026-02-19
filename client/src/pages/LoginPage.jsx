@@ -39,7 +39,7 @@ export default function LoginPage({ onLogin }) {
       <div className="mb-6">
         <img
           src={logoUrl}
-          alt="Condor Alcantarillados"
+          alt="Condor 360"
           className="mx-auto"
           style={{ maxWidth: 280 }}
         />
@@ -120,7 +120,7 @@ export default function LoginPage({ onLogin }) {
 
       <div className="mt-8 text-center">
         <p className="text-gray-300 text-xs">
-          Condor Alcantarillados &copy; {new Date().getFullYear()}
+          Condor 360 &copy; {new Date().getFullYear()}
         </p>
       </div>
     </div>

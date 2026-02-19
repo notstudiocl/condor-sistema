@@ -49,6 +49,62 @@ export function todayFormatted() {
 }
 
 /**
+ * Comprime una imagen File/Blob a JPEG con calidad reducida y tamaño máximo.
+ * @param {File} file - Archivo de imagen original
+ * @param {number} maxWidth - Ancho máximo en px (default 1920)
+ * @param {number} quality - Calidad JPEG 0-1 (default 0.7)
+ * @returns {Promise<File>} - Archivo comprimido
+ */
+export function compressImage(file, maxWidth = 1920, quality = 0.7) {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) {
+      return resolve(file);
+    }
+
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+
+      let { width, height } = img;
+
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) return reject(new Error('Error al comprimir imagen'));
+          const compressed = new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), {
+            type: 'image/jpeg',
+            lastModified: Date.now(),
+          });
+          resolve(compressed);
+        },
+        'image/jpeg',
+        quality
+      );
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(file);
+    };
+
+    img.src = url;
+  });
+}
+
+/**
  * Formatea una fecha ISO a DD/MM/YYYY en zona horaria Chile
  */
 export function formatFechaAmigable(isoString) {

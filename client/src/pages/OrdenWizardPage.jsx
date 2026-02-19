@@ -15,13 +15,12 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { METODOS_PAGO, GARANTIAS, WIZARD_STEPS, SERVICIOS_FALLBACK } from '../utils/constants';
-import { formatRut, formatCLP, parseCLP, todayISO } from '../utils/helpers';
+import { formatRut, formatCLP, parseCLP, todayISO, compressImage } from '../utils/helpers';
 import { buscarClientes, getTecnicosPublic, crearOrden, actualizarOrden, getServicios } from '../utils/api';
 import SignaturePad from '../components/SignaturePad';
 import Summary from '../components/Summary';
 
-const MAX_FOTOS = 5;
-const MAX_DIMENSION = 1200;
+const MAX_FOTOS = 6;
 
 const formatPatente = (value) => {
   const clean = value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
@@ -61,33 +60,13 @@ const initialFormData = () => ({
   firmaBase64: null,
 });
 
-// Resize image to max dimension, convert to PNG base64
-function processImage(file) {
+// Compress image and convert to JPEG base64
+async function processImage(file) {
+  const compressed = await compressImage(file);
   return new Promise((resolve) => {
     const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        let { width, height } = img;
-        if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
-          if (width > height) {
-            height = Math.round((height * MAX_DIMENSION) / width);
-            width = MAX_DIMENSION;
-          } else {
-            width = Math.round((width * MAX_DIMENSION) / height);
-            height = MAX_DIMENSION;
-          }
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/png'));
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
+    reader.onload = (e) => resolve(e.target.result);
+    reader.readAsDataURL(compressed);
   });
 }
 
@@ -364,6 +343,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
     const toProcess = files.slice(0, remaining);
     const processed = await Promise.all(toProcess.map(processImage));
     updateField(field, [...current, ...processed]);
+    if (errors[field]) setErrors((prev) => { const next = { ...prev }; delete next[field]; return next; });
     e.target.value = '';
   };
 
@@ -395,6 +375,10 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
     // Step 2: Personal
     if (!form.patenteVehiculo.trim()) errs.patenteVehiculo = 'La patente es obligatoria';
 
+    // Step 3: Fotos
+    if (!form.fotosAntes || form.fotosAntes.length === 0) errs.fotosAntes = 'Debe adjuntar al menos 1 foto del antes';
+    if (!form.fotosDespues || form.fotosDespues.length === 0) errs.fotosDespues = 'Debe adjuntar al menos 1 foto del después';
+
     // Step 4: Firma
     if (!form.firmaBase64) errs.firmaBase64 = 'La firma es obligatoria para enviar la orden';
 
@@ -406,6 +390,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
     clienteRut: 0, clienteEmpresa: 0, supervisor: 0, clienteEmail: 0, clienteTelefono: 0, direccion: 0, comuna: 0,
     horaInicio: 1, horaTermino: 1, trabajos: 1, descripcion: 1,
     patenteVehiculo: 2,
+    fotosAntes: 3, fotosDespues: 3,
     firmaBase64: 4,
   };
 
@@ -1013,7 +998,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
             </h2>
 
             {/* Fotos ANTES */}
-            <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+            <div className={`bg-white border rounded-2xl p-4 shadow-sm ${errors.fotosAntes ? 'border-red-400' : 'border-gray-200'}`} data-error={!!errors.fotosAntes}>
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-heading font-semibold text-sm text-condor-900">
                   Fotos ANTES
@@ -1052,10 +1037,11 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
                 className="hidden"
                 onChange={(e) => handleFotoUpload(e, 'fotosAntes')}
               />
+              <FieldError message={errors.fotosAntes} />
             </div>
 
             {/* Fotos DESPUÉS */}
-            <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+            <div className={`bg-white border rounded-2xl p-4 shadow-sm ${errors.fotosDespues ? 'border-red-400' : 'border-gray-200'}`} data-error={!!errors.fotosDespues}>
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-heading font-semibold text-sm text-condor-900">
                   Fotos DESPUÉS
@@ -1094,6 +1080,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
                 className="hidden"
                 onChange={(e) => handleFotoUpload(e, 'fotosDespues')}
               />
+              <FieldError message={errors.fotosDespues} />
             </div>
           </div>
         )}
