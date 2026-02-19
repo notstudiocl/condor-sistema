@@ -1,6 +1,6 @@
 import { CheckCircle2, Clock, Plus, AlertTriangle, XCircle, RotateCcw, Home } from 'lucide-react';
 import { formatCLP, todayFormatted, formatFechaAmigable } from '../utils/helpers';
-import AppFooter from '../components/AppFooter';
+import { APP_VERSION } from '../version';
 
 export default function ConfirmacionPage({ orden, onNuevaOrden, onReintentar, onInicio }) {
   const trabajosActivos = (orden.trabajos || []).filter((t) => t.cantidad > 0);
@@ -175,7 +175,17 @@ export default function ConfirmacionPage({ orden, onNuevaOrden, onReintentar, on
           </button>
         </div>
 
-        <AppFooter />
+        <div className="text-center py-4 mt-6">
+          <p className="text-white/60 text-xs">
+            Condor 360 &copy; {new Date().getFullYear()} &middot; v{APP_VERSION}
+          </p>
+          <p className="text-[10px] text-white/40 mt-1">
+            Sistema integral desarrollado por{' '}
+            <a href="https://notstudio.cl" target="_blank" rel="noopener noreferrer" className="underline hover:text-white/80">
+              NotStudio.cl
+            </a>
+          </p>
+        </div>
       </div>
     </div>
   );
