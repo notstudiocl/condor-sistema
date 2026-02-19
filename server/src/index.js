@@ -7,7 +7,7 @@ import clientesRoutes from './routes/clientes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync, renameSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'fs';
 import multer from 'multer';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -25,6 +25,19 @@ app.use('/uploads', express.static(uploadsDir));
 
 const uploadMulter = multer({ dest: uploadsDir });
 
+const pdfStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    let name = file.originalname || 'orden.pdf';
+    name = name.replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ._-]/g, '_');
+    if (!name.endsWith('.pdf')) name += '.pdf';
+    cb(null, name);
+  }
+});
+const uploadPdf = multer({ storage: pdfStorage });
+
 // Cache para prevenir duplicados (race condition)
 const procesandoOrdenes = new Set();
 
@@ -41,12 +54,10 @@ setInterval(() => {
 }, 1800000);
 
 // Upload PDF from n8n
-app.post('/api/upload-pdf', uploadMulter.single('file'), (req, res) => {
+app.post('/api/upload-pdf', uploadPdf.single('file'), (req, res) => {
   try {
-    const newName = req.file.filename + '.pdf';
-    const newPath = join(req.file.destination, newName);
-    renameSync(req.file.path, newPath);
-    const url = `https://clientes-condor-api.f8ihph.easypanel.host/uploads/${newName}`;
+    const baseUrl = process.env.SERVER_URL || 'https://clientes-condor-api.f8ihph.easypanel.host';
+    const url = `${baseUrl}/uploads/${req.file.filename}`;
     console.log('PDF subido:', url);
     res.json({ success: true, url });
   } catch (e) {
