@@ -133,10 +133,10 @@ app.get('/api/tecnicos-lista', async (_req, res) => {
   try {
     if (process.env.MOCK_MODE === 'true') {
       return res.json({ success: true, data: [
-        { recordId: 'mock_rec_1', id: '1', nombre: 'Carlos Méndez', especialidad: 'Hidrojet' },
-        { recordId: 'mock_rec_2', id: '2', nombre: 'Laura Torres', especialidad: 'Varillaje' },
-        { recordId: 'mock_rec_3', id: '3', nombre: 'Diego Silva', especialidad: 'Evacuación' },
-        { recordId: 'mock_rec_4', id: '4', nombre: 'Camila Rojas', especialidad: 'Mantención' },
+        { recordId: 'mock_rec_1', id: '1', nombre: 'Carlos Méndez' },
+        { recordId: 'mock_rec_2', id: '2', nombre: 'Laura Torres' },
+        { recordId: 'mock_rec_3', id: '3', nombre: 'Diego Silva' },
+        { recordId: 'mock_rec_4', id: '4', nombre: 'Camila Rojas' },
       ]});
     }
     const Airtable = (await import('airtable')).default;
@@ -148,7 +148,6 @@ app.get('/api/tecnicos-lista', async (_req, res) => {
       recordId: r.id,
       id: r.get('ID') || r.id,
       nombre: r.get('Nombre'),
-      especialidad: r.get('Especialidad') || '',
     }));
     res.json({ success: true, data });
   } catch (error) {
@@ -380,6 +379,9 @@ app.post('/api/ordenes', async (req, res) => {
     if (data.empleadosRecordIds && data.empleadosRecordIds.length > 0) {
       ordenFields['Empleados'] = data.empleadosRecordIds;
     }
+    if (data.serviciosIds && data.serviciosIds.length > 0) {
+      ordenFields['Servicios'] = data.serviciosIds;
+    }
 
     const ordenRecord = await base('Ordenes de Trabajo').create(ordenFields, { typecast: true });
     const ordenRecordId = ordenRecord.id;
@@ -526,6 +528,9 @@ app.put('/api/ordenes/:recordId', async (req, res) => {
     }
     if (data.empleadosRecordIds && data.empleadosRecordIds.length > 0) {
       ordenFields['Empleados'] = data.empleadosRecordIds;
+    }
+    if (data.serviciosIds && data.serviciosIds.length > 0) {
+      ordenFields['Servicios'] = data.serviciosIds;
     }
 
     await base('Ordenes de Trabajo').update(recordId, ordenFields, { typecast: true });

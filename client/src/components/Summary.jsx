@@ -1,4 +1,4 @@
-import { formatCLP, todayFormatted } from '../utils/helpers';
+import { formatCLP, todayFormatted, formatFechaHoraAmigable } from '../utils/helpers';
 import { ChevronRight } from 'lucide-react';
 
 function SectionHeader({ title, stepIndex, onEdit }) {
@@ -52,8 +52,8 @@ export default function Summary({ data, onEdit }) {
         <Field label="Dirección" value={data.direccion} required />
         <Field label="Comuna" value={data.comuna} required />
         <Field label="Orden de Compra" value={data.ordenCompra} />
-        <Field label="Inicio" value={data.horaInicio} required />
-        <Field label="Término" value={data.horaTermino} required />
+        <Field label="Inicio" value={formatFechaHoraAmigable(data.horaInicio)} required />
+        <Field label="Término" value={formatFechaHoraAmigable(data.horaTermino)} required />
       </div>
 
       {/* Trabajos */}

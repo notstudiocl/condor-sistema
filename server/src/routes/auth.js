@@ -1,21 +1,23 @@
 import { Router } from 'express';
-import { findTecnicoByEmail } from '../services/airtable.js';
+import { findTecnicoByUsuario } from '../services/airtable.js';
 import { generateToken } from '../middleware/auth.js';
 
 const router = Router();
 
 router.post('/login', async (req, res, next) => {
   try {
-    const { email, pin } = req.body;
+    const { email, usuario, pin } = req.body;
+    const rawInput = email || usuario || '';
 
-    if (!email || !pin) {
+    if (!rawInput || !pin) {
       return res.status(400).json({
         success: false,
-        error: 'Email y PIN son requeridos',
+        error: 'Usuario y PIN son requeridos',
       });
     }
 
-    const tecnico = await findTecnicoByEmail(email);
+    const usuarioInput = rawInput.trim().toLowerCase();
+    const tecnico = await findTecnicoByUsuario(usuarioInput);
     if (!tecnico) {
       return res.status(401).json({
         success: false,
@@ -41,8 +43,7 @@ router.post('/login', async (req, res, next) => {
       id: tecnico.id,
       recordId: tecnico.recordId || null,
       nombre: tecnico.nombre,
-      email: tecnico.email,
-      especialidad: tecnico.especialidad,
+      email: tecnico.usuario,
     };
 
     const token = generateToken(user);

@@ -4,10 +4,10 @@ const MOCK_MODE = process.env.MOCK_MODE === 'true';
 
 // Mock data
 const mockTecnicos = [
-  { id: '1', recordId: 'mock_rec_1', nombre: 'Carlos Méndez', email: 'carlos.mendez@condor.cl', pin: '1234', telefono: '+56 9 1111 1111', especialidad: 'Hidrojet', activo: true },
-  { id: '2', recordId: 'mock_rec_2', nombre: 'Laura Torres', email: 'laura.torres@condor.cl', pin: '1234', telefono: '+56 9 2222 2222', especialidad: 'Varillaje', activo: true },
-  { id: '3', recordId: 'mock_rec_3', nombre: 'Diego Silva', email: 'diego.silva@condor.cl', pin: '1234', telefono: '+56 9 3333 3333', especialidad: 'Evacuación', activo: true },
-  { id: '4', recordId: 'mock_rec_4', nombre: 'Camila Rojas', email: 'camila.rojas@condor.cl', pin: '1234', telefono: '+56 9 4444 4444', especialidad: 'Mantención', activo: true },
+  { id: '1', recordId: 'mock_rec_1', nombre: 'Carlos Méndez', usuario: 'carlos.mendez@condor.cl', pin: '1234', telefono: '+56 9 1111 1111', activo: true },
+  { id: '2', recordId: 'mock_rec_2', nombre: 'Laura Torres', usuario: 'laura.torres@condor.cl', pin: '1234', telefono: '+56 9 2222 2222', activo: true },
+  { id: '3', recordId: 'mock_rec_3', nombre: 'Diego Silva', usuario: 'diego.silva@condor.cl', pin: '1234', telefono: '+56 9 3333 3333', activo: true },
+  { id: '4', recordId: 'mock_rec_4', nombre: 'Camila Rojas', usuario: 'camila.rojas@condor.cl', pin: '1234', telefono: '+56 9 4444 4444', activo: true },
 ];
 
 const mockClientes = [
@@ -24,12 +24,14 @@ if (!MOCK_MODE) {
 
 // --- Empleados ---
 
-export async function findTecnicoByEmail(email) {
+export async function findTecnicoByUsuario(input) {
   if (MOCK_MODE) {
-    return mockTecnicos.find((t) => t.email === email) || null;
+    return mockTecnicos.find((t) => t.usuario.toLowerCase() === input.toLowerCase()) || null;
   }
+  // Sanitize input against Airtable formula injection
+  const sanitized = input.replace(/'/g, "\\'");
   const records = await base('Empleados')
-    .select({ filterByFormula: `{Email} = '${email}'`, maxRecords: 1 })
+    .select({ filterByFormula: `LOWER({Usuario}) = '${sanitized}'`, maxRecords: 1 })
     .firstPage();
   if (records.length === 0) return null;
   const r = records[0];
@@ -37,10 +39,9 @@ export async function findTecnicoByEmail(email) {
     id: r.get('ID') || r.id,
     recordId: r.id,
     nombre: r.get('Nombre'),
-    email: r.get('Email'),
+    usuario: r.get('Usuario'),
     pin: String(r.get('Pin Acceso') || ''),
     telefono: r.get('Telefono'),
-    especialidad: r.get('Especialidad'),
     activo: r.get('Activo') === true,
   };
 }
@@ -55,9 +56,8 @@ export async function getTecnicos() {
   return records.map((r) => ({
     id: r.get('ID') || r.id,
     nombre: r.get('Nombre'),
-    email: r.get('Email'),
+    usuario: r.get('Usuario'),
     telefono: r.get('Telefono'),
-    especialidad: r.get('Especialidad'),
   }));
 }
 

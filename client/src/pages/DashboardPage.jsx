@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, RefreshCw, Loader2, ClipboardList, ChevronRight, Search, X, WifiOff } from 'lucide-react';
 import { clearWizardSession } from './OrdenWizardPage';
+import { formatFechaAmigable } from '../utils/helpers';
 
 const API_URL = (import.meta.env.VITE_API_URL || 'https://clientes-condor-api.f8ihph.easypanel.host/api').replace(/\/api\/?$/, '');
 
@@ -159,7 +160,7 @@ export default function DashboardPage({ pendingCount = 0 }) {
                     <ChevronRight size={16} className="text-gray-300" />
                   </div>
                 </div>
-                <p className="text-sm text-gray-700 font-medium">{o.clienteEmpresa || 'Sin cliente'}<span className="text-gray-400 font-normal ml-2">{o.fecha}</span></p>
+                <p className="text-sm text-gray-700 font-medium">{o.clienteEmpresa || 'Sin cliente'}<span className="text-gray-400 font-normal ml-2">{formatFechaAmigable(o.fecha)}</span></p>
                 <p className="text-xs text-gray-400 mt-0.5">{o.direccion}{o.comuna ? `, ${o.comuna}` : ''}</p>
               </button>
             ))}

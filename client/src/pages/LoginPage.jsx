@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Mail, KeyRound, Loader2 } from 'lucide-react';
+import { User, KeyRound, Loader2 } from 'lucide-react';
 import { login } from '../utils/api';
 
 const logoUrl = import.meta.env.BASE_URL + 'condor-logo.png';
@@ -15,7 +15,7 @@ export default function LoginPage({ onLogin }) {
     setError('');
 
     if (!email.trim()) {
-      setError('Ingrese su email');
+      setError('Ingrese su usuario');
       return;
     }
     if (pin.length !== 4) {
@@ -64,17 +64,17 @@ export default function LoginPage({ onLogin }) {
 
         <div className="space-y-3">
           <div className="relative">
-            <Mail
+            <User
               size={18}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
             />
             <input
-              type="email"
-              placeholder="Email"
+              type="text"
+              placeholder="Correo o usuario"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full bg-white border border-gray-300 rounded-xl pl-10 pr-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-condor-900 focus:border-condor-900 text-sm"
-              autoComplete="email"
+              autoComplete="username"
             />
           </div>
 

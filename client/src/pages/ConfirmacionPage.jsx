@@ -1,5 +1,5 @@
 import { CheckCircle2, Clock, Plus, AlertTriangle, XCircle, RotateCcw, Home } from 'lucide-react';
-import { formatCLP, todayFormatted } from '../utils/helpers';
+import { formatCLP, todayFormatted, formatFechaAmigable } from '../utils/helpers';
 
 export default function ConfirmacionPage({ orden, onNuevaOrden, onReintentar, onInicio }) {
   const trabajosActivos = (orden.trabajos || []).filter((t) => t.cantidad > 0);

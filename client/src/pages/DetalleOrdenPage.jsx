@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader2, RotateCcw, FileText, X } from 'lucide-react';
-import { formatCLP } from '../utils/helpers';
+import { formatCLP, formatFechaAmigable, formatHoraAmigable, formatFechaHoraAmigable } from '../utils/helpers';
 
 const API_URL = (import.meta.env.VITE_API_URL || 'https://clientes-condor-api.f8ihph.easypanel.host/api').replace(/\/api\/?$/, '');
 
@@ -144,7 +144,7 @@ export default function DetalleOrdenPage() {
           </button>
           <div className="flex-1">
             <h1 className="font-heading font-bold text-lg text-condor-900">{orden.numeroOrden || 'Orden'}</h1>
-            <p className="text-xs text-gray-400">{orden.fecha}</p>
+            <p className="text-xs text-gray-400">{formatFechaAmigable(orden.fecha)}</p>
           </div>
           <EstadoBadge estado={orden.estado} />
         </div>
@@ -166,8 +166,8 @@ export default function DetalleOrdenPage() {
           <h3 className="font-heading font-semibold text-condor-900 mb-2">Trabajo</h3>
           {(orden.horaInicio || orden.horaTermino) && (
             <div className="flex gap-2 mb-2">
-              {orden.horaInicio && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-lg">Inicio: {orden.horaInicio}</span>}
-              {orden.horaTermino && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-lg">Término: {orden.horaTermino}</span>}
+              {orden.horaInicio && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-lg">Inicio: {formatFechaHoraAmigable(orden.horaInicio)}</span>}
+              {orden.horaTermino && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-lg">Término: {formatFechaHoraAmigable(orden.horaTermino)}</span>}
             </div>
           )}
           {trabajosActivos.length > 0 ? (

@@ -155,6 +155,10 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
   const { recordId: editRecordId } = editMode ? useParams() : { recordId: null };
   const [editLoading, setEditLoading] = useState(!!editMode);
 
+  // Custom service inputs
+  const [customNombre, setCustomNombre] = useState('');
+  const [customCantidad, setCustomCantidad] = useState('1');
+
   // Load services from Airtable
   const cargarServicios = async () => {
     setServiciosLoading(true);
@@ -167,18 +171,18 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
         if (prev.trabajos.length > 0) return prev;
         return {
           ...prev,
-          trabajos: lista.map((s) => ({ nombre: s.nombre, checked: false, cantidad: 0 })),
+          trabajos: lista.map((s) => ({ id: s.id, nombre: s.nombre, checked: false, cantidad: 0 })),
         };
       });
     } catch {
       // Offline or error: use fallback list
-      const fallback = SERVICIOS_FALLBACK.map((nombre) => ({ nombre }));
+      const fallback = SERVICIOS_FALLBACK.map((nombre, i) => ({ id: `fallback_${i}`, nombre }));
       setServicios(fallback);
       setForm((prev) => {
         if (prev.trabajos.length > 0) return prev;
         return {
           ...prev,
-          trabajos: fallback.map((s) => ({ nombre: s.nombre, checked: false, cantidad: 0 })),
+          trabajos: fallback.map((s) => ({ id: s.id, nombre: s.nombre, checked: false, cantidad: 0 })),
         };
       });
     } finally {
@@ -212,7 +216,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
           const srvList = srvRes.data || [];
           const mappedTrabajos = srvList.map(s => {
             const found = trabajos.find(t => (t.trabajo || t.nombre) === s.nombre);
-            return { nombre: s.nombre, checked: found ? found.cantidad > 0 : false, cantidad: found ? found.cantidad : 0 };
+            return { id: s.id, nombre: s.nombre, checked: found ? found.cantidad > 0 : false, cantidad: found ? found.cantidad : 0 };
           });
 
           setForm({
@@ -326,6 +330,19 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
       trabajos[idx] = t;
       return { ...prev, trabajos };
     });
+  };
+
+  const addCustomService = () => {
+    const nombre = customNombre.trim();
+    if (!nombre) return;
+    const cantidad = Math.max(1, parseInt(customCantidad) || 1);
+    setForm((prev) => ({
+      ...prev,
+      trabajos: [...prev.trabajos, { id: `custom_${Date.now()}`, nombre, checked: true, cantidad }],
+    }));
+    setCustomNombre('');
+    setCustomCantidad('1');
+    if (errors.trabajos) setErrors((prev) => { const next = { ...prev }; delete next.trabajos; return next; });
   };
 
   // Personal
@@ -452,6 +469,9 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
       firmaBase64: form.firmaBase64,
       clienteRecordId: form.clienteRecordId,
       empleadosRecordIds: form.personal.filter(p => p.esEmpleado && p.recordId).map(p => p.recordId),
+      serviciosIds: form.trabajos
+        .filter(t => t.cantidad > 0 && t.id && !t.id.startsWith('fallback_') && !t.id.startsWith('custom_'))
+        .map(t => t.id),
     };
 
     try {
@@ -782,6 +802,33 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
                   ))}
                 </div>
                 <FieldError message={errors.trabajos} />
+
+                {/* Custom service input */}
+                <div className="flex items-center gap-2 mt-3">
+                  <input
+                    type="text"
+                    value={customNombre}
+                    onChange={(e) => setCustomNombre(e.target.value)}
+                    placeholder="Otro servicio no listado..."
+                    className="flex-1 input-field !py-2.5 text-sm"
+                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addCustomService())}
+                  />
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min="1"
+                    value={customCantidad}
+                    onChange={(e) => setCustomCantidad(e.target.value)}
+                    className="w-16 input-field !py-2.5 text-sm text-center"
+                  />
+                  <button
+                    type="button"
+                    onClick={addCustomService}
+                    className="shrink-0 w-10 h-10 rounded-xl bg-condor-900 text-white flex items-center justify-center active:bg-condor-800"
+                  >
+                    <Plus size={18} />
+                  </button>
+                </div>
               </>
             )}
 
@@ -949,9 +996,6 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
                       >
                         {isSelected && <Check size={14} className="text-blue-600" />}
                         <span className="text-sm font-medium">{t.nombre}</span>
-                        {t.especialidad && (
-                          <span className="text-[10px] text-gray-400">{t.especialidad}</span>
-                        )}
                       </button>
                     );
                   })}
