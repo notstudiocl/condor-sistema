@@ -789,30 +789,42 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
                 <FieldError message={errors.trabajos} />
 
                 {/* Custom service input */}
-                <div className="flex items-center gap-2 mt-3">
-                  <input
-                    type="text"
-                    value={customNombre}
-                    onChange={(e) => setCustomNombre(e.target.value)}
-                    placeholder="Otro servicio no listado..."
-                    className="flex-1 input-field !py-2.5 text-sm"
-                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addCustomService())}
-                  />
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min="1"
-                    value={customCantidad}
-                    onChange={(e) => setCustomCantidad(e.target.value)}
-                    className="w-16 input-field !py-2.5 text-sm text-center"
-                  />
-                  <button
-                    type="button"
-                    onClick={addCustomService}
-                    className="shrink-0 w-10 h-10 rounded-xl bg-condor-900 text-white flex items-center justify-center active:bg-condor-800"
-                  >
-                    <Plus size={18} />
-                  </button>
+                <div className="flex items-end gap-2 mt-3">
+                  <div className="flex-1">
+                    <label className="text-xs text-gray-500 mb-1 block">Servicio no listado</label>
+                    <input
+                      type="text"
+                      value={customNombre}
+                      onChange={(e) => setCustomNombre(e.target.value)}
+                      placeholder="Otro servicio..."
+                      className="w-full input-field !py-2.5 text-sm"
+                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addCustomService())}
+                    />
+                  </div>
+                  <div className="w-20">
+                    <label className="text-xs text-gray-500 mb-1 block">Cant.</label>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min="1"
+                      value={customCantidad}
+                      onChange={(e) => setCustomCantidad(e.target.value)}
+                      className="w-full input-field !py-2.5 text-sm text-center"
+                    />
+                  </div>
+                  <div className="pb-1">
+                    <input
+                      type="checkbox"
+                      checked={false}
+                      className="w-6 h-6 accent-blue-600 cursor-pointer"
+                      onChange={(e) => {
+                        if (customNombre.trim()) {
+                          addCustomService();
+                        }
+                        e.target.checked = false;
+                      }}
+                    />
+                  </div>
                 </div>
               </>
             )}
