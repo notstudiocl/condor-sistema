@@ -382,6 +382,9 @@ app.post('/api/ordenes', async (req, res) => {
     if (data.serviciosIds && data.serviciosIds.length > 0) {
       ordenFields['Servicios'] = data.serviciosIds;
     }
+    if (req.user && req.user.recordId) {
+      ordenFields['Responsable Orden'] = [req.user.recordId];
+    }
 
     const ordenRecord = await base('Ordenes de Trabajo').create(ordenFields, { typecast: true });
     const ordenRecordId = ordenRecord.id;
@@ -531,6 +534,9 @@ app.put('/api/ordenes/:recordId', async (req, res) => {
     }
     if (data.serviciosIds && data.serviciosIds.length > 0) {
       ordenFields['Servicios'] = data.serviciosIds;
+    }
+    if (req.user && req.user.recordId) {
+      ordenFields['Responsable Orden'] = [req.user.recordId];
     }
 
     await base('Ordenes de Trabajo').update(recordId, ordenFields, { typecast: true });

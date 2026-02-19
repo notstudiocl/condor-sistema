@@ -4,7 +4,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'condor_secret_seguro';
 
 export function generateToken(user) {
   return jwt.sign(
-    { id: user.id, email: user.email, nombre: user.nombre },
+    { id: user.id, recordId: user.recordId, email: user.email, nombre: user.nombre },
     JWT_SECRET,
     { expiresIn: '12h' }
   );
