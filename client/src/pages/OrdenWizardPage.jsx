@@ -698,24 +698,24 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
             </h2>
 
             {/* Horarios */}
-            <div className="grid grid-cols-2 gap-3">
-              <div data-error={!!errors.horaInicio}>
+            <div className="flex flex-col gap-4">
+              <div className="w-full" data-error={!!errors.horaInicio}>
                 <label className="label-field">Fecha y Hora Inicio <span className="text-red-400">*</span></label>
                 <input
                   type="datetime-local"
                   value={form.horaInicio}
                   onChange={(e) => updateField('horaInicio', e.target.value)}
-                  className={`input-field ${errors.horaInicio ? 'border-red-400 ring-1 ring-red-200' : ''}`}
+                  className={`input-field w-full ${errors.horaInicio ? 'border-red-400 ring-1 ring-red-200' : ''}`}
                 />
                 <FieldError message={errors.horaInicio} />
               </div>
-              <div data-error={!!errors.horaTermino}>
+              <div className="w-full" data-error={!!errors.horaTermino}>
                 <label className="label-field">Fecha y Hora Término <span className="text-red-400">*</span></label>
                 <input
                   type="datetime-local"
                   value={form.horaTermino}
                   onChange={(e) => updateField('horaTermino', e.target.value)}
-                  className={`input-field ${errors.horaTermino ? 'border-red-400 ring-1 ring-red-200' : ''}`}
+                  className={`input-field w-full ${errors.horaTermino ? 'border-red-400 ring-1 ring-red-200' : ''}`}
                 />
                 <FieldError message={errors.horaTermino} />
               </div>
