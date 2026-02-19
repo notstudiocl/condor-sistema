@@ -778,3 +778,29 @@ app.listen(PORT, () => {
   console.log(`Condor API corriendo en http://localhost:${PORT}`);
   console.log(`Mock mode: ${process.env.MOCK_MODE === 'true' ? 'ACTIVADO' : 'desactivado'}`);
 });
+
+// Limpiar PDFs viejos (>7 días) — cada 24h
+async function limpiarPDFs() {
+  try {
+    const { readdir, stat, unlink } = await import('fs/promises');
+    const files = await readdir(uploadsDir);
+    const now = Date.now();
+    const maxAge = 7 * 24 * 60 * 60 * 1000;
+    let borrados = 0;
+    for (const file of files) {
+      if (!file.endsWith('.pdf')) continue;
+      const filePath = join(uploadsDir, file);
+      const fileStat = await stat(filePath);
+      if (now - fileStat.mtimeMs > maxAge) {
+        await unlink(filePath);
+        borrados++;
+      }
+    }
+    if (borrados > 0) console.log(`Limpieza: ${borrados} PDFs eliminados`);
+  } catch (e) {
+    console.error('Error limpiando PDFs:', e.message);
+  }
+}
+
+limpiarPDFs();
+setInterval(limpiarPDFs, 24 * 60 * 60 * 1000);
