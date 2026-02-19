@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader2, RotateCcw, FileText, X } from 'lucide-react';
 import { formatCLP, formatFechaAmigable, formatHoraAmigable, formatFechaHoraAmigable } from '../utils/helpers';
+import AppFooter from '../components/AppFooter';
 
 const API_URL = (import.meta.env.VITE_API_URL || 'https://clientes-condor-api.f8ihph.easypanel.host/api').replace(/\/api\/?$/, '');
 
@@ -294,6 +295,8 @@ export default function DetalleOrdenPage() {
             Volver al Inicio
           </button>
         </div>
+
+        <AppFooter />
       </div>
 
       {/* Photo Viewer Modal */}

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { User, KeyRound, Loader2 } from 'lucide-react';
 import { login } from '../utils/api';
+import AppFooter from '../components/AppFooter';
 
 const logoUrl = import.meta.env.BASE_URL + 'condor-logo.png';
 
@@ -118,11 +119,7 @@ export default function LoginPage({ onLogin }) {
         </button>
       </form>
 
-      <div className="mt-8 text-center">
-        <p className="text-gray-300 text-xs">
-          Condor 360 &copy; {new Date().getFullYear()}
-        </p>
-      </div>
+      <AppFooter />
     </div>
   );
 }

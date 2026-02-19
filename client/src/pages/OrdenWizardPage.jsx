@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
+import AppFooter from '../components/AppFooter';
 import {
   ChevronLeft,
   ChevronRight,
@@ -698,14 +699,14 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
             </h2>
 
             {/* Horarios */}
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 overflow-hidden">
               <div className="w-full" data-error={!!errors.horaInicio}>
                 <label className="label-field">Fecha y Hora Inicio <span className="text-red-400">*</span></label>
                 <input
                   type="datetime-local"
                   value={form.horaInicio}
                   onChange={(e) => updateField('horaInicio', e.target.value)}
-                  className={`input-field w-full ${errors.horaInicio ? 'border-red-400 ring-1 ring-red-200' : ''}`}
+                  className={`input-field w-full max-w-full box-border ${errors.horaInicio ? 'border-red-400 ring-1 ring-red-200' : ''}`}
                 />
                 <FieldError message={errors.horaInicio} />
               </div>
@@ -715,7 +716,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
                   type="datetime-local"
                   value={form.horaTermino}
                   onChange={(e) => updateField('horaTermino', e.target.value)}
-                  className={`input-field w-full ${errors.horaTermino ? 'border-red-400 ring-1 ring-red-200' : ''}`}
+                  className={`input-field w-full max-w-full box-border ${errors.horaTermino ? 'border-red-400 ring-1 ring-red-200' : ''}`}
                 />
                 <FieldError message={errors.horaTermino} />
               </div>
@@ -790,7 +791,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
 
                 {/* Custom service input */}
                 <div className="flex items-end gap-2 mt-3">
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <label className="text-xs text-gray-500 mb-1 block">Servicio no listado</label>
                     <input
                       type="text"
@@ -812,19 +813,13 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
                       className="w-full input-field !py-2.5 text-sm text-center"
                     />
                   </div>
-                  <div className="pb-1">
-                    <input
-                      type="checkbox"
-                      checked={false}
-                      className="w-6 h-6 accent-blue-600 cursor-pointer"
-                      onChange={(e) => {
-                        if (customNombre.trim()) {
-                          addCustomService();
-                        }
-                        e.target.checked = false;
-                      }}
-                    />
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { if (customNombre.trim()) addCustomService(); }}
+                    className="w-10 h-10 rounded-lg bg-green-500 hover:bg-green-600 active:bg-green-700 text-white flex items-center justify-center shrink-0 transition-colors"
+                  >
+                    <Check size={20} strokeWidth={3} />
+                  </button>
                 </div>
               </>
             )}
@@ -1152,6 +1147,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
             </button>
           </div>
         )}
+        <AppFooter />
       </div>
 
       {/* Sticky bottom navigation */}

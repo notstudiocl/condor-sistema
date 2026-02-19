@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, RefreshCw, Loader2, ClipboardList, ChevronRight, Search, X, WifiOff } from 'lucide-react';
 import { clearWizardSession } from './OrdenWizardPage';
 import { formatFechaAmigable } from '../utils/helpers';
+import AppFooter from '../components/AppFooter';
 
 const API_URL = (import.meta.env.VITE_API_URL || 'https://clientes-condor-api.f8ihph.easypanel.host/api').replace(/\/api\/?$/, '');
 
@@ -166,6 +167,8 @@ export default function DashboardPage({ pendingCount = 0 }) {
             ))}
           </div>
         )}
+
+        <AppFooter />
       </div>
     </div>
   );

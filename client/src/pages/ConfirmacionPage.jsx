@@ -1,5 +1,6 @@
 import { CheckCircle2, Clock, Plus, AlertTriangle, XCircle, RotateCcw, Home } from 'lucide-react';
 import { formatCLP, todayFormatted, formatFechaAmigable } from '../utils/helpers';
+import AppFooter from '../components/AppFooter';
 
 export default function ConfirmacionPage({ orden, onNuevaOrden, onReintentar, onInicio }) {
   const trabajosActivos = (orden.trabajos || []).filter((t) => t.cantidad > 0);
@@ -173,6 +174,8 @@ export default function ConfirmacionPage({ orden, onNuevaOrden, onReintentar, on
             Ir al Inicio
           </button>
         </div>
+
+        <AppFooter />
       </div>
     </div>
   );
