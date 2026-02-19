@@ -56,8 +56,6 @@ const initialFormData = () => ({
   clienteRecordId: null,
   personal: [],
   patenteVehiculo: '',
-  fotosAntes: [],
-  fotosDespues: [],
   firmaBase64: null,
 });
 
@@ -93,8 +91,8 @@ function loadSessionState() {
 
 function saveSessionState(form, step, idempotencyKey) {
   try {
-    // Exclude photos and firma (too large for sessionStorage)
-    const { fotosAntes, fotosDespues, firmaBase64, ...rest } = form;
+    // Exclude firma (too large for sessionStorage); photos are in refs, not in form
+    const { firmaBase64, ...rest } = form;
     sessionStorage.setItem(SESSION_KEY, JSON.stringify({ form: rest, step, idempotencyKey }));
   } catch { /* ignore quota errors */ }
 }
@@ -128,9 +126,17 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
   // Tecnicos
   const [tecnicos, setTecnicos] = useState([]);
 
-  // Photo refs
-  const fotosAntesRef = useRef(null);
-  const fotosDespuesRef = useRef(null);
+  // Photo file input refs
+  const fotosAntesInputRef = useRef(null);
+  const fotosDespuesInputRef = useRef(null);
+
+  // Photo files refs (persist across step changes)
+  const fotosAntesFilesRef = useRef([]);
+  const fotosDespuesFilesRef = useRef([]);
+
+  // Photo previews (ObjectURLs for UI)
+  const [fotosAntesPreview, setFotosAntesPreview] = useState([]);
+  const [fotosDespuesPreview, setFotosDespuesPreview] = useState([]);
 
   const { recordId: editRecordId } = editMode ? useParams() : { recordId: null };
   const [editLoading, setEditLoading] = useState(!!editMode);
@@ -219,8 +225,6 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
             requiereFactura: orden.requiereFactura || 'No',
             personal: [{ nombre: user.nombre, esEmpleado: true, recordId: user.recordId || null }],
             patenteVehiculo: orden.patente || '',
-            fotosAntes: [],
-            fotosDespues: [],
             firmaBase64: null,
             clienteRecordId: null,
           });
@@ -335,21 +339,28 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
     updateField('personal', form.personal.filter((_, i) => i !== idx));
   };
 
-  // Photos
+  // Photos — files live in refs, previews in state
   const handleFotoUpload = async (e, field) => {
     const files = Array.from(e.target.files || []);
-    const current = form[field];
-    const remaining = MAX_FOTOS - current.length;
+    const filesRef = field === 'fotosAntes' ? fotosAntesFilesRef : fotosDespuesFilesRef;
+    const setPreview = field === 'fotosAntes' ? setFotosAntesPreview : setFotosDespuesPreview;
+    const remaining = MAX_FOTOS - filesRef.current.length;
     if (remaining <= 0) return;
     const toProcess = files.slice(0, remaining);
-    const processed = await Promise.all(toProcess.map(processImage));
-    updateField(field, [...current, ...processed]);
+    const compressed = await Promise.all(toProcess.map(f => compressImage(f)));
+    filesRef.current = [...filesRef.current, ...compressed];
+    setPreview(filesRef.current.map(f => ({ name: f.name, url: URL.createObjectURL(f) })));
     if (errors[field]) setErrors((prev) => { const next = { ...prev }; delete next[field]; return next; });
     e.target.value = '';
   };
 
   const removeFoto = (field, idx) => {
-    updateField(field, form[field].filter((_, i) => i !== idx));
+    const filesRef = field === 'fotosAntes' ? fotosAntesFilesRef : fotosDespuesFilesRef;
+    const setPreview = field === 'fotosAntes' ? setFotosAntesPreview : setFotosDespuesPreview;
+    const preview = field === 'fotosAntes' ? fotosAntesPreview : fotosDespuesPreview;
+    if (preview[idx]?.url) URL.revokeObjectURL(preview[idx].url);
+    filesRef.current = filesRef.current.filter((_, i) => i !== idx);
+    setPreview(filesRef.current.map(f => ({ name: f.name, url: URL.createObjectURL(f) })));
   };
 
   // --- VALIDATION (only at submit) ---
@@ -376,9 +387,9 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
     // Step 2: Personal
     if (!form.patenteVehiculo.trim()) errs.patenteVehiculo = 'La patente es obligatoria';
 
-    // Step 3: Fotos
-    if (!form.fotosAntes || form.fotosAntes.length === 0) errs.fotosAntes = 'Debe adjuntar al menos 1 foto del antes';
-    if (!form.fotosDespues || form.fotosDespues.length === 0) errs.fotosDespues = 'Debe adjuntar al menos 1 foto del después';
+    // Step 3: Fotos (check refs, not form state)
+    if (fotosAntesFilesRef.current.length === 0) errs.fotosAntes = 'Debe adjuntar al menos 1 foto del antes';
+    if (fotosDespuesFilesRef.current.length === 0) errs.fotosDespues = 'Debe adjuntar al menos 1 foto del después';
 
     // Step 4: Firma
     if (!form.firmaBase64) errs.firmaBase64 = 'La firma es obligatoria para enviar la orden';
@@ -450,8 +461,8 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
       metodoPago: form.metodoPago,
       garantia: form.garantia,
       requiereFactura: form.requiereFactura,
-      fotosAntes: form.fotosAntes,
-      fotosDespues: form.fotosDespues,
+      fotosAntes: await Promise.all(fotosAntesFilesRef.current.map(processImage)),
+      fotosDespues: await Promise.all(fotosDespuesFilesRef.current.map(processImage)),
       firmaBase64: form.firmaBase64,
       clienteRecordId: form.clienteRecordId,
       empleadosRecordIds: form.personal.filter(p => p.esEmpleado && p.recordId).map(p => p.recordId),
@@ -486,7 +497,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
         if (result?.offline) {
           payload._offline = true;
         } else {
-          if (form.fotosAntes.length > 0 || form.fotosDespues.length > 0) {
+          if (fotosAntesFilesRef.current.length > 0 || fotosDespuesFilesRef.current.length > 0) {
             setSendingText('Subiendo fotos...');
           }
           setSendingText('Procesando...');
@@ -1010,12 +1021,12 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
                 <h3 className="font-heading font-semibold text-sm text-condor-900">
                   Fotos ANTES
                 </h3>
-                <span className="text-xs text-gray-400">{form.fotosAntes.length}/{MAX_FOTOS}</span>
+                <span className="text-xs text-gray-400">{fotosAntesPreview.length}/{MAX_FOTOS}</span>
               </div>
               <div className="grid grid-cols-3 gap-2">
-                {form.fotosAntes.map((foto, idx) => (
+                {fotosAntesPreview.map((foto, idx) => (
                   <div key={idx} className="relative aspect-square rounded-xl overflow-hidden bg-gray-100">
-                    <img src={foto} alt={`Antes ${idx + 1}`} className="w-full h-full object-cover" />
+                    <img src={foto.url} alt={`Antes ${idx + 1}`} className="w-full h-full object-cover" />
                     <button
                       type="button"
                       onClick={() => removeFoto('fotosAntes', idx)}
@@ -1025,10 +1036,10 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
                     </button>
                   </div>
                 ))}
-                {form.fotosAntes.length < MAX_FOTOS && (
+                {fotosAntesPreview.length < MAX_FOTOS && (
                   <button
                     type="button"
-                    onClick={() => fotosAntesRef.current?.click()}
+                    onClick={() => fotosAntesInputRef.current?.click()}
                     className="aspect-square rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 hover:border-condor-400 hover:bg-condor-50 transition-colors"
                   >
                     <Camera size={20} className="text-gray-400" />
@@ -1037,7 +1048,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
                 )}
               </div>
               <input
-                ref={fotosAntesRef}
+                ref={fotosAntesInputRef}
                 type="file"
                 accept="image/*"
                 multiple
@@ -1053,12 +1064,12 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
                 <h3 className="font-heading font-semibold text-sm text-condor-900">
                   Fotos DESPUÉS
                 </h3>
-                <span className="text-xs text-gray-400">{form.fotosDespues.length}/{MAX_FOTOS}</span>
+                <span className="text-xs text-gray-400">{fotosDespuesPreview.length}/{MAX_FOTOS}</span>
               </div>
               <div className="grid grid-cols-3 gap-2">
-                {form.fotosDespues.map((foto, idx) => (
+                {fotosDespuesPreview.map((foto, idx) => (
                   <div key={idx} className="relative aspect-square rounded-xl overflow-hidden bg-gray-100">
-                    <img src={foto} alt={`Después ${idx + 1}`} className="w-full h-full object-cover" />
+                    <img src={foto.url} alt={`Después ${idx + 1}`} className="w-full h-full object-cover" />
                     <button
                       type="button"
                       onClick={() => removeFoto('fotosDespues', idx)}
@@ -1068,10 +1079,10 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
                     </button>
                   </div>
                 ))}
-                {form.fotosDespues.length < MAX_FOTOS && (
+                {fotosDespuesPreview.length < MAX_FOTOS && (
                   <button
                     type="button"
-                    onClick={() => fotosDespuesRef.current?.click()}
+                    onClick={() => fotosDespuesInputRef.current?.click()}
                     className="aspect-square rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 hover:border-condor-400 hover:bg-condor-50 transition-colors"
                   >
                     <Camera size={20} className="text-gray-400" />
@@ -1080,7 +1091,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
                 )}
               </div>
               <input
-                ref={fotosDespuesRef}
+                ref={fotosDespuesInputRef}
                 type="file"
                 accept="image/*"
                 multiple
@@ -1099,7 +1110,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
               {editMode ? 'Editar y Reenviar' : 'Resumen y Firma'}
             </h2>
 
-            <Summary data={{ ...form, personal: form.personal.map((p) => p.nombre) }} onEdit={(s) => { setConfirmado(false); goToStep(s); }} />
+            <Summary data={{ ...form, personal: form.personal.map((p) => p.nombre), fotosAntes: fotosAntesPreview.map(p => p.url), fotosDespues: fotosDespuesPreview.map(p => p.url) }} onEdit={(s) => { setConfirmado(false); goToStep(s); }} />
 
             <div className={`bg-white rounded-2xl p-4 border shadow-sm ${errors.firmaBase64 ? 'border-red-400' : 'border-gray-200'}`} data-error={!!errors.firmaBase64}>
               <p className="text-sm text-gray-500 mb-1">Firma del Supervisor <span className="text-red-400">*</span></p>
