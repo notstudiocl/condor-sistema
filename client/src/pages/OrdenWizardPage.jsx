@@ -16,7 +16,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { METODOS_PAGO, GARANTIAS, WIZARD_STEPS, SERVICIOS_FALLBACK } from '../utils/constants';
-import { formatRut, formatCLP, parseCLP, todayISO, compressImage } from '../utils/helpers';
+import { formatRut, formatCLP, parseCLP, todayISO, compressImage, fileToBase64, base64ToFile } from '../utils/helpers';
 import { buscarClientes, getTecnicosPublic, crearOrden, actualizarOrden, getServicios } from '../utils/api';
 import SignaturePad from '../components/SignaturePad';
 import Summary from '../components/Summary';
@@ -99,6 +99,8 @@ function saveSessionState(form, step, idempotencyKey) {
 
 export function clearWizardSession() {
   sessionStorage.removeItem(SESSION_KEY);
+  sessionStorage.removeItem('fotosAntes');
+  sessionStorage.removeItem('fotosDespues');
 }
 
 export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
@@ -244,6 +246,29 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
     saveSessionState(form, step, idempotencyKey);
   }, [form, step, idempotencyKey, editMode]);
 
+  // Restore photos from sessionStorage on mount (survives page refresh)
+  useEffect(() => {
+    if (editMode) return;
+    try {
+      const savedAntes = sessionStorage.getItem('fotosAntes');
+      if (savedAntes) {
+        const meta = JSON.parse(savedAntes);
+        const files = meta.map(m => base64ToFile(m.data, m.name));
+        fotosAntesFilesRef.current = files;
+        setFotosAntesPreview(files.map(f => ({ name: f.name, url: URL.createObjectURL(f) })));
+      }
+    } catch (err) { console.warn('Error restaurando fotos antes:', err); }
+    try {
+      const savedDespues = sessionStorage.getItem('fotosDespues');
+      if (savedDespues) {
+        const meta = JSON.parse(savedDespues);
+        const files = meta.map(m => base64ToFile(m.data, m.name));
+        fotosDespuesFilesRef.current = files;
+        setFotosDespuesPreview(files.map(f => ({ name: f.name, url: URL.createObjectURL(f) })));
+      }
+    } catch (err) { console.warn('Error restaurando fotos después:', err); }
+  }, []);
+
   const updateField = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     // Clear error for this field when user types
@@ -339,7 +364,17 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
     updateField('personal', form.personal.filter((_, i) => i !== idx));
   };
 
-  // Photos — files live in refs, previews in state
+  // Photos — files live in refs, previews in state, persisted to sessionStorage as base64
+  const saveFotosToSession = async (field, filesArray) => {
+    try {
+      const base64Array = await Promise.all(filesArray.map(f => fileToBase64(f)));
+      const meta = filesArray.map((f, i) => ({ name: f.name, data: base64Array[i] }));
+      sessionStorage.setItem(field, JSON.stringify(meta));
+    } catch (err) {
+      console.warn('No se pudieron guardar fotos en sessionStorage:', err);
+    }
+  };
+
   const handleFotoUpload = async (e, field) => {
     const files = Array.from(e.target.files || []);
     const filesRef = field === 'fotosAntes' ? fotosAntesFilesRef : fotosDespuesFilesRef;
@@ -350,6 +385,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
     const compressed = await Promise.all(toProcess.map(f => compressImage(f)));
     filesRef.current = [...filesRef.current, ...compressed];
     setPreview(filesRef.current.map(f => ({ name: f.name, url: URL.createObjectURL(f) })));
+    saveFotosToSession(field, filesRef.current);
     if (errors[field]) setErrors((prev) => { const next = { ...prev }; delete next[field]; return next; });
     e.target.value = '';
   };
@@ -361,6 +397,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
     if (preview[idx]?.url) URL.revokeObjectURL(preview[idx].url);
     filesRef.current = filesRef.current.filter((_, i) => i !== idx);
     setPreview(filesRef.current.map(f => ({ name: f.name, url: URL.createObjectURL(f) })));
+    saveFotosToSession(field, filesRef.current);
   };
 
   // --- VALIDATION (only at submit) ---
