@@ -491,14 +491,20 @@ app.post('/api/ordenes', async (req, res) => {
         const timeout = setTimeout(() => controller.abort(), 30000);
 
         const webhookPayload = { ...data, airtableRecordId: ordenRecordId, clienteRecordId };
+        // Eliminar campos binarios/base64 que no deben ir al webhook
         delete webhookPayload.fotosAntes;
         delete webhookPayload.fotosDespues;
         delete webhookPayload.firmaBase64;
+        delete webhookPayload.firma;
+
+        const payloadJson = JSON.stringify(webhookPayload);
+        console.log('4a. Payload size:', payloadJson.length, 'bytes');
+        console.log('4a. Webhook URL:', webhookUrl);
 
         const webhookResponse = await fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(webhookPayload),
+          body: payloadJson,
           signal: controller.signal,
         });
         clearTimeout(timeout);
@@ -516,6 +522,8 @@ app.post('/api/ordenes', async (req, res) => {
         }
       } catch (err) {
         console.error('4. Webhook error:', err.message);
+        console.error('4b. Webhook error cause:', err.cause?.message || err.cause || 'sin causa');
+        console.error('4c. Webhook error code:', err.cause?.code || err.code || 'sin código');
         webhookError = err.message;
       }
     } else {
@@ -625,13 +633,20 @@ app.put('/api/ordenes/:recordId', async (req, res) => {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 30000);
         const webhookPayload = { ...data, airtableRecordId: recordId, accion: 'actualizar' };
+        // Eliminar campos binarios/base64 que no deben ir al webhook
         delete webhookPayload.fotosAntes;
         delete webhookPayload.fotosDespues;
         delete webhookPayload.firmaBase64;
+        delete webhookPayload.firma;
+
+        const payloadJson = JSON.stringify(webhookPayload);
+        console.log('PUT webhook - Payload size:', payloadJson.length, 'bytes');
+        console.log('PUT webhook - URL:', webhookUrl);
+
         const webhookResponse = await fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(webhookPayload),
+          body: payloadJson,
           signal: controller.signal,
         });
         clearTimeout(timeout);
@@ -647,6 +662,9 @@ app.put('/api/ordenes/:recordId', async (req, res) => {
           webhookError = webhookData?.message || `HTTP ${webhookResponse.status}`;
         }
       } catch (err) {
+        console.error('PUT webhook error:', err.message);
+        console.error('PUT webhook error cause:', err.cause?.message || err.cause || 'sin causa');
+        console.error('PUT webhook error code:', err.cause?.code || err.code || 'sin código');
         webhookError = err.message;
       }
     }
@@ -702,10 +720,15 @@ app.post('/api/ordenes/:recordId/reenviar', async (req, res) => {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 30000);
+
+        const payloadJson = JSON.stringify(webhookPayload);
+        console.log('Reenvío webhook - Payload size:', payloadJson.length, 'bytes');
+        console.log('Reenvío webhook - URL:', webhookUrl);
+
         const webhookResponse = await fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(webhookPayload),
+          body: payloadJson,
           signal: controller.signal,
         });
         clearTimeout(timeout);
@@ -715,6 +738,9 @@ app.post('/api/ordenes/:recordId/reenviar', async (req, res) => {
           webhookError = webhookData?.message || `HTTP ${webhookResponse.status}`;
         }
       } catch (err) {
+        console.error('Reenvío webhook error:', err.message);
+        console.error('Reenvío webhook error cause:', err.cause?.message || err.cause || 'sin causa');
+        console.error('Reenvío webhook error code:', err.cause?.code || err.code || 'sin código');
         webhookError = err.message;
       }
     } else {
