@@ -107,6 +107,20 @@ app.get('/api/diagnostico-webhook', async (req, res) => {
   res.json(resultados);
 });
 
+// Subscription status (public, no auth)
+app.get('/api/subscription-status', (_req, res) => {
+  const active = process.env.SUBSCRIPTION_ACTIVE !== 'false';
+  res.json({
+    success: true,
+    data: {
+      active,
+      message: active
+        ? null
+        : (process.env.SUBSCRIPTION_MESSAGE || 'Sistema temporalmente suspendido. Contacte a su administrador.'),
+    },
+  });
+});
+
 // Health check
 app.get('/api/health', (_req, res) => {
   res.json({
@@ -314,6 +328,14 @@ app.get('/api/ordenes', async (req, res) => {
 
 // POST ordenes — Airtable + webhook
 app.post('/api/ordenes', async (req, res) => {
+  if (process.env.SUBSCRIPTION_ACTIVE === 'false') {
+    return res.status(403).json({
+      success: false,
+      error: process.env.SUBSCRIPTION_MESSAGE || 'Sistema suspendido.',
+      code: 'SUBSCRIPTION_INACTIVE',
+    });
+  }
+
   try {
     const data = req.body;
     console.log('=== NUEVA ORDEN ===');
@@ -557,6 +579,14 @@ app.post('/api/ordenes', async (req, res) => {
 
 // PUT ordenes — actualizar y reenviar
 app.put('/api/ordenes/:recordId', async (req, res) => {
+  if (process.env.SUBSCRIPTION_ACTIVE === 'false') {
+    return res.status(403).json({
+      success: false,
+      error: process.env.SUBSCRIPTION_MESSAGE || 'Sistema suspendido.',
+      code: 'SUBSCRIPTION_INACTIVE',
+    });
+  }
+
   try {
     const { recordId } = req.params;
     const data = req.body;
@@ -689,6 +719,14 @@ app.put('/api/ordenes/:recordId', async (req, res) => {
 
 // POST reenviar orden al webhook
 app.post('/api/ordenes/:recordId/reenviar', async (req, res) => {
+  if (process.env.SUBSCRIPTION_ACTIVE === 'false') {
+    return res.status(403).json({
+      success: false,
+      error: process.env.SUBSCRIPTION_MESSAGE || 'Sistema suspendido.',
+      code: 'SUBSCRIPTION_INACTIVE',
+    });
+  }
+
   try {
     const { recordId } = req.params;
     console.log('=== REENVIANDO ORDEN ===', recordId);

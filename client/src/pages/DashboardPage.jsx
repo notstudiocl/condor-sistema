@@ -4,6 +4,7 @@ import { Plus, RefreshCw, Loader2, ClipboardList, ChevronRight, Search, X, WifiO
 import { clearWizardSession } from './OrdenWizardPage';
 import { formatFechaAmigable } from '../utils/helpers';
 import AppFooter from '../components/AppFooter';
+import SubscriptionBanner from '../components/SubscriptionBanner';
 
 const API_URL = (import.meta.env.VITE_API_URL || 'https://clientes-condor-api.f8ihph.easypanel.host/api').replace(/\/api\/?$/, '');
 
@@ -22,7 +23,7 @@ function EstadoBadge({ estado }) {
   );
 }
 
-export default function DashboardPage({ pendingCount = 0 }) {
+export default function DashboardPage({ pendingCount = 0, subscriptionActive = true, subscriptionMessage = null }) {
   const navigate = useNavigate();
   const [ordenes, setOrdenes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -75,6 +76,7 @@ export default function DashboardPage({ pendingCount = 0 }) {
 
   return (
     <div className="min-h-[calc(100vh-56px)] bg-gray-50">
+      <SubscriptionBanner message={subscriptionMessage} />
       <div className="max-w-lg mx-auto px-4 pt-6 pb-8">
         {/* Pending offline orders banner */}
         {pendingCount > 0 && (
@@ -88,8 +90,13 @@ export default function DashboardPage({ pendingCount = 0 }) {
 
         {/* Boton Nueva Orden */}
         <button
-          onClick={() => { clearWizardSession(); navigate('/orden/nueva'); }}
-          className="w-full bg-accent-600 hover:bg-accent-700 active:bg-accent-800 text-white font-bold rounded-2xl py-5 text-lg transition-colors flex items-center justify-center gap-2 shadow-lg mb-6"
+          onClick={() => subscriptionActive && (clearWizardSession(), navigate('/orden/nueva'))}
+          disabled={!subscriptionActive}
+          className={`w-full font-bold rounded-2xl py-5 text-lg transition-colors flex items-center justify-center gap-2 shadow-lg mb-6 ${
+            subscriptionActive
+              ? 'bg-accent-600 hover:bg-accent-700 active:bg-accent-800 text-white'
+              : 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-60'
+          }`}
         >
           <Plus size={24} strokeWidth={3} />
           Nueva Orden de Trabajo

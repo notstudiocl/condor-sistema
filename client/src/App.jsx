@@ -8,11 +8,26 @@ import ConfirmacionPage from './pages/ConfirmacionPage';
 import Header from './components/Header';
 import OfflineIndicator from './components/OfflineIndicator';
 import { getPendingOrders, updateOrderStatus } from './utils/offlineStorage';
+import { checkSubscription } from './utils/api';
 
 function AppRoutes({ user, onLogout }) {
   const navigate = useNavigate();
   const [ordenEnviada, setOrdenEnviada] = useState(null);
   const [pendingCount, setPendingCount] = useState(0);
+  const [subscriptionActive, setSubscriptionActive] = useState(true);
+  const [subscriptionMessage, setSubscriptionMessage] = useState(null);
+
+  // Check subscription status
+  useEffect(() => {
+    checkSubscription()
+      .then(res => {
+        if (res.success) {
+          setSubscriptionActive(res.data.active);
+          setSubscriptionMessage(res.data.message);
+        }
+      })
+      .catch(() => setSubscriptionActive(true));
+  }, []);
 
   // Check pending orders count
   const refreshPendingCount = useCallback(async () => {
@@ -83,19 +98,19 @@ function AppRoutes({ user, onLogout }) {
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
-      <Header user={user} onLogout={onLogout} />
+      <Header user={user} onLogout={onLogout} subscriptionActive={subscriptionActive} />
       <main className="flex-1">
         <Routes>
-          <Route path="/" element={<DashboardPage pendingCount={pendingCount} />} />
+          <Route path="/" element={<DashboardPage pendingCount={pendingCount} subscriptionActive={subscriptionActive} subscriptionMessage={subscriptionMessage} />} />
           <Route
             path="/orden/nueva"
-            element={<OrdenWizardPage user={user} onOrdenEnviada={handleOrdenEnviada} />}
+            element={<OrdenWizardPage user={user} onOrdenEnviada={handleOrdenEnviada} subscriptionActive={subscriptionActive} />}
           />
           <Route
             path="/orden/:recordId/editar"
-            element={<OrdenWizardPage user={user} onOrdenEnviada={handleOrdenEnviada} editMode />}
+            element={<OrdenWizardPage user={user} onOrdenEnviada={handleOrdenEnviada} editMode subscriptionActive={subscriptionActive} />}
           />
-          <Route path="/orden/:recordId" element={<DetalleOrdenPage />} />
+          <Route path="/orden/:recordId" element={<DetalleOrdenPage subscriptionActive={subscriptionActive} subscriptionMessage={subscriptionMessage} />} />
           <Route
             path="/confirmacion"
             element={
@@ -105,6 +120,7 @@ function AppRoutes({ user, onLogout }) {
                   onNuevaOrden={handleNuevaOrden}
                   onReintentar={handleReintentar}
                   onInicio={handleIrAlInicio}
+                  subscriptionActive={subscriptionActive}
                 />
               ) : (
                 <Navigate to="/" replace />

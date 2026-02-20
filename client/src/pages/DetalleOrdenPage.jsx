@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader2, RotateCcw, FileText, X } from 'lucide-react';
 import { formatCLP, formatFechaAmigable, formatHoraAmigable, formatFechaHoraAmigable } from '../utils/helpers';
 import AppFooter from '../components/AppFooter';
+import SubscriptionBanner from '../components/SubscriptionBanner';
 
 const API_URL = (import.meta.env.VITE_API_URL || 'https://clientes-condor-api.f8ihph.easypanel.host/api').replace(/\/api\/?$/, '');
 
@@ -63,7 +64,7 @@ function PhotoViewer({ fotos, initialIndex, onClose }) {
   );
 }
 
-export default function DetalleOrdenPage() {
+export default function DetalleOrdenPage({ subscriptionActive = true, subscriptionMessage = null }) {
   const { recordId } = useParams();
   const navigate = useNavigate();
   const [orden, setOrden] = useState(null);
@@ -137,6 +138,7 @@ export default function DetalleOrdenPage() {
 
   return (
     <div className="min-h-[calc(100vh-56px)] bg-gray-50">
+      {!subscriptionActive && <SubscriptionBanner message={subscriptionMessage} />}
       <div className="max-w-lg mx-auto px-4 pt-4 pb-8">
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
@@ -280,8 +282,12 @@ export default function DetalleOrdenPage() {
           {(orden.estado === 'Error' || orden.estado === 'Pendiente' || !hasPdf) && (
             <button
               onClick={handleReenviar}
-              disabled={reenviando}
-              className="w-full bg-accent-600 hover:bg-accent-700 active:bg-accent-800 disabled:opacity-50 text-white font-bold rounded-2xl py-4 text-sm transition-colors flex items-center justify-center gap-2"
+              disabled={reenviando || !subscriptionActive}
+              className={`w-full font-bold rounded-2xl py-4 text-sm transition-colors flex items-center justify-center gap-2 ${
+                !subscriptionActive
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-60'
+                  : 'bg-accent-600 hover:bg-accent-700 active:bg-accent-800 disabled:opacity-50 text-white'
+              }`}
             >
               {reenviando ? <Loader2 size={18} className="animate-spin" /> : <RotateCcw size={18} />}
               {reenviando ? 'Reenviando...' : 'Reintentar Envío'}

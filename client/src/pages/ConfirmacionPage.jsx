@@ -2,7 +2,7 @@ import { CheckCircle2, Clock, Plus, AlertTriangle, XCircle, RotateCcw, Home } fr
 import { formatCLP, todayFormatted, formatFechaAmigable } from '../utils/helpers';
 import { APP_VERSION } from '../version';
 
-export default function ConfirmacionPage({ orden, onNuevaOrden, onReintentar, onInicio }) {
+export default function ConfirmacionPage({ orden, onNuevaOrden, onReintentar, onInicio, subscriptionActive = true }) {
   const trabajosActivos = (orden.trabajos || []).filter((t) => t.cantidad > 0);
   const isOffline = orden._offline === true;
   const webhookError = orden._webhookError;
@@ -167,8 +167,13 @@ export default function ConfirmacionPage({ orden, onNuevaOrden, onReintentar, on
             </button>
           )}
           <button
-            onClick={onNuevaOrden}
-            className="w-full bg-white text-gray-900 font-semibold rounded-2xl py-4 text-sm transition-colors flex items-center justify-center gap-2 shadow-lg"
+            onClick={() => subscriptionActive && onNuevaOrden()}
+            disabled={!subscriptionActive}
+            className={`w-full font-semibold rounded-2xl py-4 text-sm transition-colors flex items-center justify-center gap-2 shadow-lg ${
+              subscriptionActive
+                ? 'bg-white text-gray-900'
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-60'
+            }`}
           >
             <Plus size={20} />
             Nueva Orden de Trabajo

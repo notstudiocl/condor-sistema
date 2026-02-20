@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 const logoUrl = import.meta.env.BASE_URL + 'condor-logo.png';
 
-export default function Header({ user, onLogout }) {
+export default function Header({ user, onLogout, subscriptionActive = true }) {
   const location = useLocation();
   const navigate = useNavigate();
   const isDashboard = location.pathname === '/' || location.pathname === '';
@@ -27,8 +27,13 @@ export default function Header({ user, onLogout }) {
       <div className="flex items-center gap-1.5 min-w-0">
         {isDashboard ? (
           <button
-            onClick={() => navigate('/orden/nueva')}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-accent-600 hover:bg-accent-700 transition-colors text-sm text-white font-medium shrink-0"
+            onClick={() => subscriptionActive && navigate('/orden/nueva')}
+            disabled={!subscriptionActive}
+            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors text-sm font-medium shrink-0 ${
+              subscriptionActive
+                ? 'bg-accent-600 hover:bg-accent-700 text-white'
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-60'
+            }`}
           >
             <Plus size={16} />
             <span className="hidden sm:inline">Nueva Orden</span>

@@ -89,6 +89,12 @@ export async function getServicios() {
   return res.json();
 }
 
+export async function checkSubscription() {
+  const baseUrl = (import.meta.env.VITE_API_URL || 'https://clientes-condor-api.f8ihph.easypanel.host/api').replace(/\/api\/?$/, '');
+  const res = await fetch(`${baseUrl}/api/subscription-status`);
+  return res.json();
+}
+
 export async function actualizarOrden(recordId, orden) {
   const baseUrl = (import.meta.env.VITE_API_URL || 'https://clientes-condor-api.f8ihph.easypanel.host/api').replace(/\/api\/?$/, '');
   const res = await fetch(`${baseUrl}/api/ordenes/${recordId}`, {

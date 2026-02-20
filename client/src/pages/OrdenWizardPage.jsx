@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import AppFooter from '../components/AppFooter';
 import {
   ChevronLeft,
@@ -103,7 +103,14 @@ export function clearWizardSession() {
   sessionStorage.removeItem('fotosDespues');
 }
 
-export default function OrdenWizardPage({ user, onOrdenEnviada, editMode }) {
+export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscriptionActive = true }) {
+  const wizardNavigate = useNavigate();
+
+  // Redirect to dashboard if subscription is inactive
+  useEffect(() => {
+    if (!subscriptionActive) wizardNavigate('/');
+  }, [subscriptionActive, wizardNavigate]);
+
   const saved = useRef(editMode ? null : loadSessionState());
   const [step, setStep] = useState(saved.current?.step || 0);
   const [form, setForm] = useState(() => saved.current?.form ? { ...initialFormData(), ...saved.current.form } : initialFormData());
