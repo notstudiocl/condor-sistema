@@ -251,13 +251,21 @@ app.get('/api/clientes/buscar', async (req, res) => {
     const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
     const records = await base('Clientes').select({ maxRecords: 100 }).firstPage();
 
-    const qLimpio = q.replace(/\./g, '').replace(/-/g, '').toLowerCase();
+    const qLimpio = q.toLowerCase().trim();
+    const qSinFormato = qLimpio.replace(/\./g, '').replace(/-/g, '');
 
     const resultados = records
       .filter(r => {
-        const rut = (r.get('RUT') || '').replace(/\./g, '').replace(/-/g, '').toLowerCase();
-        const nombre = (r.get('Nombre') || '').toLowerCase();
-        return rut.includes(qLimpio) || nombre.includes(qLimpio);
+        const campos = [
+          (r.get('RUT') || '').replace(/\./g, '').replace(/-/g, '').toLowerCase(),
+          (r.get('Nombre') || '').toLowerCase(),
+          (r.get('Empresa') || '').toLowerCase(),
+          (r.get('Email') || '').toLowerCase(),
+          (r.get('Telefono') || '').replace(/\s/g, '').toLowerCase(),
+          (r.get('Direccion') || '').toLowerCase(),
+          (r.get('Comuna') || '').toLowerCase(),
+        ];
+        return campos.some(campo => campo.includes(qLimpio) || campo.includes(qSinFormato));
       })
       .map(r => ({
         recordId: r.id,

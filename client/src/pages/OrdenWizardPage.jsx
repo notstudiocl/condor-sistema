@@ -20,6 +20,7 @@ import { formatRut, formatCLP, parseCLP, todayISO, compressImage, fileToBase64, 
 import { buscarClientes, getTecnicosPublic, crearOrden, actualizarOrden, getServicios } from '../utils/api';
 import SignaturePad from '../components/SignaturePad';
 import Summary from '../components/Summary';
+import ClienteSearch from '../components/ClienteSearch';
 
 const MAX_FOTOS = 6;
 
@@ -131,6 +132,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const debounceRef = useRef(null);
+  const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
 
   // Tecnicos
   const [tecnicos, setTecnicos] = useState([]);
@@ -321,6 +323,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
     }));
     setSearchResults([]);
     setErrors({});
+    setClienteSeleccionado(cliente);
   };
 
   // Trabajos
@@ -634,6 +637,37 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
             <h2 className="font-heading font-bold text-xl text-condor-900">
               Datos del Cliente
             </h2>
+
+            {/* General client search */}
+            <ClienteSearch
+              clienteSeleccionado={clienteSeleccionado}
+              onSelectCliente={(cliente) => {
+                selectCliente(cliente);
+                setClienteSeleccionado(cliente);
+              }}
+              onClearCliente={() => {
+                setForm((prev) => ({
+                  ...prev,
+                  clienteRut: '',
+                  clienteEmpresa: '',
+                  supervisor: '',
+                  clienteEmail: '',
+                  clienteTelefono: '',
+                  direccion: '',
+                  comuna: '',
+                  clienteRecordId: null,
+                }));
+                setClienteSeleccionado(null);
+                setErrors({});
+              }}
+            />
+
+            {/* Separator */}
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px bg-gray-200" />
+              <span className="text-xs text-gray-400 whitespace-nowrap">o complete los datos manualmente</span>
+              <div className="flex-1 h-px bg-gray-200" />
+            </div>
 
             {/* RUT unified search */}
             <div className="relative" data-error={!!errors.clienteRut}>
