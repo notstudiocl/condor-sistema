@@ -184,11 +184,11 @@ En el catch del POST `/api/ordenes`, se usa `req.body?.idempotencyKey` (optional
 - NO hay personas externas (eliminado)
 
 ### Evidencia fotográfica (Paso 4)
-- Fotos ANTES (upload múltiple, **max 6**, compresión JPEG 70% max 1920px) **obligatorio al menos 1**
-- Fotos DESPUÉS (upload múltiple, **max 6**, compresión JPEG 70% max 1920px) **obligatorio al menos 1**
+- Fotos ANTES (upload múltiple, **max 6**, compresión JPEG 55% max 1280x1280px) **obligatorio al menos 1**
+- Fotos DESPUÉS (upload múltiple, **max 6**, compresión JPEG 55% max 1280x1280px) **obligatorio al menos 1**
 - Fotos persisten entre pasos del wizard (via `useRef` para File objects)
 - Fotos persisten al recargar página (via `sessionStorage` con base64)
-- Compresión vía `compressImage()`: canvas → toBlob JPEG quality 0.7, max width 1920px
+- Compresión vía `compressImage()`: canvas → toBlob JPEG quality 0.55, max 1280x1280px
 
 ### Firma y cierre (Paso 5)
 - Firma digital del supervisor (canvas touch, guardada como attachment en Airtable campo "Firma") **obligatorio**
@@ -504,7 +504,7 @@ Al crear una orden se envía POST al webhook (sin fotos/firma base64 para no hac
 | `parseCLP(str)` | Parsea CLP a número: $350.000 → 350000 |
 | `todayISO()` | Fecha hoy YYYY-MM-DD |
 | `todayFormatted()` | Fecha hoy DD/MM/YYYY |
-| `compressImage(file, maxWidth=1920, quality=0.7)` | Comprime imagen a JPEG vía canvas |
+| `compressImage(file, maxWidth=1280, quality=0.55, maxHeight=1280)` | Comprime imagen a JPEG vía canvas |
 | `fileToBase64(file)` | File/Blob → data URL base64 |
 | `base64ToFile(base64, filename)` | Data URL base64 → File |
 | `formatFechaAmigable(isoString)` | ISO → DD/MM/YYYY (timezone Chile `America/Santiago`) |
@@ -536,7 +536,7 @@ Al crear una orden se envía POST al webhook (sin fotos/firma base64 para no hac
 10. **Detalle de orden**: Vista completa con fotos (visor fullscreen), firma, PDF, botón reenviar, fechas/horas en formato Chile.
 11. **Edición de órdenes**: Carga datos existentes en el wizard, permite editar y reenviar.
 12. **Anti-duplicados**: Idempotency key + ref guard + in-memory Set. El usuario nunca ve duplicados.
-13. **Fotos obligatorias**: Mínimo 1 antes y 1 después, máximo 6 cada uno. Compresión JPEG 70% max 1920px.
+13. **Fotos obligatorias**: Mínimo 1 antes y 1 después, máximo 6 cada uno. Compresión JPEG 55% max 1280x1280px.
 14. **Fotos persistentes**: Sobreviven navegación entre pasos (refs) y recarga de página (sessionStorage base64).
 15. **Solo técnicos de Airtable**: No hay opción de "persona externa" en el personal.
 16. **Confirmación clara**: 4 checks visuales + botón Ver PDF + número de orden destacado.

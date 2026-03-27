@@ -60,14 +60,9 @@ const initialFormData = () => ({
   firmaBase64: null,
 });
 
-// Compress image and convert to JPEG base64
+// Convert already-compressed image file to base64
 async function processImage(file) {
-  const compressed = await compressImage(file);
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (e) => resolve(e.target.result);
-    reader.readAsDataURL(compressed);
-  });
+  return fileToBase64(file);
 }
 
 function FieldError({ message }) {

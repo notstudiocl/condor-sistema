@@ -51,11 +51,12 @@ export function todayFormatted() {
 /**
  * Comprime una imagen File/Blob a JPEG con calidad reducida y tamaño máximo.
  * @param {File} file - Archivo de imagen original
- * @param {number} maxWidth - Ancho máximo en px (default 1920)
- * @param {number} quality - Calidad JPEG 0-1 (default 0.7)
+ * @param {number} maxWidth - Ancho máximo en px (default 1280)
+ * @param {number} quality - Calidad JPEG 0-1 (default 0.55)
+ * @param {number} maxHeight - Alto máximo en px (default 1280)
  * @returns {Promise<File>} - Archivo comprimido
  */
-export function compressImage(file, maxWidth = 1920, quality = 0.7) {
+export function compressImage(file, maxWidth = 1280, quality = 0.55, maxHeight = 1280) {
   return new Promise((resolve, reject) => {
     if (!file.type.startsWith('image/')) {
       return resolve(file);
@@ -69,9 +70,10 @@ export function compressImage(file, maxWidth = 1920, quality = 0.7) {
 
       let { width, height } = img;
 
-      if (width > maxWidth) {
-        height = Math.round((height * maxWidth) / width);
-        width = maxWidth;
+      if (width > maxWidth || height > maxHeight) {
+        const ratio = Math.min(maxWidth / width, maxHeight / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
       }
 
       const canvas = document.createElement('canvas');
