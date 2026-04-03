@@ -15,11 +15,20 @@ const mockClientes = [
   { rut: '9.876.543-2', nombre: 'Restaurant El Buen Sabor', email: 'contacto@buensabor.cl', telefono: '+56 2 8765 4321', direccion: 'Calle Comercio 456, Santiago', comuna: 'Santiago', tipo: 'Empresa', empresa: 'Restaurant El Buen Sabor' },
 ];
 
-// Airtable connection (only when not in mock mode)
-let base = null;
-if (!MOCK_MODE) {
+// Fresh Airtable base per call (avoids stale connections)
+function getBase() {
   Airtable.configure({ apiKey: process.env.AIRTABLE_API_KEY });
-  base = Airtable.base(process.env.AIRTABLE_BASE_ID);
+  return Airtable.base(process.env.AIRTABLE_BASE_ID);
+}
+
+// Timeout wrapper for Airtable calls
+function withTimeout(promise, ms = 10000, label = 'Airtable') {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`${label}: timeout después de ${ms}ms`)), ms)
+    ),
+  ]);
 }
 
 // --- Empleados ---
@@ -44,15 +53,20 @@ export async function findTecnicoByCredencial(input) {
   const sanitizedInput = normalizedInput.replace(/'/g, "\\'");
   const sanitizedRut = normalizedRut.replace(/'/g, "\\'");
 
-  const records = await base('Empleados')
-    .select({
-      filterByFormula: `OR(
-        LOWER({Usuario}) = '${sanitizedInput}',
-        SUBSTITUTE(SUBSTITUTE(LOWER({RUT}), ".", ""), "-", "") = '${sanitizedRut}'
-      )`,
-      maxRecords: 1,
-    })
-    .firstPage();
+  const base = getBase();
+  const records = await withTimeout(
+    base('Empleados')
+      .select({
+        filterByFormula: `OR(
+          LOWER({Usuario}) = '${sanitizedInput}',
+          SUBSTITUTE(SUBSTITUTE(LOWER({RUT}), ".", ""), "-", "") = '${sanitizedRut}'
+        )`,
+        maxRecords: 1,
+      })
+      .firstPage(),
+    10000,
+    'findTecnicoByCredencial'
+  );
   if (records.length === 0) return null;
   const r = records[0];
   return {
@@ -71,9 +85,14 @@ export async function getTecnicos() {
   if (MOCK_MODE) {
     return mockTecnicos.map(({ pin, ...rest }) => rest);
   }
-  const records = await base('Empleados')
-    .select({ filterByFormula: `{Activo} = TRUE()` })
-    .firstPage();
+  const base = getBase();
+  const records = await withTimeout(
+    base('Empleados')
+      .select({ filterByFormula: `{Activo} = TRUE()` })
+      .firstPage(),
+    10000,
+    'getTecnicos'
+  );
   return records.map((r) => ({
     id: r.get('ID') || r.id,
     nombre: r.get('Nombre'),
@@ -95,7 +114,12 @@ export async function buscarClientes(query) {
   }
 
   // Fetch all clients and filter locally (few records, avoids Airtable format issues)
-  const records = await base('Clientes').select({ fields: ['RUT', 'Nombre', 'Email', 'Telefono', 'Direccion', 'Comuna', 'Tipo', 'Empresa'] }).firstPage();
+  const base = getBase();
+  const records = await withTimeout(
+    base('Clientes').select({ fields: ['RUT', 'Nombre', 'Email', 'Telefono', 'Direccion', 'Comuna', 'Tipo', 'Empresa'] }).firstPage(),
+    10000,
+    'buscarClientes'
+  );
   return records
     .filter((r) => {
       const rut = (r.get('RUT') || '').replace(/[.\-]/g, '').toLowerCase();

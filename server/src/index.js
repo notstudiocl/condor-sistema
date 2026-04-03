@@ -19,6 +19,22 @@ const PORT = process.env.PORT || 3001;
 app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
 app.use(express.json({ limit: '50mb' }));
 
+// Global request timeout (30s safety net)
+app.use((req, res, next) => {
+  const timeout = setTimeout(() => {
+    if (!res.headersSent) {
+      console.error(`[TIMEOUT] Request timed out: ${req.method} ${req.originalUrl} (30s)`);
+      res.status(504).json({
+        success: false,
+        error: 'El servidor tardó demasiado en responder. Intente nuevamente.',
+      });
+    }
+  }, 30000);
+  res.on('finish', () => clearTimeout(timeout));
+  res.on('close', () => clearTimeout(timeout));
+  next();
+});
+
 const uploadsDir = join(__dirname, '..', 'uploads');
 if (!existsSync(uploadsDir)) mkdirSync(uploadsDir, { recursive: true });
 app.use('/uploads', express.static(uploadsDir));
