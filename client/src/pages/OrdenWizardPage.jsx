@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { METODOS_PAGO, GARANTIAS, WIZARD_STEPS, SERVICIOS_FALLBACK } from '../utils/constants';
 import { formatRut, formatCLP, parseCLP, todayISO, compressImage, fileToBase64, base64ToFile } from '../utils/helpers';
-import { buscarClientes, getTecnicosPublic, crearOrden, actualizarOrden, getServicios } from '../utils/api';
+import { buscarClientes, getTecnicosPublic, crearOrden, actualizarOrden, getServicios, getOrdenById } from '../utils/api';
 import SignaturePad from '../components/SignaturePad';
 import Summary from '../components/Summary';
 import ClienteSearch from '../components/ClienteSearch';
@@ -195,10 +195,8 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
     if (!editMode || !editRecordId) return;
     const loadOrden = async () => {
       try {
-        const baseUrl = (import.meta.env.VITE_API_URL || 'https://clientes-condor-api.f8ihph.easypanel.host/api').replace(/\/api\/?$/, '');
-        const res = await fetch(`${baseUrl}/api/ordenes`);
-        const data = await res.json();
-        const orden = (data.data || []).find(o => o.recordId === editRecordId);
+        const data = await getOrdenById(editRecordId);
+        const orden = data.data || null;
         if (orden) {
           let trabajos = [];
           try { trabajos = typeof orden.trabajos === 'string' ? JSON.parse(orden.trabajos) : orden.trabajos || []; } catch { trabajos = []; }

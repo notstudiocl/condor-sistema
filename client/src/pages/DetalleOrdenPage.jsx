@@ -2,10 +2,9 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader2, RotateCcw, FileText, X } from 'lucide-react';
 import { formatCLP, formatFechaAmigable, formatHoraAmigable, formatFechaHoraAmigable } from '../utils/helpers';
+import { getOrdenById, reenviarOrden } from '../utils/api';
 import AppFooter from '../components/AppFooter';
 import SubscriptionBanner from '../components/SubscriptionBanner';
-
-const API_URL = (import.meta.env.VITE_API_URL || 'https://clientes-condor-api.f8ihph.easypanel.host/api').replace(/\/api\/?$/, '');
 
 function EstadoBadge({ estado }) {
   const styles = {
@@ -77,10 +76,8 @@ export default function DetalleOrdenPage({ subscriptionActive = true, subscripti
   useEffect(() => {
     const cargar = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/ordenes`);
-        const data = await res.json();
-        const found = (data.data || []).find(o => o.recordId === recordId);
-        setOrden(found || null);
+        const data = await getOrdenById(recordId);
+        setOrden(data.data || null);
       } catch {
         setOrden(null);
       } finally {
@@ -95,8 +92,7 @@ export default function DetalleOrdenPage({ subscriptionActive = true, subscripti
     setReenviando(true);
     setReenvioMsg(null);
     try {
-      const res = await fetch(`${API_URL}/api/ordenes/${recordId}/reenviar`, { method: 'POST' });
-      const result = await res.json();
+      const result = await reenviarOrden(recordId);
       if (result?.data?.webhookOk) {
         setReenvioMsg({ ok: true, text: 'Orden reenviada correctamente' });
       } else {

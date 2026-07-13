@@ -1,9 +1,14 @@
-import { getPendingOrders, updateOrderStatus, deleteSentOrders, getPendingCount } from './offlineStorage';
+import { getPendingOrders, updateOrderStatus, deleteSentOrders, getPendingCount, resetStuckSendingOrders } from './offlineStorage';
+import { API_URL, notifyAuthError } from './api';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://clientes-condor-api.f8ihph.easypanel.host/api';
-const MAX_RETRIES = 5;
+export const MAX_RETRIES = 5;
 
-let statusCallback = null;
+// Único mecanismo de sincronización de la app (App.jsx NO debe tener su propio
+// listener 'online' ni su propio POST /api/ordenes — ver App.jsx). Múltiples
+// suscriptores (OfflineIndicator, App.jsx, el panel de "Pendientes") escuchan acá
+// en vez de que cada uno registre sus propios listeners de red.
+export const syncEvents = new EventTarget();
+
 let syncing = false;
 
 function getToken() {
@@ -11,7 +16,7 @@ function getToken() {
 }
 
 function notifyStatus(status, detail = {}) {
-  if (statusCallback) statusCallback({ status, ...detail });
+  syncEvents.dispatchEvent(new CustomEvent('status', { detail: { status, ...detail } }));
 }
 
 async function sleep(ms) {
@@ -22,14 +27,25 @@ export async function syncPendingOrders() {
   if (syncing || !navigator.onLine) return;
   syncing = true;
 
-  const pending = await getPendingOrders();
-  if (pending.length === 0) { syncing = false; return; }
+  // Zombies: 'sending' colgado hace >2 min (proceso murió a mitad de un envío) vuelve a 'pending'.
+  await resetStuckSendingOrders();
 
-  notifyStatus('syncing', { count: pending.length });
+  const pending = await getPendingOrders();
+  // 'auth-required' se salta en el ciclo automático — no consume reintentos ni red
+  // hasta un re-login exitoso (resumeAfterReauth) o un reintento manual del técnico.
+  const attemptable = pending.filter((o) => o.status !== 'auth-required');
+
+  if (attemptable.length === 0) {
+    syncing = false;
+    if (pending.length > 0) notifyStatus('auth-required', { count: pending.length });
+    return;
+  }
+
+  notifyStatus('syncing', { count: attemptable.length });
   let sentCount = 0;
 
-  for (const order of pending) {
-    if (order.retries >= MAX_RETRIES) continue;
+  for (const order of attemptable) {
+    if ((order.retries || 0) >= MAX_RETRIES) continue;
 
     try {
       await updateOrderStatus(order.id, 'sending');
@@ -43,28 +59,50 @@ export async function syncPendingOrders() {
         body: JSON.stringify(order.data),
       });
 
-      if (res.ok) {
+      let body = null;
+      try {
+        body = await res.json();
+      } catch {
+        // sin body JSON — se trata como fallo genérico abajo
+      }
+
+      if (res.status === 401 || res.status === 403) {
+        // Nunca consume reintentos (corrección de resiliencia #2). El kill switch de
+        // suscripción también cae acá (también 403) pero no dispara el banner de
+        // "vuelve a iniciar sesión" — ya tiene su propio aviso.
+        await updateOrderStatus(order.id, 'auth-required');
+        if (body?.code !== 'SUBSCRIPTION_INACTIVE') {
+          notifyAuthError({ status: res.status, source: 'sync' });
+        }
+        continue;
+      }
+
+      // Exige res.ok Y body.success — antes solo miraba res.ok, lo que podía marcar
+      // 'sent' (y borrar de IndexedDB) una respuesta 200 con success:false.
+      if (res.ok && body?.success) {
         await updateOrderStatus(order.id, 'sent');
         sentCount++;
       } else {
-        await updateOrderStatus(order.id, 'error', order.retries + 1);
-        await sleep(Math.pow(2, order.retries) * 1000);
+        await updateOrderStatus(order.id, 'error', (order.retries || 0) + 1);
+        await sleep(Math.pow(2, order.retries || 0) * 1000);
       }
     } catch {
-      await updateOrderStatus(order.id, 'error', order.retries + 1);
-      await sleep(Math.pow(2, order.retries) * 1000);
+      // Fallo de red real (fetch nunca llegó al servidor) — sí cuenta contra MAX_RETRIES.
+      await updateOrderStatus(order.id, 'error', (order.retries || 0) + 1);
+      await sleep(Math.pow(2, order.retries || 0) * 1000);
     }
   }
 
   await deleteSentOrders();
   syncing = false;
 
+  const remaining = await getPendingCount();
   if (sentCount > 0) {
     notifyStatus('synced', { count: sentCount });
+  } else if (remaining > 0) {
+    notifyStatus('offline', { count: remaining });
   } else {
-    const remaining = await getPendingCount();
-    if (remaining > 0) notifyStatus('offline', { count: remaining });
-    else notifyStatus('online');
+    notifyStatus('online');
   }
 }
 
@@ -72,21 +110,30 @@ export function getConnectionStatus() {
   return navigator.onLine ? 'online' : 'offline';
 }
 
-export function initSyncManager(callback) {
-  statusCallback = callback;
-
+// Se llama una sola vez (OfflineIndicator, montado en la raíz de App) — registra los
+// ÚNICOS listeners 'online'/'offline' de toda la app.
+export function initSyncManager() {
   window.addEventListener('online', () => {
     notifyStatus('online');
     syncPendingOrders();
   });
 
   window.addEventListener('offline', async () => {
-    const count = await getPendingCount();
-    notifyStatus('offline', { count });
+    notifyStatus('offline', { count: await getPendingCount() });
   });
 
-  // Sync on init if there are pending orders
   if (navigator.onLine) {
     syncPendingOrders();
   }
+}
+
+// Tras un re-login exitoso: libera las órdenes bloqueadas por 401/403 (vuelven a
+// 'pending') y dispara un sync inmediato. App.jsx llama esto al recibir el evento
+// global de auth-error seguido de un login exitoso.
+export async function resumeAfterReauth() {
+  const pending = await getPendingOrders();
+  await Promise.all(
+    pending.filter((o) => o.status === 'auth-required').map((o) => updateOrderStatus(o.id, 'pending'))
+  );
+  if (navigator.onLine) syncPendingOrders();
 }

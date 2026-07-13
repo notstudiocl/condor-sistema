@@ -4,7 +4,7 @@ import { APP_VERSION } from '../version';
 
 const logoUrl = import.meta.env.BASE_URL + 'condor-logo.png';
 
-export default function LoginPage({ onLogin }) {
+export default function LoginPage({ onLogin, sessionExpiredMessage }) {
   const [email, setEmail] = useState('');
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
@@ -54,6 +54,15 @@ export default function LoginPage({ onLogin }) {
           className="h-20 object-contain mb-3"
         />
         <p className="text-blue-600 text-sm font-medium tracking-widest uppercase mb-10">Sistema de Órdenes de Trabajo</p>
+
+        {sessionExpiredMessage && (
+          <div className="w-full flex items-center gap-2 p-3 mb-5 bg-amber-50 border border-amber-200 rounded-xl">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-amber-700 text-xs font-medium">{sessionExpiredMessage}</span>
+          </div>
+        )}
 
         {/* Formulario */}
         <form onSubmit={handleSubmit} className="w-full space-y-5">

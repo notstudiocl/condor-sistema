@@ -1,34 +1,31 @@
 import { Router } from 'express';
-import Airtable from 'airtable';
-import { authMiddleware } from '../middleware/auth.js';
-import { buscarClientes } from '../services/airtable.js';
+import * as clientesRepo from '../repositories/clientesRepo.js';
 
 const router = Router();
 
-// Diagnostic endpoint — NO auth, raw Airtable response
-router.get('/test', async (_req, res) => {
+// Búsqueda de clientes por RUT/nombre/empresa/email/teléfono/comuna.
+// Pública, sin auth — se usa en el paso 1 del wizard antes de cualquier login
+// (implementación única: antes había una versión pública en index.js y otra
+// autenticada aquí mismo, duplicadas y con la pública ganando siempre).
+router.get('/buscar', async (req, res, next) => {
   try {
-    if (process.env.MOCK_MODE === 'true') {
-      return res.json({ success: true, mock: true, message: 'Mock mode active, no Airtable call' });
-    }
-    Airtable.configure({ apiKey: process.env.AIRTABLE_API_KEY });
-    const base = Airtable.base(process.env.AIRTABLE_BASE_ID);
-    const records = await base('Clientes').select({ maxRecords: 10 }).firstPage();
-    const data = records.map((r) => ({ id: r.id, fields: r.fields }));
-    res.json({ success: true, count: data.length, data });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message, stack: err.stack });
-  }
-});
+    const q = (req.query.q || '').trim();
+    if (q.length < 2) return res.json({ success: true, data: [] });
 
-router.get('/buscar', authMiddleware, async (req, res, next) => {
-  try {
-    const query = req.query.q || '';
-    if (query.length < 2) {
-      return res.json({ success: true, data: [] });
-    }
-    const clientes = await buscarClientes(query);
-    res.json({ success: true, data: clientes });
+    const clientes = await clientesRepo.buscarClientes(q);
+    const data = clientes.map((c) => ({
+      recordId: String(c.id),
+      rut: c.rut || '',
+      nombre: c.nombre || '',
+      tipo: c.tipo || '',
+      empresa: c.empresa || '',
+      email: c.email || '',
+      telefono: c.telefono || '',
+      direccion: c.direccion || '',
+      comuna: c.comuna || '',
+    }));
+
+    res.json({ success: true, data });
   } catch (err) {
     next(err);
   }

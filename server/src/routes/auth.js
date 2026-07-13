@@ -1,10 +1,11 @@
 import { Router } from 'express';
-import { findTecnicoByCredencial } from '../services/airtable.js';
+import * as empleadosRepo from '../repositories/empleadosRepo.js';
 import { generateToken } from '../middleware/auth.js';
+import { loginRateLimiter } from '../middleware/rateLimiter.js';
 
 const router = Router();
 
-router.post('/login', async (req, res, next) => {
+router.post('/login', loginRateLimiter, async (req, res, next) => {
   const startTime = Date.now();
   console.log('[LOGIN] Intento de login recibido:', {
     ip: req.ip,
@@ -14,8 +15,8 @@ router.post('/login', async (req, res, next) => {
   });
 
   try {
-    const { email, usuario, pin } = req.body;
-    const rawInput = email || usuario || '';
+    const { email, usuario, pin } = req.body || {};
+    const rawInput = (email || usuario || '').trim();
 
     if (!rawInput || !pin) {
       console.log('[LOGIN] Faltan credenciales');
@@ -26,37 +27,40 @@ router.post('/login', async (req, res, next) => {
     }
 
     console.log('[LOGIN] Buscando técnico para:', rawInput);
-    const tecnico = await findTecnicoByCredencial(rawInput);
-    console.log('[LOGIN] Resultado búsqueda:', tecnico ? `encontrado: ${tecnico.nombre}` : 'no encontrado', `(${Date.now() - startTime}ms)`);
+    const empleado = await empleadosRepo.findByCredencial(rawInput);
+    console.log('[LOGIN] Resultado búsqueda:', empleado ? `encontrado: ${empleado.nombre}` : 'no encontrado', `(${Date.now() - startTime}ms)`);
 
-    if (!tecnico) {
+    if (!empleado) {
       return res.status(401).json({
         success: false,
         error: 'Credenciales incorrectas',
       });
     }
 
-    if (tecnico.activo !== true) {
-      console.log('[LOGIN] Usuario inactivo:', tecnico.nombre);
+    if (empleado.activo !== true) {
+      console.log('[LOGIN] Usuario inactivo:', empleado.nombre);
       return res.status(403).json({
         success: false,
         error: 'Usuario inactivo. Contacte al administrador.',
       });
     }
 
-    if (String(tecnico.pin) !== String(pin)) {
-      console.log('[LOGIN] PIN incorrecto para:', tecnico.nombre);
+    const pinOk = await empleadosRepo.verificarPin(empleado, pin);
+    if (!pinOk) {
+      console.log('[LOGIN] PIN incorrecto para:', empleado.nombre);
       return res.status(401).json({
         success: false,
         error: 'Credenciales incorrectas',
       });
     }
 
+    // recordId = id numérico de Postgres (ya no rec* de Airtable) — se usa como
+    // linked record de "Responsable Orden" y para verificar empleado.activo en cada request.
     const user = {
-      id: tecnico.id,
-      recordId: tecnico.recordId || null,
-      nombre: tecnico.nombre,
-      email: tecnico.usuario,
+      id: empleado.id,
+      recordId: empleado.id,
+      nombre: empleado.nombre,
+      email: empleado.usuario,
     };
 
     const token = generateToken(user);

@@ -3,10 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, RefreshCw, Loader2, ClipboardList, ChevronRight, Search, X, WifiOff } from 'lucide-react';
 import { clearWizardSession } from './OrdenWizardPage';
 import { formatFechaAmigable } from '../utils/helpers';
+import { getOrdenes } from '../utils/api';
 import AppFooter from '../components/AppFooter';
 import SubscriptionBanner from '../components/SubscriptionBanner';
-
-const API_URL = (import.meta.env.VITE_API_URL || 'https://clientes-condor-api.f8ihph.easypanel.host/api').replace(/\/api\/?$/, '');
 
 function EstadoBadge({ estado }) {
   const styles = {
@@ -34,8 +33,7 @@ export default function DashboardPage({ pendingCount = 0, subscriptionActive = t
   const cargarOrdenes = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/ordenes`);
-      const data = await res.json();
+      const data = await getOrdenes();
       setOrdenes(data.data || []);
     } catch {
       setOrdenes([]);

@@ -7,8 +7,9 @@ import DetalleOrdenPage from './pages/DetalleOrdenPage';
 import ConfirmacionPage from './pages/ConfirmacionPage';
 import Header from './components/Header';
 import OfflineIndicator from './components/OfflineIndicator';
-import { getPendingOrders, updateOrderStatus } from './utils/offlineStorage';
-import { checkSubscription } from './utils/api';
+import { getPendingOrders } from './utils/offlineStorage';
+import { syncEvents, resumeAfterReauth } from './utils/syncManager';
+import { checkSubscription, authEvents } from './utils/api';
 
 function AppRoutes({ user, onLogout }) {
   const navigate = useNavigate();
@@ -39,39 +40,17 @@ function AppRoutes({ user, onLogout }) {
     }
   }, []);
 
-  // Retry pending offline orders when back online
-  const retryPendingOrders = useCallback(async () => {
-    const orders = await getPendingOrders();
-    if (orders.length === 0) return;
-
-    const baseUrl = (import.meta.env.VITE_API_URL || 'https://clientes-condor-api.f8ihph.easypanel.host/api').replace(/\/api\/?$/, '');
-
-    for (const order of orders) {
-      try {
-        const res = await fetch(`${baseUrl}/api/ordenes`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(order.data),
-        });
-        const result = await res.json();
-        if (result.success || result.data?.duplicate) {
-          await updateOrderStatus(order.id, 'sent');
-        } else {
-          await updateOrderStatus(order.id, 'error', (order.retries || 0) + 1);
-        }
-      } catch {
-        await updateOrderStatus(order.id, 'error', (order.retries || 0) + 1);
-      }
-    }
-    refreshPendingCount();
-  }, [refreshPendingCount]);
-
+  // Único camino de sincronización: syncManager.js posee los listeners 'online'/'offline'
+  // (registrados una vez desde OfflineIndicator). App.jsx solo escucha sus eventos de
+  // estado para refrescar el badge de "N pendientes" del Dashboard — nunca hace su
+  // propio fetch a /api/ordenes ni su propio listener 'online' (ese camino duplicado
+  // quemaba reintentos sin pasar por auth/backoff y corría en paralelo al de syncManager).
   useEffect(() => {
     refreshPendingCount();
-    const handleOnline = () => retryPendingOrders();
-    window.addEventListener('online', handleOnline);
-    return () => window.removeEventListener('online', handleOnline);
-  }, [retryPendingOrders, refreshPendingCount]);
+    const handleSyncStatus = () => refreshPendingCount();
+    syncEvents.addEventListener('status', handleSyncStatus);
+    return () => syncEvents.removeEventListener('status', handleSyncStatus);
+  }, [refreshPendingCount]);
 
   const handleOrdenEnviada = (orden) => {
     setOrdenEnviada(orden);
@@ -139,6 +118,7 @@ export default function App() {
     const saved = localStorage.getItem('condor_user');
     return saved ? JSON.parse(saved) : null;
   });
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -149,9 +129,25 @@ export default function App() {
     }
   }, [user]);
 
+  // Interceptor global de 401/403 (api.js) — token vencido/inválido o empleado
+  // desactivado. Limpia la sesión y fuerza la vuelta a LoginPage, PERO nunca toca
+  // IndexedDB (cola offline) ni el sessionStorage del wizard en curso: al re-loguear,
+  // el wizard restaura su paso/formulario/fotos desde sessionStorage tal como estaban.
+  useEffect(() => {
+    const handleAuthError = () => {
+      setUser(null);
+      setSessionExpired(true);
+    };
+    authEvents.addEventListener('auth-error', handleAuthError);
+    return () => authEvents.removeEventListener('auth-error', handleAuthError);
+  }, []);
+
   const handleLogin = (userData, token) => {
     setUser(userData);
     localStorage.setItem('condor_token', token);
+    setSessionExpired(false);
+    // Libera órdenes que habían quedado en 'auth-required' y las reintenta ya con el token nuevo.
+    resumeAfterReauth();
   };
 
   const handleLogout = () => {
@@ -162,7 +158,7 @@ export default function App() {
     return (
       <HashRouter>
         <OfflineIndicator />
-        <LoginPage onLogin={handleLogin} />
+        <LoginPage onLogin={handleLogin} sessionExpiredMessage={sessionExpired ? 'Tu sesión expiró. Vuelve a iniciar sesión para continuar — tus órdenes pendientes están a salvo.' : null} />
       </HashRouter>
     );
   }
