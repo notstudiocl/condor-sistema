@@ -15,7 +15,15 @@ function shapeOrden(orden) {
   const trabajos = (orden.trabajos || [])
     .slice()
     .sort((a, b) => (a.orden_index ?? 0) - (b.orden_index ?? 0))
-    .map((t) => ({ trabajo: t.servicio_nombre || t.nombre_personalizado || '', cantidad: t.cantidad }));
+    // servicioId (null si es un trabajo personalizado) se agrega para que el wizard
+    // pueda reconstruir la edición sin adivinar por nombre contra el catálogo activo
+    // actual — antes se perdían silenciosamente los trabajos con servicio desactivado,
+    // renombrado, o personalizado al editar una orden (bug real corregido).
+    .map((t) => ({
+      trabajo: t.servicio_nombre || t.nombre_personalizado || '',
+      cantidad: t.cantidad,
+      servicioId: t.servicio_id != null ? String(t.servicio_id) : null,
+    }));
 
   const fotos = orden.fotos || [];
   const fotosAntes = fotos.filter((f) => f.tipo === 'antes').map((f) => ({ url: ordenesRepo.buildFotoUrl(f.r2_key), filename: f.filename }));
@@ -47,6 +55,10 @@ function shapeOrden(orden) {
     email: orden.cliente_email || '',
     telefono: orden.cliente_telefono || '',
     empleados: (orden.empleados || []).map((e) => e.nombre),
+    // ids en el mismo orden que `empleados` (arriba) — agregado para que el wizard
+    // pueda restaurar el equipo real al editar en vez de perderlo (bug real corregido,
+    // ver OrdenWizardPage.jsx). `empleados` se mantiene igual por compatibilidad.
+    empleadosIds: (orden.empleados || []).map((e) => String(e.id)),
     fotosAntes,
     fotosDespues,
     firma,

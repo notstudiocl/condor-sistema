@@ -194,8 +194,15 @@ async function generarYSubirPdf(orden) {
 }
 
 function respuestaDuplicada(orden) {
-  const pdfFoto = (orden.fotos || []).find((f) => f.tipo === 'pdf');
+  const fotos = orden.fotos || [];
+  const pdfFoto = fotos.find((f) => f.tipo === 'pdf');
   const pdfUrl = pdfFoto ? buildPublicUrl(pdfFoto.r2_key) : null;
+  // fotosOk real (no hardcoded true — bug real corregido): al menos 1 foto antes y
+  // 1 después deben existir para considerar la evidencia completa. No es perfecto
+  // (no sabemos cuántas se intentaron subir originalmente), pero es mucho más
+  // honesto que fingir éxito total sobre una orden que pudo haber quedado con
+  // fotos parcialmente perdidas.
+  const fotosOk = fotos.some((f) => f.tipo === 'antes') && fotos.some((f) => f.tipo === 'despues');
   return {
     success: true,
     data: {
@@ -203,7 +210,7 @@ function respuestaDuplicada(orden) {
       recordId: String(orden.id),
       webhookOk: true,
       webhookError: null,
-      fotosOk: true,
+      fotosOk,
       duplicate: true,
       webhookData: {
         success: true,
@@ -232,8 +239,13 @@ export async function createOrdenCompleta(data) {
       return {
         success: true,
         data: {
+          // recordId null + fotosOk null a propósito: todavía no se sabe si el
+          // request que sí está procesando esta orden va a tener éxito. El cliente
+          // NO debe tratar esto como confirmación final (bug real corregido: antes
+          // fotosOk:true hacía que el técnico marcara la orden 'sent' y la borrara
+          // de la cola local sin ninguna garantía de que se haya creado de verdad).
           airtableOk: true, recordId: null, webhookOk: true, webhookError: null,
-          fotosOk: true, duplicate: true, webhookData: null,
+          fotosOk: null, duplicate: true, webhookData: null,
           message: 'Orden ya está siendo procesada',
         },
       };
@@ -380,40 +392,76 @@ async function finalizarOrdenYResponder(ordenBase, data) {
  * (mismo comportamiento que tenía el PUT antes de F3) — el repo conserva el cliente
  * existente vía COALESCE cuando clienteId es null.
  */
-export async function actualizarOrdenCompleta(ordenId, data) {
-  const ordenActualizada = await ordenesRepo.actualizarOrdenCompleta(ordenId, {
-    estado: 'Enviada',
-    clienteId: data.clienteRecordId || null,
-    clienteEmpresa: data.clienteEmpresa || null,
-    clienteEmail: data.clienteEmail || null,
-    clienteTelefono: data.clienteTelefono || null,
-    direccion: data.direccion || null,
-    ordenCompra: data.ordenCompra || null,
-    comuna: data.comuna || null,
-    supervisor: data.supervisor || null,
-    horaInicio: data.horaInicio || null,
-    horaTermino: data.horaTermino || null,
-    descripcionTrabajo: data.descripcion || null,
-    observaciones: data.observaciones || null,
-    garantia: data.garantia || 'Sin garantía',
-    patenteVehiculo: data.patenteVehiculo || null,
-    total: Number(data.total) || 0,
-    metodoPago: data.metodoPago || null,
-    requiereFactura: parseRequiereFactura(data.requiereFactura),
-    empleadoIds: data.empleadosRecordIds || [],
-    responsableId: data.responsableId || null,
-    trabajos: data.trabajos ? await resolverTrabajosConServicio(data.trabajos, data.serviciosIds) : undefined,
-  });
+// Idempotencia de edición: antes/despues son acumulativas (ver subirFotosYFirma), así
+// que reintentar un PUT que ya se procesó (ej. el técnico presiona "Actualizar y
+// Reenviar" de nuevo porque el spinner tardó, sin saber que la primera sí llegó)
+// volvía a subir y a apilar el mismo lote de fotos — bug real corregido cacheando la
+// respuesta por idempotencyKey igual que ya hace createOrdenCompleta.
+const edicionesEnProceso = new Set();
+const respuestasEdicionRecientes = new Map(); // idempotencyKey -> respuesta ya resuelta
+const EDICION_CACHE_TTL_MS = 60000;
 
-  if (!ordenActualizada) {
-    return {
-      success: false,
-      notFound: true,
-      data: { airtableOk: false, recordId: null, webhookOk: false, webhookError: 'Orden no encontrada', webhookData: null },
-    };
+export async function actualizarOrdenCompleta(ordenId, data) {
+  const idempotencyKey = data.idempotencyKey || null;
+
+  if (idempotencyKey) {
+    const cacheada = respuestasEdicionRecientes.get(idempotencyKey);
+    if (cacheada) return cacheada;
+    if (edicionesEnProceso.has(idempotencyKey)) {
+      return {
+        success: true,
+        data: {
+          airtableOk: true, recordId: String(ordenId), webhookOk: true, webhookError: null,
+          fotosOk: null, duplicate: true, webhookData: null,
+          message: 'La edición ya está siendo procesada',
+        },
+      };
+    }
+    edicionesEnProceso.add(idempotencyKey);
   }
 
-  return finalizarOrdenYResponder(ordenActualizada, data);
+  try {
+    const ordenActualizada = await ordenesRepo.actualizarOrdenCompleta(ordenId, {
+      estado: 'Enviada',
+      clienteId: data.clienteRecordId || null,
+      clienteEmpresa: data.clienteEmpresa || null,
+      clienteEmail: data.clienteEmail || null,
+      clienteTelefono: data.clienteTelefono || null,
+      direccion: data.direccion || null,
+      ordenCompra: data.ordenCompra || null,
+      comuna: data.comuna || null,
+      supervisor: data.supervisor || null,
+      horaInicio: data.horaInicio || null,
+      horaTermino: data.horaTermino || null,
+      descripcionTrabajo: data.descripcion || null,
+      observaciones: data.observaciones || null,
+      garantia: data.garantia || 'Sin garantía',
+      patenteVehiculo: data.patenteVehiculo || null,
+      total: Number(data.total) || 0,
+      metodoPago: data.metodoPago || null,
+      requiereFactura: parseRequiereFactura(data.requiereFactura),
+      empleadoIds: data.empleadosRecordIds || [],
+      responsableId: data.responsableId || null,
+      trabajos: data.trabajos ? await resolverTrabajosConServicio(data.trabajos, data.serviciosIds) : undefined,
+    });
+
+    if (!ordenActualizada) {
+      return {
+        success: false,
+        notFound: true,
+        data: { airtableOk: false, recordId: null, webhookOk: false, webhookError: 'Orden no encontrada', webhookData: null },
+      };
+    }
+
+    const respuesta = await finalizarOrdenYResponder(ordenActualizada, data);
+    if (idempotencyKey) {
+      respuestasEdicionRecientes.set(idempotencyKey, respuesta);
+      setTimeout(() => respuestasEdicionRecientes.delete(idempotencyKey), EDICION_CACHE_TTL_MS);
+    }
+    return respuesta;
+  } finally {
+    if (idempotencyKey) edicionesEnProceso.delete(idempotencyKey);
+  }
 }
 
 /**

@@ -36,12 +36,13 @@ export async function getPendingOrders() {
   return all.filter((order) => order.status === 'pending' || order.status === 'error' || order.status === 'auth-required');
 }
 
-export async function updateOrderStatus(id, status, retries) {
+export async function updateOrderStatus(id, status, retries, extra) {
   const db = await getDB();
   const order = await db.get(STORE_NAME, id);
   if (order) {
     order.status = status;
     if (retries !== undefined) order.retries = retries;
+    if (extra) order.result = extra;
     order.updatedAt = new Date().toISOString();
     await db.put(STORE_NAME, order);
   }
@@ -52,6 +53,9 @@ export async function deleteSentOrders() {
   const all = await db.getAll(STORE_NAME);
   const tx = db.transaction(STORE_NAME, 'readwrite');
   for (const order of all) {
+    // 'sent-incomplete' (orden creada en el servidor pero con fotos faltantes) NO se
+    // borra automáticamente — debe quedar visible hasta que el técnico la reconozca
+    // (ver acknowledgeIncompleteOrder), para no perder el aviso en silencio.
     if (order.status === 'sent') {
       await tx.store.delete(order.id);
     }
@@ -62,6 +66,22 @@ export async function deleteSentOrders() {
 export async function getPendingCount() {
   const orders = await getPendingOrders();
   return orders.length;
+}
+
+// Órdenes que sí se crearon en el servidor pero con alguna foto sin subir — se
+// muestran aparte del resto de la cola (no son "pendientes de enviar", son
+// "enviadas con evidencia incompleta").
+export async function getIncompleteOrders() {
+  const db = await getDB();
+  const all = await db.getAll(STORE_NAME);
+  return all.filter((order) => order.status === 'sent-incomplete');
+}
+
+// El técnico confirma que ya vio el aviso (típicamente tras contactar a la oficina
+// para completar la evidencia manualmente) — recién ahí se borra de IndexedDB.
+export async function acknowledgeIncompleteOrder(id) {
+  const db = await getDB();
+  await db.delete(STORE_NAME, id);
 }
 
 // Bug de zombies: si el proceso muere (app cerrada, red cortada) justo entre marcar

@@ -11,23 +11,58 @@ import { getPendingOrders } from './utils/offlineStorage';
 import { syncEvents, resumeAfterReauth } from './utils/syncManager';
 import { checkSubscription, authEvents } from './utils/api';
 
+// Solo los campos livianos que ConfirmacionPage realmente muestra — a propósito
+// excluye fotosAntes/fotosDespues/firmaBase64 (pueden pesar varios MB en base64,
+// no caben cómodos en sessionStorage junto con el resto del estado del wizard).
+const CONFIRMACION_KEY = 'condor_confirmacion_state';
+
+function guardarConfirmacion(orden) {
+  try {
+    const { fotosAntes, fotosDespues, firmaBase64, ...liviano } = orden;
+    sessionStorage.setItem(CONFIRMACION_KEY, JSON.stringify(liviano));
+  } catch { /* ignore quota errors — a lo sumo no sobrevive un F5 */ }
+}
+
+function cargarConfirmacion() {
+  try {
+    const raw = sessionStorage.getItem(CONFIRMACION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function limpiarConfirmacion() {
+  sessionStorage.removeItem(CONFIRMACION_KEY);
+}
+
+// Poll de suscripción — antes solo se chequeaba una vez al montar la sesión, así que
+// si NotStudio suspendía el servicio con la app ya abierta, el técnico podía llenar
+// un wizard entero y recién enterarse (de forma confusa) al presionar Enviar (bug
+// real corregido).
+const SUBSCRIPTION_POLL_MS = 5 * 60 * 1000;
+
 function AppRoutes({ user, onLogout }) {
   const navigate = useNavigate();
-  const [ordenEnviada, setOrdenEnviada] = useState(null);
+  const [ordenEnviada, setOrdenEnviada] = useState(() => cargarConfirmacion());
   const [pendingCount, setPendingCount] = useState(0);
   const [subscriptionActive, setSubscriptionActive] = useState(true);
   const [subscriptionMessage, setSubscriptionMessage] = useState(null);
 
-  // Check subscription status
+  // Check subscription status — al montar y cada SUBSCRIPTION_POLL_MS mientras la
+  // sesión sigue abierta.
   useEffect(() => {
-    checkSubscription()
-      .then(res => {
-        if (res.success) {
-          setSubscriptionActive(res.data.active);
-          setSubscriptionMessage(res.data.message);
-        }
-      })
-      .catch(() => setSubscriptionActive(true));
+    const check = () => {
+      checkSubscription()
+        .then(res => {
+          if (res.success) {
+            setSubscriptionActive(res.data.active);
+            setSubscriptionMessage(res.data.message);
+          }
+        })
+        .catch(() => setSubscriptionActive(true));
+    };
+    check();
+    const interval = setInterval(check, SUBSCRIPTION_POLL_MS);
+    return () => clearInterval(interval);
   }, []);
 
   // Check pending orders count
@@ -54,24 +89,28 @@ function AppRoutes({ user, onLogout }) {
 
   const handleOrdenEnviada = (orden) => {
     setOrdenEnviada(orden);
+    guardarConfirmacion(orden);
     refreshPendingCount();
     navigate('/confirmacion');
   };
 
   const handleNuevaOrden = () => {
     setOrdenEnviada(null);
+    limpiarConfirmacion();
     clearWizardSession();
     navigate('/orden/nueva');
   };
 
   const handleIrAlInicio = () => {
     setOrdenEnviada(null);
+    limpiarConfirmacion();
     clearWizardSession();
     navigate('/');
   };
 
   const handleReintentar = () => {
     setOrdenEnviada(null);
+    limpiarConfirmacion();
     navigate('/orden/nueva');
   };
 
@@ -152,6 +191,12 @@ export default function App() {
 
   const handleLogout = () => {
     setUser(null);
+    // Un wizard sin enviar quedaba en sessionStorage después de cerrar sesión — en un
+    // dispositivo compartido entre técnicos, el siguiente que iniciara sesión y
+    // tocara "+Nueva Orden" desde el Header (a diferencia del botón del Dashboard,
+    // que sí limpiaba) heredaba en silencio cliente/fotos del técnico anterior (bug
+    // real corregido: fuga de datos entre técnicos).
+    clearWizardSession();
   };
 
   if (!user) {

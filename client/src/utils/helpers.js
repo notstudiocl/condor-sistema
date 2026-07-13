@@ -16,28 +16,66 @@ export function formatRut(value) {
 }
 
 /**
- * Formatea un monto en CLP con separador de miles: 350000 → $350.000
+ * Formatea un monto en CLP con separador de miles: 350000 → $350.000, -5000 → -$5.000
+ * (antes un monto negativo daba "$-5.000" — el signo quedaba después del símbolo).
  */
 export function formatCLP(amount) {
   if (!amount && amount !== 0) return '';
-  const num = typeof amount === 'string' ? parseInt(amount.replace(/\D/g, ''), 10) : amount;
+  const num = typeof amount === 'string' ? parseInt(amount.replace(/[^\d-]/g, ''), 10) : amount;
   if (isNaN(num)) return '';
-  return '$' + num.toLocaleString('es-CL');
+  const signo = num < 0 ? '-' : '';
+  return signo + '$' + Math.abs(num).toLocaleString('es-CL');
 }
 
 /**
- * Parsea un string CLP a número: $350.000 → 350000
+ * Parsea un string CLP a número: $350.000 → 350000, -$5.000 → -5000
+ * (antes .replace(/\D/g,'') borraba el signo "-" junto con los puntos, perdiéndolo).
  */
 export function parseCLP(str) {
   if (!str) return 0;
-  return parseInt(str.replace(/\D/g, ''), 10) || 0;
+  const negativo = /^\s*-/.test(str);
+  const digitos = parseInt(str.replace(/\D/g, ''), 10) || 0;
+  return negativo ? -digitos : digitos;
 }
 
 /**
- * Genera la fecha de hoy en formato YYYY-MM-DD
+ * Genera la fecha de hoy en formato YYYY-MM-DD, en hora de Chile (America/Santiago).
+ * NO usar new Date().toISOString() acá: eso da la fecha en UTC, que retrocede al día
+ * SIGUIENTE para cualquier orden cerrada de noche en Chile — bug real corregido
+ * (una orden cerrada a las 21:00 quedaba fechada para "mañana").
  */
 export function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Santiago',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const get = (type) => parts.find((p) => p.type === type)?.value;
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+/**
+ * Convierte un timestamp ISO con hora real (ej. horaInicio/horaTermino) al string que
+ * espera un <input type="datetime-local">, en hora de Chile. Un ISO con "Z" o
+ * milisegundos no es un valor válido de datetime-local — el navegador simplemente
+ * mostraba el campo vacío al editar una orden existente (bug real corregido).
+ */
+export function toDatetimeLocal(isoString) {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Santiago',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(d);
+  const get = (type) => parts.find((p) => p.type === type)?.value;
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
 }
 
 /**
@@ -132,11 +170,19 @@ export function base64ToFile(base64, filename) {
 }
 
 /**
- * Formatea una fecha ISO a DD/MM/YYYY en zona horaria Chile
+ * Formatea una fecha a DD/MM/YYYY. `orden.fecha` es una columna `date` de Postgres
+ * (sin hora asociada) — convertirla a través de una zona horaria puede retroceder un
+ * día completo (bug real corregido: TODAS las órdenes se mostraban con la fecha de
+ * ayer). Un string "YYYY-MM-DD" puro se parsea directo, sin pasar por Date/timezone.
+ * Strings con hora (formato legado) siguen convirtiéndose a hora de Chile.
  */
 export function formatFechaAmigable(isoString) {
   if (!isoString) return '—';
   try {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(isoString)) {
+      const [y, m, d] = isoString.split('-');
+      return `${d}/${m}/${y}`;
+    }
     const d = new Date(isoString);
     if (isNaN(d.getTime())) return isoString;
     return d.toLocaleDateString('es-CL', {

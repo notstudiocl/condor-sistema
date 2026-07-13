@@ -281,11 +281,61 @@ export async function listOrdenesRecientes(limit = 50) {
   return rows;
 }
 
+// Hidrata un LOTE de órdenes en 4 queries totales (una por tabla relacionada, con
+// WHERE ... = ANY($1)) en vez de 4 queries POR orden — bug real corregido: con 50
+// órdenes, hydrateOrden() una por una llegaba a ~200 queries concurrentes contra el
+// pool en un solo request, y fue la causa real de que el backend se cayera más de una
+// vez durante este mismo bug hunt (confirmado reproduciendo el 504 en GET /api/ordenes).
+async function hydrateOrdenes(ordenes) {
+  if (ordenes.length === 0) return [];
+  const ids = ordenes.map((o) => o.id);
+  const clienteIds = [...new Set(ordenes.map((o) => o.cliente_id).filter(Boolean))];
+
+  const [trabajos, empleados, fotos, clientes] = await Promise.all([
+    pool.query(
+      `SELECT ot.*, s.nombre as servicio_nombre FROM orden_trabajos ot
+       LEFT JOIN servicios s ON s.id = ot.servicio_id
+       WHERE ot.orden_id = ANY($1) ORDER BY ot.orden_index`,
+      [ids]
+    ),
+    pool.query(
+      `SELECT oe.orden_id, e.id, e.nombre FROM orden_empleados oe
+       JOIN empleados e ON e.id = oe.empleado_id WHERE oe.orden_id = ANY($1)`,
+      [ids]
+    ),
+    pool.query('SELECT * FROM orden_fotos WHERE orden_id = ANY($1) ORDER BY tipo, orden_index', [ids]),
+    clienteIds.length > 0
+      ? pool.query('SELECT id, rut, nombre, empresa FROM clientes WHERE id = ANY($1)', [clienteIds])
+      : Promise.resolve({ rows: [] }),
+  ]);
+
+  const agruparPorOrden = (rows) => {
+    const map = new Map();
+    for (const r of rows) {
+      if (!map.has(r.orden_id)) map.set(r.orden_id, []);
+      map.get(r.orden_id).push(r);
+    }
+    return map;
+  };
+  const trabajosPorOrden = agruparPorOrden(trabajos.rows);
+  const empleadosPorOrden = agruparPorOrden(empleados.rows);
+  const fotosPorOrden = agruparPorOrden(fotos.rows);
+  const clientePorId = new Map(clientes.rows.map((c) => [c.id, c]));
+
+  return ordenes.map((orden) => ({
+    ...orden,
+    trabajos: trabajosPorOrden.get(orden.id) || [],
+    empleados: empleadosPorOrden.get(orden.id) || [],
+    fotos: fotosPorOrden.get(orden.id) || [],
+    cliente: orden.cliente_id ? (clientePorId.get(orden.cliente_id) || null) : null,
+  }));
+}
+
 // Igual que listOrdenesRecientes pero hidratada (trabajos/empleados/fotos/cliente) —
 // usada por GET /api/ordenes del técnico, que necesita el mismo shape que el detalle.
 export async function listOrdenesRecientesCompletas(limit = 50) {
   const recientes = await listOrdenesRecientes(limit);
-  return Promise.all(recientes.map((o) => hydrateOrden(o)));
+  return hydrateOrdenes(recientes);
 }
 
 export async function listOrdenesAdmin({ page = 1, limit = 50, estado, q, tecnicoId, fechaDesde, fechaHasta }) {

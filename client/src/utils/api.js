@@ -94,7 +94,17 @@ export async function crearOrden(orden) {
     const isAuthOrSubscriptionFailure = err.status === 401 || err.status === 403;
     if (isNetworkFailure || isServerFailure || isAuthOrSubscriptionFailure) {
       await savePendingOrder(orden);
-      return { success: true, offline: true };
+      // code/message se propagan para que la pantalla de confirmación pueda mostrar
+      // el motivo real (ej. servicio suspendido) en vez de disfrazarlo siempre de
+      // "sin conexión" — antes un 403 por kill switch se veía idéntico a una falla de
+      // red real y el mensaje configurado (SUBSCRIPTION_MESSAGE) nunca llegaba a
+      // mostrarse (bug real corregido).
+      return {
+        success: true,
+        offline: true,
+        offlineCode: isAuthOrSubscriptionFailure ? err.code : undefined,
+        offlineMessage: isAuthOrSubscriptionFailure ? err.message : undefined,
+      };
     }
     throw err;
   }

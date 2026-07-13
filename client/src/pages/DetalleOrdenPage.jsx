@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader2, RotateCcw, FileText, X } from 'lucide-react';
-import { formatCLP, formatFechaAmigable, formatHoraAmigable, formatFechaHoraAmigable } from '../utils/helpers';
+import { formatCLP, formatFechaAmigable, formatFechaHoraAmigable } from '../utils/helpers';
 import { getOrdenById, reenviarOrden } from '../utils/api';
 import AppFooter from '../components/AppFooter';
 import SubscriptionBanner from '../components/SubscriptionBanner';
 
+// Los 5 estados reales (ver CHECK de ordenes.estado en 001_init.sql) — no incluye
+// 'Error', que era un residuo de la era Airtable y nunca es un valor válido hoy.
 function EstadoBadge({ estado }) {
   const styles = {
     Enviada: 'bg-blue-500 text-white',
     Completada: 'bg-emerald-500 text-white',
-    Error: 'bg-red-500 text-white',
     Pendiente: 'bg-amber-400 text-black',
     'Facturacion pendiente': 'bg-orange-500 text-white',
     Facturada: 'bg-purple-500 text-white',
@@ -69,23 +70,34 @@ export default function DetalleOrdenPage({ subscriptionActive = true, subscripti
   const navigate = useNavigate();
   const [orden, setOrden] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Distingue "no existe / id inválido" de "hubo un error de red o timeout" — antes
+  // cualquier falla (ej. un 504 real que reproduje durante el bug hunt) caía en el
+  // mismo catch y mostraba "Orden no encontrada", como si el id fuera inválido, en
+  // vez de avisar que hubo un problema de conexión que vale la pena reintentar (bug
+  // real corregido).
+  const [loadError, setLoadError] = useState(false);
   const [reenviando, setReenviando] = useState(false);
   const [reenvioMsg, setReenvioMsg] = useState(null);
   const [viewerFotos, setViewerFotos] = useState(null);
   const [viewerIndex, setViewerIndex] = useState(0);
 
+  const cargar = async () => {
+    setLoading(true);
+    setLoadError(false);
+    try {
+      const data = await getOrdenById(recordId);
+      setOrden(data.data || null);
+    } catch {
+      setOrden(null);
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const cargar = async () => {
-      try {
-        const data = await getOrdenById(recordId);
-        setOrden(data.data || null);
-      } catch {
-        setOrden(null);
-      } finally {
-        setLoading(false);
-      }
-    };
     cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordId]);
 
   const handleReenviar = async () => {
@@ -122,8 +134,15 @@ export default function DetalleOrdenPage({ subscriptionActive = true, subscripti
   if (!orden) {
     return (
       <div className="min-h-[calc(100vh-56px)] flex flex-col items-center justify-center p-4">
-        <p className="text-gray-400 mb-4">Orden no encontrada</p>
-        <button onClick={() => navigate('/')} className="btn-secondary px-4 py-2 rounded-xl">Volver</button>
+        <p className="text-gray-400 mb-4">
+          {loadError ? 'No se pudo cargar la orden — revisa tu conexión' : 'Orden no encontrada'}
+        </p>
+        <div className="flex gap-2">
+          {loadError && (
+            <button onClick={cargar} className="bg-accent-600 hover:bg-accent-700 text-white font-semibold px-4 py-2 rounded-xl">Reintentar</button>
+          )}
+          <button onClick={() => navigate('/')} className="btn-secondary px-4 py-2 rounded-xl">Volver</button>
+        </div>
       </div>
     );
   }
@@ -189,6 +208,9 @@ export default function DetalleOrdenPage({ subscriptionActive = true, subscripti
         {/* Equipo */}
         <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm mb-3">
           <h3 className="font-heading font-semibold text-condor-900 mb-2">Equipo</h3>
+          {/* El backend siempre mandó orden.empleados — nunca se leía acá, así que el
+              detalle no mostraba quién trabajó en la orden (bug real corregido). */}
+          <Field label="Técnicos" value={(orden.empleados || []).join(', ')} />
           <Field label="Patente" value={orden.patente} />
         </div>
 
@@ -276,7 +298,7 @@ export default function DetalleOrdenPage({ subscriptionActive = true, subscripti
 
         {/* Botones de acción */}
         <div className="space-y-3 mt-4">
-          {(orden.estado === 'Error' || orden.estado === 'Pendiente' || !hasPdf) && (
+          {(orden.estado === 'Pendiente' || !hasPdf) && (
             <button
               onClick={handleReenviar}
               disabled={reenviando || !subscriptionActive}

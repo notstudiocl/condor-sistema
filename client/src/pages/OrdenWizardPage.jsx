@@ -16,7 +16,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { METODOS_PAGO, GARANTIAS, WIZARD_STEPS, SERVICIOS_FALLBACK } from '../utils/constants';
-import { formatRut, formatCLP, parseCLP, todayISO, compressImage, fileToBase64, base64ToFile } from '../utils/helpers';
+import { formatRut, formatCLP, parseCLP, todayISO, toDatetimeLocal, compressImage, fileToBase64, base64ToFile } from '../utils/helpers';
 import { buscarClientes, getTecnicosPublic, crearOrden, actualizarOrden, getServicios, getOrdenById } from '../utils/api';
 import SignaturePad from '../components/SignaturePad';
 import Summary from '../components/Summary';
@@ -147,6 +147,14 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
   const { recordId: editRecordId } = editMode ? useParams() : { recordId: null };
   const [editLoading, setEditLoading] = useState(!!editMode);
 
+  // Fotos que la orden YA tiene guardadas (modo edición) — antes/después son
+  // acumulativas server-side, así que esto es solo para mostrarle al técnico cuántas
+  // ya existen y para no exigirle fotos nuevas si la orden ya tiene evidencia (bug
+  // real corregido: antes de esto el paso 4 bloqueaba el envío exigiendo SIEMPRE
+  // fotos nuevas al editar, sin mostrar nunca cuántas ya había).
+  const [fotosAntesExistentes, setFotosAntesExistentes] = useState(0);
+  const [fotosDespuesExistentes, setFotosDespuesExistentes] = useState(0);
+
   // Custom service inputs
   const [customNombre, setCustomNombre] = useState('');
   const [customCantidad, setCustomCantidad] = useState('1');
@@ -187,8 +195,12 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
     getTecnicosPublic()
       .then((res) => setTecnicos(res.data || []))
       .catch(() => {});
-    setForm((prev) => ({ ...prev, personal: [{ nombre: user.nombre, esEmpleado: true, recordId: user.recordId || null }] }));
-  }, [user.nombre]);
+    // En editMode el personal real lo restaura el loader de edición de abajo — acá
+    // pisarlo con solo el usuario logueado era justamente el bug (ver ese efecto).
+    if (!editMode) {
+      setForm((prev) => ({ ...prev, personal: [{ nombre: user.nombre, esEmpleado: true, recordId: user.recordId || null }] }));
+    }
+  }, [user.nombre, editMode]);
 
   // Load existing order for edit mode
   useEffect(() => {
@@ -204,10 +216,31 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
           // Wait for servicios to be loaded to map correctly
           const srvRes = await getServicios();
           const srvList = srvRes.data || [];
-          const mappedTrabajos = srvList.map(s => {
-            const found = trabajos.find(t => (t.trabajo || t.nombre) === s.nombre);
+          const srvIds = new Set(srvList.map((s) => String(s.id)));
+          const mappedActivos = srvList.map(s => {
+            const found = trabajos.find(t => t.servicioId != null && String(t.servicioId) === String(s.id));
             return { id: s.id, nombre: s.nombre, checked: found ? found.cantidad > 0 : false, cantidad: found ? found.cantidad : 0 };
           });
+          // Trabajos de la orden que no matchean ningún servicio activo hoy (servicio
+          // desactivado/renombrado, o personalizado sin id de catálogo) — antes se
+          // perdían en silencio al editar porque solo se recorría el catálogo activo
+          // (bug real corregido).
+          const extras = trabajos
+            .filter(t => t.servicioId == null || !srvIds.has(String(t.servicioId)))
+            .map((t, i) => ({ id: `guardado_${i}_${t.trabajo}`, nombre: t.trabajo, checked: t.cantidad > 0, cantidad: t.cantidad }));
+          const mappedTrabajos = [...mappedActivos, ...extras];
+
+          // Personal real de la orden (antes se pisaba con solo el usuario que edita,
+          // borrando al resto del equipo al reenviar — bug real corregido). Los ids
+          // vienen alineados por índice con los nombres (mismo orden que devuelve la
+          // query de origen en el backend, ver server/src/routes/ordenes.js).
+          const nombresEquipo = orden.empleados || [];
+          const idsEquipo = orden.empleadosIds || [];
+          const personalReal = nombresEquipo.map((nombre, i) => ({
+            nombre,
+            esEmpleado: true,
+            recordId: idsEquipo[i] || null,
+          }));
 
           setForm({
             clienteRut: typeof orden.clienteRut === 'object' ? '' : (orden.clienteRut || ''),
@@ -218,20 +251,26 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
             comuna: orden.comuna || '',
             ordenCompra: orden.ordenCompra || '',
             supervisor: orden.supervisor || '',
-            horaInicio: orden.horaInicio || '',
-            horaTermino: orden.horaTermino || '',
+            // datetime-local no acepta un ISO con "Z"/milisegundos — antes el campo
+            // quedaba visualmente vacío al editar aunque la orden sí tuviera hora
+            // guardada (bug real corregido).
+            horaInicio: toDatetimeLocal(orden.horaInicio),
+            horaTermino: toDatetimeLocal(orden.horaTermino),
             trabajos: mappedTrabajos,
             descripcion: orden.descripcion || '',
             observaciones: orden.observaciones || '',
-            total: orden.total ? String(orden.total) : '',
+            total: orden.total ? formatCLP(orden.total) : '',
             metodoPago: orden.metodoPago || 'Efectivo',
             garantia: orden.garantia || 'Sin garantía',
             requiereFactura: orden.requiereFactura || 'No',
-            personal: [{ nombre: user.nombre, esEmpleado: true, recordId: user.recordId || null }],
+            personal: personalReal,
             patenteVehiculo: orden.patente || '',
             firmaBase64: null,
             clienteRecordId: null,
           });
+
+          setFotosAntesExistentes((orden.fotosAntes || []).length);
+          setFotosDespuesExistentes((orden.fotosDespues || []).length);
         }
       } catch (err) {
         console.error('Error cargando orden para edición:', err);
@@ -381,7 +420,12 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
       const meta = filesArray.map((f, i) => ({ name: f.name, data: base64Array[i] }));
       sessionStorage.setItem(field, JSON.stringify(meta));
     } catch (err) {
+      // Antes esto fallaba en silencio (sessionStorage lleno o restringido, típico en
+      // Safari privado) y una recarga de página perdía fotos ya tomadas sin ningún
+      // aviso — bug real corregido: se avisa al técnico que ese respaldo no funcionó,
+      // para que evite recargar la página hasta enviar la orden.
       console.warn('No se pudieron guardar fotos en sessionStorage:', err);
+      setErrors((prev) => ({ ...prev, [`${field}Backup`]: 'No se pudo respaldar la foto en este dispositivo — evita recargar la página hasta enviar la orden.' }));
     }
   };
 
@@ -389,7 +433,8 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
     const files = Array.from(e.target.files || []);
     const filesRef = field === 'fotosAntes' ? fotosAntesFilesRef : fotosDespuesFilesRef;
     const setPreview = field === 'fotosAntes' ? setFotosAntesPreview : setFotosDespuesPreview;
-    const remaining = MAX_FOTOS - filesRef.current.length;
+    const existentes = field === 'fotosAntes' ? fotosAntesExistentes : fotosDespuesExistentes;
+    const remaining = MAX_FOTOS - existentes - filesRef.current.length;
     if (remaining <= 0) return;
     const toProcess = files.slice(0, remaining);
     const compressed = await Promise.all(toProcess.map(f => compressImage(f)));
@@ -435,9 +480,12 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
       // Step 2: Personal
       if (!form.patenteVehiculo.trim()) errs.patenteVehiculo = 'La patente es obligatoria';
     } else if (stepIdx === 3) {
-      // Step 3: Fotos (check refs, not form state)
-      if (fotosAntesFilesRef.current.length === 0) errs.fotosAntes = 'Debe adjuntar al menos 1 foto del antes';
-      if (fotosDespuesFilesRef.current.length === 0) errs.fotosDespues = 'Debe adjuntar al menos 1 foto del después';
+      // Step 3: Fotos (check refs, not form state). En edición, la orden puede ya
+      // tener fotos guardadas — no forzar fotos nuevas si ya hay evidencia (antes
+      // esto bloqueaba el reenvío exigiendo SIEMPRE fotos nuevas al editar, sin
+      // mostrar cuántas ya existían — bug real corregido).
+      if (fotosAntesFilesRef.current.length + fotosAntesExistentes === 0) errs.fotosAntes = 'Debe adjuntar al menos 1 foto del antes';
+      if (fotosDespuesFilesRef.current.length + fotosDespuesExistentes === 0) errs.fotosDespues = 'Debe adjuntar al menos 1 foto del después';
     } else if (stepIdx === 4) {
       // Step 4: Firma
       if (!form.firmaBase64) errs.firmaBase64 = 'La firma es obligatoria para enviar la orden';
@@ -565,6 +613,8 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
         const result = await crearOrden(payload);
         if (result?.offline) {
           payload._offline = true;
+          payload._offlineCode = result.offlineCode;
+          payload._offlineMessage = result.offlineMessage;
         } else {
           if (fotosAntesFilesRef.current.length > 0 || fotosDespuesFilesRef.current.length > 0) {
             setSendingText('Subiendo fotos...');
@@ -1124,8 +1174,13 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
                 <h3 className="font-heading font-semibold text-sm text-condor-900">
                   Fotos ANTES
                 </h3>
-                <span className="text-xs text-gray-400">{fotosAntesPreview.length}/{MAX_FOTOS}</span>
+                <span className="text-xs text-gray-400">{fotosAntesPreview.length + fotosAntesExistentes}/{MAX_FOTOS}</span>
               </div>
+              {fotosAntesExistentes > 0 && (
+                <p className="text-xs text-condor-600 mb-2">
+                  La orden ya tiene {fotosAntesExistentes} foto{fotosAntesExistentes > 1 ? 's' : ''} guardada{fotosAntesExistentes > 1 ? 's' : ''} — las que agregues acá se suman a esas.
+                </p>
+              )}
               <div className="grid grid-cols-3 gap-2">
                 {fotosAntesPreview.map((foto, idx) => (
                   <div key={idx} className="relative aspect-square rounded-xl overflow-hidden bg-gray-100">
@@ -1139,7 +1194,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
                     </button>
                   </div>
                 ))}
-                {fotosAntesPreview.length < MAX_FOTOS && (
+                {fotosAntesPreview.length + fotosAntesExistentes < MAX_FOTOS && (
                   <button
                     type="button"
                     onClick={() => fotosAntesInputRef.current?.click()}
@@ -1159,6 +1214,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
                 onChange={(e) => handleFotoUpload(e, 'fotosAntes')}
               />
               <FieldError message={errors.fotosAntes} />
+              <FieldError message={errors.fotosAntesBackup} />
             </div>
 
             {/* Fotos DESPUÉS */}
@@ -1167,8 +1223,13 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
                 <h3 className="font-heading font-semibold text-sm text-condor-900">
                   Fotos DESPUÉS
                 </h3>
-                <span className="text-xs text-gray-400">{fotosDespuesPreview.length}/{MAX_FOTOS}</span>
+                <span className="text-xs text-gray-400">{fotosDespuesPreview.length + fotosDespuesExistentes}/{MAX_FOTOS}</span>
               </div>
+              {fotosDespuesExistentes > 0 && (
+                <p className="text-xs text-condor-600 mb-2">
+                  La orden ya tiene {fotosDespuesExistentes} foto{fotosDespuesExistentes > 1 ? 's' : ''} guardada{fotosDespuesExistentes > 1 ? 's' : ''} — las que agregues acá se suman a esas.
+                </p>
+              )}
               <div className="grid grid-cols-3 gap-2">
                 {fotosDespuesPreview.map((foto, idx) => (
                   <div key={idx} className="relative aspect-square rounded-xl overflow-hidden bg-gray-100">
@@ -1182,7 +1243,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
                     </button>
                   </div>
                 ))}
-                {fotosDespuesPreview.length < MAX_FOTOS && (
+                {fotosDespuesPreview.length + fotosDespuesExistentes < MAX_FOTOS && (
                   <button
                     type="button"
                     onClick={() => fotosDespuesInputRef.current?.click()}
@@ -1202,6 +1263,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
                 onChange={(e) => handleFotoUpload(e, 'fotosDespues')}
               />
               <FieldError message={errors.fotosDespues} />
+              <FieldError message={errors.fotosDespuesBackup} />
             </div>
           </div>
         )}

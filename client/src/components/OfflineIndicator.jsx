@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Wifi, WifiOff, Loader2, CheckCircle, LogIn, ChevronDown, ChevronUp, RotateCcw, Clock } from 'lucide-react';
+import { Wifi, WifiOff, Loader2, CheckCircle, LogIn, ChevronDown, ChevronUp, RotateCcw, Clock, ImageOff } from 'lucide-react';
 import { initSyncManager, syncEvents, syncPendingOrders, MAX_RETRIES } from '../utils/syncManager';
-import { getPendingCount, getPendingOrders, updateOrderStatus } from '../utils/offlineStorage';
+import { getPendingCount, getPendingOrders, updateOrderStatus, getIncompleteOrders, acknowledgeIncompleteOrder } from '../utils/offlineStorage';
 
 const STATUS_CONFIG = {
-  online:          { bg: 'bg-emerald-500', icon: Wifi,        hide: true },
-  offline:         { bg: 'bg-red-500',     icon: WifiOff,     hide: false },
-  syncing:         { bg: 'bg-amber-500',   icon: Loader2,     hide: false },
-  synced:          { bg: 'bg-emerald-500', icon: CheckCircle, hide: true },
-  'auth-required': { bg: 'bg-amber-600',   icon: LogIn,       hide: false },
+  online:              { bg: 'bg-emerald-500', icon: Wifi,        hide: true },
+  offline:             { bg: 'bg-red-500',     icon: WifiOff,     hide: false },
+  syncing:             { bg: 'bg-amber-500',   icon: Loader2,     hide: false },
+  synced:              { bg: 'bg-emerald-500', icon: CheckCircle, hide: true },
+  'auth-required':     { bg: 'bg-amber-600',   icon: LogIn,       hide: false },
+  'fotos-incompletas': { bg: 'bg-amber-600',   icon: ImageOff,    hide: false },
 };
 
 let initedOnce = false;
@@ -26,12 +27,14 @@ export default function OfflineIndicator() {
   const [message, setMessage] = useState('');
   const [visible, setVisible] = useState(false);
   const [stuck, setStuck] = useState([]);
+  const [incomplete, setIncomplete] = useState([]);
   const [panelOpen, setPanelOpen] = useState(false);
   const hideTimer = useRef(null);
 
   const refreshStuck = useCallback(async () => {
     const pending = await getPendingOrders();
     setStuck(pending.filter(esOrdenAtascada));
+    setIncomplete(await getIncompleteOrders());
   }, []);
 
   useEffect(() => {
@@ -56,6 +59,7 @@ export default function OfflineIndicator() {
           syncing: `Enviando ${n} orden${n > 1 ? 'es' : ''} pendiente${n > 1 ? 's' : ''}...`,
           synced: `${n} orden${n > 1 ? 'es' : ''} enviada${n > 1 ? 's' : ''} exitosamente`,
           'auth-required': `Inicia sesión para enviar ${n} orden${n > 1 ? 'es' : ''} pendiente${n > 1 ? 's' : ''}`,
+          'fotos-incompletas': `${n} orden${n > 1 ? 'es' : ''} enviada${n > 1 ? 's' : ''} con fotos incompletas — revisa abajo`,
         };
         setMessage(messages[newStatus] || '');
       });
@@ -93,6 +97,11 @@ export default function OfflineIndicator() {
     setPanelOpen(false);
     await refreshStuck();
     syncPendingOrders();
+  };
+
+  const reconocerIncompleta = async (id) => {
+    await acknowledgeIncompleteOrder(id);
+    await refreshStuck();
   };
 
   const config = STATUS_CONFIG[status] || STATUS_CONFIG.online;
@@ -138,7 +147,9 @@ export default function OfflineIndicator() {
                       {o.data?.clienteEmpresa || o.data?.supervisor || `Orden sin enviar`}
                     </p>
                     <p className="text-[10px] text-gray-400">
-                      {o.status === 'auth-required' ? 'Sesión requerida' : `${o.retries || 0} intentos fallidos`}
+                      {o.status === 'auth-required'
+                        ? (o.result?.code === 'SUBSCRIPTION_INACTIVE' ? 'Servicio suspendido' : 'Sesión requerida')
+                        : `${o.retries || 0} intentos fallidos`}
                     </p>
                   </div>
                   <button
@@ -152,6 +163,32 @@ export default function OfflineIndicator() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {incomplete.length > 0 && (
+        <div className={`fixed ${visible ? 'top-12' : 'top-2'} left-2 z-[99] w-72 max-h-80 overflow-y-auto bg-white border border-amber-300 rounded-xl shadow-xl transition-all duration-300`}>
+          <div className="px-3 py-2 border-b border-amber-100 flex items-center gap-1.5 text-amber-700">
+            <ImageOff size={13} />
+            <span className="text-xs font-semibold">Enviadas con fotos incompletas</span>
+          </div>
+          {incomplete.map((o) => (
+            <div key={o.id} className="px-3 py-2 border-b border-amber-50 last:border-0">
+              <p className="text-xs font-medium text-gray-800 truncate">
+                Orden {o.result?.numeroOrden ? `#${o.result.numeroOrden}` : ''} — {o.data?.clienteEmpresa || o.data?.supervisor || 'sin nombre'}
+              </p>
+              <p className="text-[10px] text-gray-500 mt-0.5">
+                Se guardó, pero alguna foto no se subió. Avisa a la oficina para completarla.
+              </p>
+              <button
+                type="button"
+                onClick={() => reconocerIncompleta(o.id)}
+                className="mt-1 text-[11px] font-bold text-amber-700 hover:text-amber-800"
+              >
+                Entendido
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </>

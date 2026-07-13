@@ -7,11 +7,12 @@ import { getOrdenes } from '../utils/api';
 import AppFooter from '../components/AppFooter';
 import SubscriptionBanner from '../components/SubscriptionBanner';
 
+// Los 5 estados reales (ver CHECK de ordenes.estado en 001_init.sql) — no incluye
+// 'Error', que era un residuo de la era Airtable y nunca es un valor válido hoy.
 function EstadoBadge({ estado }) {
   const styles = {
     Enviada: 'bg-blue-500 text-white',
     Completada: 'bg-emerald-500 text-white',
-    Error: 'bg-red-500 text-white',
     Pendiente: 'bg-amber-400 text-black',
     'Facturacion pendiente': 'bg-orange-500 text-white',
     Facturada: 'bg-purple-500 text-white',
@@ -29,15 +30,22 @@ export default function DashboardPage({ pendingCount = 0, subscriptionActive = t
   const [loading, setLoading] = useState(true);
   const [busqueda, setBusqueda] = useState('');
   const [busquedaDebounced, setBusquedaDebounced] = useState('');
+  // Distingue "no hay órdenes" de "hubo un error cargándolas" — antes cualquier falla
+  // de red/timeout caía en el mismo catch que una lista genuinamente vacía y mostraba
+  // "No hay ordenes registradas", sin ninguna pista de que en realidad hubo un
+  // problema de conexión (bug real corregido).
+  const [loadError, setLoadError] = useState(false);
   const debounceRef = useRef(null);
 
   const cargarOrdenes = async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const data = await getOrdenes();
       setOrdenes(data.data || []);
     } catch {
       setOrdenes([]);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -147,10 +155,17 @@ export default function DashboardPage({ pendingCount = 0, subscriptionActive = t
           <div className="flex flex-col items-center justify-center py-16">
             <ClipboardList size={48} className="text-gray-300 mb-3" />
             <p className="text-sm text-gray-400">
-              {busquedaDebounced
+              {loadError
+                ? 'No se pudieron cargar las órdenes — revisa tu conexión'
+                : busquedaDebounced
                 ? `No se encontraron órdenes para '${busquedaDebounced}'`
                 : 'No hay ordenes registradas'}
             </p>
+            {loadError && (
+              <button onClick={cargarOrdenes} className="mt-3 text-sm font-semibold text-accent-600 hover:text-accent-700">
+                Reintentar
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-3">

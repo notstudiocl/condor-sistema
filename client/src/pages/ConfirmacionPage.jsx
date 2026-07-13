@@ -5,6 +5,7 @@ import { APP_VERSION } from '../version';
 export default function ConfirmacionPage({ orden, onNuevaOrden, onReintentar, onInicio, subscriptionActive = true }) {
   const trabajosActivos = (orden.trabajos || []).filter((t) => t.cantidad > 0);
   const isOffline = orden._offline === true;
+  const isSuspendido = isOffline && orden._offlineCode === 'SUBSCRIPTION_INACTIVE';
   const webhookError = orden._webhookError;
   const submitError = orden._submitError;
   const airtableOk = orden._airtableOk;
@@ -28,6 +29,15 @@ export default function ConfirmacionPage({ orden, onNuevaOrden, onReintentar, on
     icon = <AlertTriangle size={48} className="text-white" />;
     title = 'Orden Guardada';
     subtitle = 'Pendiente de procesar';
+  } else if (isSuspendido) {
+    // El kill switch de suscripción (403) antes se veía idéntico a "sin conexión",
+    // ocultando el mensaje real configurado en SUBSCRIPTION_MESSAGE — el técnico
+    // pensaba que era un problema de señal y no sabía que el servicio está suspendido
+    // (bug real corregido).
+    bgClass = 'bg-amber-500';
+    icon = <AlertTriangle size={48} className="text-white" />;
+    title = 'Servicio Suspendido';
+    subtitle = orden._offlineMessage || 'La orden quedó guardada en este dispositivo — contacta a la oficina.';
   } else if (isOffline) {
     bgClass = 'bg-amber-500';
     icon = <Clock size={48} className="text-white" />;

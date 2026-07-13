@@ -1,5 +1,6 @@
 import { LogOut, Plus, ArrowLeft } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { clearWizardSession } from '../pages/OrdenWizardPage';
 
 const logoUrl = import.meta.env.BASE_URL + 'condor-logo.png';
 
@@ -27,7 +28,7 @@ export default function Header({ user, onLogout, subscriptionActive = true }) {
       <div className="flex items-center gap-1.5 min-w-0">
         {isDashboard ? (
           <button
-            onClick={() => subscriptionActive && navigate('/orden/nueva')}
+            onClick={() => subscriptionActive && (clearWizardSession(), navigate('/orden/nueva'))}
             disabled={!subscriptionActive}
             className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors text-sm font-medium shrink-0 ${
               subscriptionActive
