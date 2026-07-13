@@ -242,7 +242,7 @@ export default function ClientesPage() {
   return (
     <div className="space-y-4">
       {gruposConDatos.length > 0 && (
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between bg-red-50 border border-red-200 rounded-xl px-4 py-3.5">
+        <div className="flex flex-col gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3.5">
           <div className="flex items-start gap-2.5">
             <AlertTriangle size={18} className="text-red-500 shrink-0 mt-0.5" />
             <p className="text-sm text-red-800">
@@ -253,9 +253,9 @@ export default function ClientesPage() {
               marca el grupo como "No son duplicados".
             </p>
           </div>
-          <div className="flex gap-2 flex-wrap shrink-0">
+          <div className="flex gap-2 flex-wrap">
             {gruposConDatos.map((g, i) => (
-              <div key={i} className="flex items-center gap-1.5 shrink-0">
+              <div key={i} className="flex items-center gap-1.5">
                 <button onClick={() => abrirFusion(g)} className="btn-accent py-1.5 px-3 text-xs shrink-0">
                   <GitMerge size={13} /> Fusionar {g.clientes[0].empresa || g.clientes[0].nombre}
                 </button>
