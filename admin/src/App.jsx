@@ -39,6 +39,15 @@ function AppRoutes({ user, onLogin, onLogout }) {
           </ProtectedRoute>
         }
       />
+      {/* Antes de /ordenes/:id: si no, react-router matcheara "nueva" como el :id dinámico. */}
+      <Route
+        path="/ordenes/nueva"
+        element={
+          <ProtectedRoute user={user} onLogout={onLogout} title="Nueva orden">
+            <OrdenDetallePage esNuevaOrden />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/ordenes/:id"
         element={

@@ -30,7 +30,11 @@ async function request(path, options = {}) {
     // respuesta sin body JSON (ej. 502 de un proxy) — data queda null, se maneja abajo
   }
 
-  if ((res.status === 401 || res.status === 403) && data?.code !== 'SUBSCRIPTION_INACTIVE') {
+  // /auth/login nunca dispara el evento global de auth-error: un 401/403 acá es
+  // simplemente "credenciales incorrectas" o "usuario inactivo" en el intento de
+  // login (LoginPage ya lo muestra vía su propio catch) — no una sesión que expiró,
+  // así que no debe gatillar el banner "Tu sesión expiró..." en la pantalla de login.
+  if ((res.status === 401 || res.status === 403) && data?.code !== 'SUBSCRIPTION_INACTIVE' && path !== '/auth/login') {
     notifyAuthError({ status: res.status, path });
   }
 

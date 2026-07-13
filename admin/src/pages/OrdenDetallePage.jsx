@@ -41,6 +41,7 @@ import {
   reenviarOrden,
   cambiarEstadoOrden,
   actualizarOrdenAdmin,
+  crearOrdenAdmin,
   agregarFotosOrden,
   eliminarFotoOrden,
   regenerarPdfOrden,
@@ -112,6 +113,12 @@ function parseNumeroInput(value) {
   return isNaN(num) ? 0 : num;
 }
 
+// Fecha de hoy en zona horaria Chile, formato YYYY-MM-DD (input type="date") — 'en-CA'
+// es un truco estándar para obtener ISO directo de toLocaleDateString.
+function todayISOChile() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Santiago' });
+}
+
 function buildFormFromOrden(orden) {
   return {
     fecha: orden.fecha ? String(orden.fecha).slice(0, 10) : '',
@@ -145,7 +152,15 @@ function buildFormFromOrden(orden) {
   };
 }
 
+// Formulario vacío para el modo creación (/ordenes/nueva) — reusa buildFormFromOrden
+// con un objeto vacío (todos los campos caen a sus defaults de '' / [] / null) y solo
+// pisa la fecha con la de hoy, como hace el wizard del técnico.
+function buildFormVacio() {
+  return { ...buildFormFromOrden({}), fecha: todayISOChile() };
+}
+
 const ACCION_LABELS = {
+  crear_orden: 'Creó la orden',
   editar_orden: 'Editó la orden',
   agregar_foto: 'Agregó fotos',
   eliminar_foto: 'Eliminó una foto',
@@ -174,12 +189,12 @@ function ResumenDetalleAuditoria({ detalle }) {
   );
 }
 
-export default function OrdenDetallePage() {
+export default function OrdenDetallePage({ esNuevaOrden = false }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const { addToast } = useToast();
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!esNuevaOrden);
   const [error, setError] = useState('');
   const [orden, setOrden] = useState(null);
   const [notificaciones, setNotificaciones] = useState([]);
@@ -193,8 +208,10 @@ export default function OrdenDetallePage() {
   const [confirmEstado, setConfirmEstado] = useState(null);
 
   // ---- Edición ----
-  const [editMode, setEditMode] = useState(false);
-  const [form, setForm] = useState(null);
+  // En modo creación (/ordenes/nueva) arranca directo en editMode con un formulario
+  // vacío — no hay orden que cargar ni toggle "Editar orden" que apretar.
+  const [editMode, setEditMode] = useState(esNuevaOrden);
+  const [form, setForm] = useState(esNuevaOrden ? buildFormVacio() : null);
   const [guardando, setGuardando] = useState(false);
   const [servicios, setServicios] = useState([]);
   const [tecnicos, setTecnicos] = useState([]);
@@ -203,6 +220,7 @@ export default function OrdenDetallePage() {
   const [fotosParaEliminar, setFotosParaEliminar] = useState([]);
 
   const cargar = async () => {
+    if (esNuevaOrden) return; // nada que cargar — el formulario arranca vacío
     setLoading(true);
     setError('');
     try {
@@ -220,6 +238,7 @@ export default function OrdenDetallePage() {
   };
 
   const cargarAuditoria = async () => {
+    if (esNuevaOrden) return;
     try {
       const res = await getAuditoriaOrden(id);
       setAuditoria(res.data || []);
@@ -257,7 +276,7 @@ export default function OrdenDetallePage() {
     );
   }
 
-  if (error || !orden) {
+  if (!esNuevaOrden && (error || !orden)) {
     return (
       <EmptyState
         icon={AlertCircle}
@@ -280,7 +299,21 @@ export default function OrdenDetallePage() {
       const res = await reenviarOrden(orden.id);
       setConfirmReenviar(false);
       if (res.data?.webhookOk) {
-        addToast('PDF regenerado y notificaciones reenviadas.', { type: 'success' });
+        // webhookOk solo confirma el PDF — las notificaciones (Resend/Telegram) se
+        // intentan aparte y pueden fallar en silencio (p.ej. sin credenciales
+        // configuradas todavía) sin que el request falle, ver ordenService.reenviarOrden.
+        // Se revisa el detalle real en vez de asumir éxito para no informar de más.
+        const notifs = res.data?.webhookData?.notificaciones || [];
+        const notifsOk = notifs.filter((n) => n.ok).length;
+        if (notifs.length === 0) {
+          addToast('PDF regenerado correctamente.', { type: 'success' });
+        } else if (notifsOk === notifs.length) {
+          addToast('PDF regenerado y notificaciones reenviadas.', { type: 'success' });
+        } else if (notifsOk > 0) {
+          addToast(`PDF regenerado. ${notifsOk} de ${notifs.length} notificaciones se enviaron correctamente.`, { type: 'info' });
+        } else {
+          addToast('PDF regenerado, pero ninguna notificación pudo enviarse. Revisa Configuración → Notificaciones.', { type: 'error' });
+        }
       } else {
         addToast(`Orden reenviada, pero el PDF quedó pendiente: ${res.data?.webhookError || 'error desconocido'}`, { type: 'error' });
       }
@@ -336,6 +369,16 @@ export default function OrdenDetallePage() {
     setFotosParaEliminar([]);
     setForm(null);
     setEditMode(false);
+  };
+
+  // En modo creación no hay una orden previa a la que "cancelar" volviendo: el botón
+  // simplemente descarta el formulario y vuelve al listado.
+  const handleCancelar = () => {
+    if (esNuevaOrden) {
+      navigate('/ordenes');
+      return;
+    }
+    cancelarEdicion();
   };
 
   const setCampo = (campo, valor) => setForm((prev) => ({ ...prev, [campo]: valor }));
@@ -436,6 +479,15 @@ export default function OrdenDetallePage() {
           .map((t) => ({ servicioId: t.servicioId || undefined, trabajo: t.trabajo.trim(), cantidad: Number(t.cantidad) || 1 })),
       };
 
+      if (esNuevaOrden) {
+        // Sin fotos/PDF/notificaciones acá — la orden nace en estado 'Enviada' y la
+        // oficina usa "Regenerar PDF"/"Agregar foto" desde la ficha recién creada.
+        const res = await crearOrdenAdmin(payload);
+        addToast(`Orden OT-${res.data.numero_orden_display} creada correctamente.`, { type: 'success' });
+        navigate(`/ordenes/${res.data.id}`);
+        return;
+      }
+
       await actualizarOrdenAdmin(orden.id, payload);
 
       for (const fotoId of fotosParaEliminar) {
@@ -468,15 +520,15 @@ export default function OrdenDetallePage() {
       await cargar();
       await cargarAuditoria();
     } catch (err) {
-      addToast(`No se pudo guardar: ${err.message}`, { type: 'error' });
+      addToast(`No se pudo ${esNuevaOrden ? 'crear la orden' : 'guardar'}: ${err.message}`, { type: 'error' });
     } finally {
       setGuardando(false);
     }
   };
 
-  const timeline = buildTimeline(orden.estado);
-  const trabajos = orden.trabajos || [];
-  const empleados = orden.empleados || [];
+  const timeline = orden ? buildTimeline(orden.estado) : [];
+  const trabajos = orden?.trabajos || [];
+  const empleados = orden?.empleados || [];
   const auditoriaVisible = auditoriaExpandida ? auditoria : auditoria.slice(0, 5);
 
   return (
@@ -490,20 +542,24 @@ export default function OrdenDetallePage() {
           <ArrowLeft size={18} />
         </button>
         <div className="min-w-0">
-          <p className="font-heading font-bold text-lg text-gray-900">OT-{orden.numero_orden_display}</p>
-          <p className="text-xs text-gray-400">{formatFecha(orden.fecha)}</p>
+          <p className="font-heading font-bold text-lg text-gray-900">
+            {esNuevaOrden ? 'Nueva orden' : `OT-${orden.numero_orden_display}`}
+          </p>
+          {!esNuevaOrden && <p className="text-xs text-gray-400">{formatFecha(orden.fecha)}</p>}
         </div>
-        <EstadoBadge estado={orden.estado} solido />
+        {!esNuevaOrden && <EstadoBadge estado={orden.estado} solido />}
 
         <div className="ml-auto flex items-center gap-2 flex-wrap">
           {editMode ? (
             <>
-              <button className="btn-secondary" onClick={cancelarEdicion} disabled={guardando}>
+              <button className="btn-secondary" onClick={handleCancelar} disabled={guardando}>
                 Cancelar
               </button>
               <button className="btn-accent" onClick={handleGuardar} disabled={guardando}>
                 {guardando ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-                {guardando ? 'Guardando...' : 'Guardar cambios'}
+                {guardando
+                  ? esNuevaOrden ? 'Creando...' : 'Guardando...'
+                  : esNuevaOrden ? 'Crear orden' : 'Guardar cambios'}
               </button>
             </>
           ) : (
@@ -536,30 +592,32 @@ export default function OrdenDetallePage() {
         </div>
       </div>
 
-      {/* Timeline de estados */}
-      <div className="card p-5">
-        <div className="flex items-center overflow-x-auto">
-          {timeline.map((step, i) => (
-            <div key={step.estado} className="flex items-center flex-1 min-w-[110px] last:flex-initial">
-              <div className="flex flex-col items-center gap-1.5">
-                <div
-                  className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                    step.hecho ? 'bg-condor-900 text-white' : 'bg-gray-100 text-gray-400'
-                  }`}
-                >
-                  {step.hecho ? <Check size={14} /> : i + 1}
+      {/* Timeline de estados — no aplica todavía en modo creación (la orden no existe) */}
+      {!esNuevaOrden && (
+        <div className="card p-5">
+          <div className="flex items-center overflow-x-auto">
+            {timeline.map((step, i) => (
+              <div key={step.estado} className="flex items-center flex-1 min-w-[110px] last:flex-initial">
+                <div className="flex flex-col items-center gap-1.5">
+                  <div
+                    className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                      step.hecho ? 'bg-condor-900 text-white' : 'bg-gray-100 text-gray-400'
+                    }`}
+                  >
+                    {step.hecho ? <Check size={14} /> : i + 1}
+                  </div>
+                  <span className={`text-[11px] text-center leading-tight ${step.hecho ? 'text-gray-800 font-medium' : 'text-gray-400'}`}>
+                    {step.estado}
+                  </span>
                 </div>
-                <span className={`text-[11px] text-center leading-tight ${step.hecho ? 'text-gray-800 font-medium' : 'text-gray-400'}`}>
-                  {step.estado}
-                </span>
+                {i < timeline.length - 1 && (
+                  <div className={`h-0.5 flex-1 mx-1 ${timeline[i + 1].hecho ? 'bg-condor-900' : 'bg-gray-200'}`} />
+                )}
               </div>
-              {i < timeline.length - 1 && (
-                <div className={`h-0.5 flex-1 mx-1 ${timeline[i + 1].hecho ? 'bg-condor-900' : 'bg-gray-200'}`} />
-              )}
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Columna principal */}
@@ -720,7 +778,10 @@ export default function OrdenDetallePage() {
             )}
           </div>
 
-          {/* Fotos */}
+          {/* Fotos / Notificaciones / Historial — no aplican en modo creación: la orden
+              todavía no existe, no puede tener fotos, notificaciones ni cambios auditados. */}
+          {!esNuevaOrden && (
+          <>
           <div className="card p-5">
             <h2 className="font-heading font-semibold text-gray-900 mb-4">Evidencia fotográfica</h2>
 
@@ -898,6 +959,8 @@ export default function OrdenDetallePage() {
               </div>
             )}
           </div>
+          </>
+          )}
         </div>
 
         {/* Lateral */}
@@ -1137,7 +1200,7 @@ export default function OrdenDetallePage() {
         onClose={() => setConfirmEstado(null)}
         onConfirm={handleCambiarEstado}
         title="Cambiar estado de la orden"
-        message={`¿Confirmas cambiar el estado de OT-${orden.numero_orden_display} a "${confirmEstado}"?`}
+        message={orden ? `¿Confirmas cambiar el estado de OT-${orden.numero_orden_display} a "${confirmEstado}"?` : ''}
         confirmLabel="Cambiar estado"
       />
     </div>

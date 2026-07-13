@@ -106,11 +106,30 @@ function buildPdfKey(orden) {
  * ~10s (corrección de resiliencia #6). Nunca lanza: cada subida se intenta de forma
  * independiente (Promise.allSettled) y las que fallan simplemente no quedan en R2 ni
  * en orden_fotos — la orden nunca se marca como éxito total con fotos perdidas.
+ *
+ * ANTES/DESPUES son evidencia acumulativa por diseño (no se borran filas viejas, a
+ * diferencia de firma/pdf) — por eso el índice de cada foto nueva SIEMPRE continúa
+ * desde `ordenesRepo.siguienteIndiceFoto` (mismo patrón que ya usa correctamente
+ * POST /api/admin/ordenes/:id/fotos) en vez de arrancar en 0. Si no fuera así, una
+ * edición (PUT /api/ordenes/:id) que reenvía fotos nuevas reutilizaría las claves R2
+ * 0-foto/1-foto de la creación original, pisando en silencio el archivo — la fila
+ * vieja en orden_fotos queda apuntando a esa misma key, mostrando como "evidencia
+ * antigua" un archivo que en realidad ya es el nuevo (bug real encontrado en QA:
+ * pérdida silenciosa de evidencia fotográfica al editar, exactamente lo que la
+ * corrección de resiliencia #5 prohíbe).
  */
-async function subirFotosYFirma(numeroOrdenDisplay, data) {
+async function subirFotosYFirma(ordenId, numeroOrdenDisplay, data) {
   const tareas = [];
-  (data.fotosAntes || []).forEach((base64, i) => tareas.push({ tipo: 'antes', index: i, base64 }));
-  (data.fotosDespues || []).forEach((base64, i) => tareas.push({ tipo: 'despues', index: i, base64 }));
+  const fotosAntes = data.fotosAntes || [];
+  if (fotosAntes.length > 0) {
+    let idx = await ordenesRepo.siguienteIndiceFoto(ordenId, 'antes');
+    fotosAntes.forEach((base64) => tareas.push({ tipo: 'antes', index: idx++, base64 }));
+  }
+  const fotosDespues = data.fotosDespues || [];
+  if (fotosDespues.length > 0) {
+    let idx = await ordenesRepo.siguienteIndiceFoto(ordenId, 'despues');
+    fotosDespues.forEach((base64) => tareas.push({ tipo: 'despues', index: idx++, base64 }));
+  }
   if (data.firmaBase64) tareas.push({ tipo: 'firma', index: 0, base64: data.firmaBase64 });
 
   if (tareas.length === 0) return { subidas: [], fotosOk: true };
@@ -303,7 +322,7 @@ async function finalizarOrdenYResponder(ordenBase, data) {
     await ordenesRepo.eliminarFotosPorTipo(ordenBase.id, 'firma');
   }
 
-  const { subidas, fotosOk } = await subirFotosYFirma(ordenBase.numero_orden_display, data);
+  const { subidas, fotosOk } = await subirFotosYFirma(ordenBase.id, ordenBase.numero_orden_display, data);
   for (const s of subidas) {
     await ordenesRepo.agregarFoto(ordenBase.id, {
       tipo: s.tipo, r2Key: s.key, contentType: s.contentType, sizeBytes: s.size, ordenIndex: s.index,

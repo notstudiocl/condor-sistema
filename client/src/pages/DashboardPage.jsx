@@ -13,6 +13,7 @@ function EstadoBadge({ estado }) {
     Completada: 'bg-emerald-500 text-white',
     Error: 'bg-red-500 text-white',
     Pendiente: 'bg-amber-400 text-black',
+    'Facturacion pendiente': 'bg-orange-500 text-white',
     Facturada: 'bg-purple-500 text-white',
   };
   return (
@@ -74,7 +75,7 @@ export default function DashboardPage({ pendingCount = 0, subscriptionActive = t
 
   return (
     <div className="min-h-[calc(100vh-56px)] bg-gray-50">
-      <SubscriptionBanner message={subscriptionMessage} />
+      {!subscriptionActive && <SubscriptionBanner message={subscriptionMessage} />}
       <div className="max-w-lg mx-auto px-4 pt-6 pb-8">
         {/* Pending offline orders banner */}
         {pendingCount > 0 && (

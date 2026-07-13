@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import ExcelJS from 'exceljs';
-import { Download, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
+import { Download, Plus, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 import DataTable from '../components/DataTable';
 import FilterChips from '../components/FilterChips';
 import SearchInput from '../components/SearchInput';
@@ -15,26 +15,31 @@ import { listOrdenes, listEmpleados, cambiarEstadoOrden, cambiarEstadoOrdenesMas
 
 const PAGE_SIZE = 50;
 
+// `format` deja cada celda con el tipo correcto para Excel (no todo como texto):
+// fecha en formato chileno legible, total como número real (sumable/formateable
+// por la oficina al cuadrar contra la factura del contador, ver plan §Órdenes).
 const EXPORT_COLUMNS = [
   { key: 'numero_orden_display', label: 'OT', width: 12 },
-  { key: 'fecha', label: 'Fecha', width: 14 },
+  { key: 'fecha', label: 'Fecha', width: 14, format: formatFecha },
   { key: 'estado', label: 'Estado', width: 18 },
   { key: 'cliente_empresa', label: 'Cliente', width: 28 },
   { key: 'supervisor', label: 'Supervisor', width: 24 },
   { key: 'comuna', label: 'Comuna', width: 18 },
-  { key: 'total', label: 'Total', width: 14 },
+  { key: 'total', label: 'Total', width: 14, format: (v) => Number(v) || 0, numFmt: '#,##0' },
 ];
 
 async function exportExcel(rows) {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Órdenes');
 
-  sheet.columns = EXPORT_COLUMNS.map((c) => ({ header: c.label, key: c.key, width: c.width }));
+  sheet.columns = EXPORT_COLUMNS.map((c) => ({ header: c.label, key: c.key, width: c.width, style: c.numFmt ? { numFmt: c.numFmt } : undefined }));
   sheet.getRow(1).font = { bold: true };
   sheet.getRow(1).alignment = { vertical: 'middle' };
 
   rows.forEach((r) => {
-    sheet.addRow(Object.fromEntries(EXPORT_COLUMNS.map((c) => [c.key, r[c.key] ?? ''])));
+    sheet.addRow(
+      Object.fromEntries(EXPORT_COLUMNS.map((c) => [c.key, c.format ? c.format(r[c.key]) : r[c.key] ?? '']))
+    );
   });
 
   const buffer = await workbook.xlsx.writeBuffer();
@@ -135,6 +140,17 @@ export default function OrdenesListPage() {
 
   useEffect(() => {
     cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, estadosActivos, query]);
+
+  // La selección múltiple (y su suma en CLP) se calcula solo contra `ordenes`, la página
+  // actualmente cargada — ver `seleccionadas`/`sumaSeleccion` más abajo. Si no se limpia
+  // acá, cambiar de página/filtro deja ids seleccionados que ya no están en `ordenes`:
+  // el contador del banner ("N seleccionadas") queda desactualizado mientras la suma cae
+  // silenciosamente a lo que sí sigue visible (o $0), mostrando un total incorrecto justo
+  // en el flujo de "Marcar como Facturada" que se usa para cuadrar contra la factura.
+  useEffect(() => {
+    setSelected([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, estadosActivos, query]);
 
@@ -247,7 +263,7 @@ export default function OrdenesListPage() {
         <FilterChips options={estadoOptions} values={estadosActivos} onChange={handleEstadosChange} />
         <div className="flex items-center gap-2 shrink-0">
           <SearchInput
-            placeholder="Buscar OT, cliente, dirección..."
+            placeholder="Buscar OT, RUT, cliente, dirección..."
             value={query}
             onChange={setQuery}
             onSearch={(v) => {
@@ -265,6 +281,9 @@ export default function OrdenesListPage() {
           >
             <Download size={15} />
             <span className="hidden sm:inline">Exportar a Excel</span>
+          </button>
+          <button onClick={() => navigate('/ordenes/nueva')} className="btn-primary shrink-0">
+            <Plus size={16} /> Nueva orden
           </button>
         </div>
       </div>

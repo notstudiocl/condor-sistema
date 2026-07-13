@@ -273,10 +273,17 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
 
   const updateField = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
-    // Clear error for this field when user types
-    if (errors[field]) {
-      setErrors((prev) => { const next = { ...prev }; delete next[field]; return next; });
-    }
+    // Clear error for this field when user types. Uses the functional setState form
+    // (reads live state, not the `errors` closure) so this also works correctly when
+    // called from handlers memoized with useCallback([]) like handleRutChange, whose
+    // captured `updateField` would otherwise see a permanently-stale `errors` snapshot
+    // from mount and never clear the RUT field's error/red border while typing.
+    setErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
   };
 
   // Debounced RUT search
@@ -305,7 +312,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
   const selectCliente = (cliente) => {
     setForm((prev) => ({
       ...prev,
-      clienteRut: cliente.rut || '',
+      clienteRut: cliente.rut ? formatRut(cliente.rut) : '',
       clienteEmpresa: cliente.empresa && cliente.empresa.trim() ? cliente.empresa : (cliente.nombre || ''),
       supervisor: cliente.nombre || '',
       clienteEmail: cliente.email || '',
@@ -403,39 +410,49 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
     saveFotosToSession(field, filesRef.current);
   };
 
-  // --- VALIDATION (only at submit) ---
-  const validateAll = () => {
+  // --- VALIDATION (por paso, al presionar "Siguiente" — y también completa al enviar) ---
+  const validateStep = (stepIdx) => {
     const errs = {};
 
-    // Step 0: Cliente
-    if (!form.clienteRut.trim()) errs.clienteRut = 'Debe buscar y seleccionar un cliente por RUT';
-    if (!form.clienteEmpresa.trim()) errs.clienteEmpresa = 'El campo Cliente / Empresa es obligatorio';
-    if (!form.supervisor.trim()) errs.supervisor = 'El campo Supervisor / Encargado es obligatorio';
-    if (!form.clienteEmail.trim()) errs.clienteEmail = 'El email es obligatorio';
-    else if (!validateEmail(form.clienteEmail.trim())) errs.clienteEmail = 'El formato del email no es válido';
-    if (!form.clienteTelefono.trim()) errs.clienteTelefono = 'El teléfono es obligatorio';
-    if (!form.direccion.trim()) errs.direccion = 'La dirección es obligatoria';
-    if (!form.comuna.trim()) errs.comuna = 'La comuna es obligatoria';
-
-    // Step 1: Trabajos
-    if (!form.horaInicio) errs.horaInicio = 'La hora de inicio es obligatoria';
-    if (!form.horaTermino) errs.horaTermino = 'La hora de término es obligatoria';
-    const tieneTrabajos = form.trabajos.some((t) => t.cantidad > 0);
-    if (!tieneTrabajos) errs.trabajos = 'Debe seleccionar al menos un trabajo realizado';
-    if (!form.descripcion.trim()) errs.descripcion = 'La descripción del trabajo es obligatoria';
-
-    // Step 2: Personal
-    if (!form.patenteVehiculo.trim()) errs.patenteVehiculo = 'La patente es obligatoria';
-
-    // Step 3: Fotos (check refs, not form state)
-    if (fotosAntesFilesRef.current.length === 0) errs.fotosAntes = 'Debe adjuntar al menos 1 foto del antes';
-    if (fotosDespuesFilesRef.current.length === 0) errs.fotosDespues = 'Debe adjuntar al menos 1 foto del después';
-
-    // Step 4: Firma
-    if (!form.firmaBase64) errs.firmaBase64 = 'La firma es obligatoria para enviar la orden';
+    if (stepIdx === 0) {
+      // Step 0: Cliente
+      if (!form.clienteRut.trim()) errs.clienteRut = 'Debe buscar y seleccionar un cliente por RUT';
+      if (!form.clienteEmpresa.trim()) errs.clienteEmpresa = 'El campo Cliente / Empresa es obligatorio';
+      if (!form.supervisor.trim()) errs.supervisor = 'El campo Supervisor / Encargado es obligatorio';
+      if (!form.clienteEmail.trim()) errs.clienteEmail = 'El email es obligatorio';
+      else if (!validateEmail(form.clienteEmail.trim())) errs.clienteEmail = 'El formato del email no es válido';
+      if (!form.clienteTelefono.trim()) errs.clienteTelefono = 'El teléfono es obligatorio';
+      if (!form.direccion.trim()) errs.direccion = 'La dirección es obligatoria';
+      if (!form.comuna.trim()) errs.comuna = 'La comuna es obligatoria';
+    } else if (stepIdx === 1) {
+      // Step 1: Trabajos
+      if (!form.horaInicio) errs.horaInicio = 'La hora de inicio es obligatoria';
+      if (!form.horaTermino) errs.horaTermino = 'La hora de término es obligatoria';
+      const tieneTrabajos = form.trabajos.some((t) => t.cantidad > 0);
+      if (!tieneTrabajos) errs.trabajos = 'Debe seleccionar al menos un trabajo realizado';
+      if (!form.descripcion.trim()) errs.descripcion = 'La descripción del trabajo es obligatoria';
+    } else if (stepIdx === 2) {
+      // Step 2: Personal
+      if (!form.patenteVehiculo.trim()) errs.patenteVehiculo = 'La patente es obligatoria';
+    } else if (stepIdx === 3) {
+      // Step 3: Fotos (check refs, not form state)
+      if (fotosAntesFilesRef.current.length === 0) errs.fotosAntes = 'Debe adjuntar al menos 1 foto del antes';
+      if (fotosDespuesFilesRef.current.length === 0) errs.fotosDespues = 'Debe adjuntar al menos 1 foto del después';
+    } else if (stepIdx === 4) {
+      // Step 4: Firma
+      if (!form.firmaBase64) errs.firmaBase64 = 'La firma es obligatoria para enviar la orden';
+    }
 
     return errs;
   };
+
+  const validateAll = () => ({
+    ...validateStep(0),
+    ...validateStep(1),
+    ...validateStep(2),
+    ...validateStep(3),
+    ...validateStep(4),
+  });
 
   // Map field names to their step index
   const fieldToStep = {
@@ -447,6 +464,15 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
   };
 
   const handleNext = () => {
+    const errs = validateStep(step);
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs);
+      setTimeout(() => {
+        const el = document.querySelector('[data-error="true"]');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
+      return;
+    }
     setErrors({});
     setStep(step + 1);
   };

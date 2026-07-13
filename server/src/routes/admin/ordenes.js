@@ -86,6 +86,62 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
+// POST /api/admin/ordenes — creación MANUAL desde la oficina (corrección, carga
+// retroactiva, pedido telefónico). A diferencia de POST /api/ordenes (el técnico en
+// terreno, que pasa por ordenService.createOrdenCompleta: genera PDF con Gotenberg,
+// sube fotos a R2 y dispara notificaciones Resend/Telegram porque asume que el trabajo
+// YA se hizo), esta ruta llama directo a ordenesRepo.createOrdenCompleta: crea la orden
+// en estado 'Enviada' sin fotos/PDF/notificaciones — la oficina recién está tipeando
+// los datos. Después, desde la ficha, la oficina puede usar "Regenerar PDF"
+// (POST /:id/regenerar-pdf) y "Agregar foto" (POST /:id/fotos), ambos ya existentes.
+router.post('/', async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const creada = await ordenesRepo.createOrdenCompleta({
+      fecha: body.fecha || null,
+      clienteId: body.clienteId ?? null,
+      clienteEmpresa: body.clienteEmpresa,
+      clienteEmail: body.clienteEmail,
+      clienteTelefono: body.clienteTelefono,
+      direccion: body.direccion,
+      ordenCompra: body.ordenCompra,
+      comuna: body.comuna,
+      supervisor: body.supervisor,
+      horaInicio: body.horaInicio || null,
+      horaTermino: body.horaTermino || null,
+      descripcionTrabajo: body.descripcionTrabajo,
+      observaciones: body.observaciones,
+      garantia: body.garantia,
+      patenteVehiculo: body.patenteVehiculo,
+      total: body.total,
+      metodoPago: body.metodoPago,
+      requiereFactura: body.requiereFactura,
+      empleadoIds: body.empleadoIds || [],
+      trabajos: body.trabajos,
+    });
+
+    auditRepo.registrar({
+      adminUserId: req.admin?.id,
+      accion: 'crear_orden',
+      entidad: 'ordenes',
+      entidadId: String(creada.id),
+      detalle: {
+        clienteEmpresa: body.clienteEmpresa || null,
+        supervisor: body.supervisor || null,
+        direccion: body.direccion || null,
+        comuna: body.comuna || null,
+        descripcionTrabajo: body.descripcionTrabajo || null,
+      },
+    }).catch((err) => console.error('[admin/ordenes] no se pudo registrar auditoría de creación:', err.message));
+
+    const hidratada = await ordenesRepo.getOrdenById(creada.id);
+    const fotos = (hidratada.fotos || []).map((f) => ({ ...f, url: ordenesRepo.buildFotoUrl(f.r2_key) }));
+    res.status(201).json({ success: true, data: { ...hidratada, fotos } });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/admin/ordenes/:id/notificaciones — log de envíos de esta orden (email/telegram)
 router.get('/:id/notificaciones', async (req, res, next) => {
   try {

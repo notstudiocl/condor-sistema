@@ -1,13 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, KeyRound, Copy, Check, Phone, Calendar, UserX, UserCheck, AlertCircle, Smartphone } from 'lucide-react';
+import { Plus, KeyRound, Copy, Check, AlertCircle, Smartphone, UserX, UserCheck } from 'lucide-react';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import SearchInput from '../components/SearchInput';
+import DataTable from '../components/DataTable';
 import EmptyState from '../components/EmptyState';
-import { SkeletonCard } from '../components/Skeleton';
 import { useToast } from '../components/Toast';
 import { formatCLP, formatRut, formatFecha, formatRelativo, iniciales } from '../utils/format';
 import { listEmpleados, getEmpleado, crearEmpleado, actualizarEmpleado, resetPinEmpleado } from '../utils/api';
+
+function EstadoTecnicoBadge({ activo }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap border ${
+        activo ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-gray-100 text-gray-500 border-gray-200'
+      }`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${activo ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+      {activo ? 'Activo' : 'Inactivo'}
+    </span>
+  );
+}
 
 // Convierte los datos crudos del empleado (API) al estado editable del form de la ficha.
 function toFichaForm(data) {
@@ -180,6 +193,88 @@ export default function PersonalPage() {
     }
   };
 
+  const columns = [
+    {
+      key: 'nombre',
+      label: 'Técnico',
+      sortable: true,
+      render: (e) => (
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="h-8 w-8 rounded-lg bg-condor-900 text-white text-xs font-bold flex items-center justify-center shrink-0">
+            {iniciales(e.nombre)}
+          </span>
+          <div className="min-w-0">
+            <p className="font-heading font-semibold text-gray-900 truncate">{e.nombre}</p>
+            <p className="text-[11px] text-gray-400 font-mono">{e.codigo}</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'rut',
+      label: 'RUT',
+      sortable: true,
+      render: (e) => <span className="font-mono text-xs">{formatRut(e.rut)}</span>,
+    },
+    {
+      key: 'telefono',
+      label: 'Contacto',
+      render: (e) => (e.telefono ? <span>{e.telefono}</span> : <span className="text-gray-300">Sin teléfono</span>),
+    },
+    {
+      key: 'total_ordenes',
+      label: 'Órdenes',
+      sortable: true,
+      align: 'right',
+      render: (e) => <span className="font-mono font-bold text-gray-900">{e.total_ordenes}</span>,
+    },
+    {
+      key: 'ultima_orden',
+      label: 'Última / Generado',
+      sortValue: (e) => e.ultima_orden,
+      render: (e) => {
+        const monto = Number(e.monto_generado) || 0;
+        if (monto > 0) return <span className="text-xs">{formatCLP(monto)}</span>;
+        const ultima = formatRelativo(e.ultima_orden);
+        return ultima ? <span className="text-xs text-gray-400 capitalize">{ultima}</span> : <span className="text-gray-300">—</span>;
+      },
+    },
+    {
+      key: 'activo',
+      label: 'Estado',
+      align: 'center',
+      sortValue: (e) => (e.activo ? 1 : 0),
+      sortable: true,
+      render: (e) => <EstadoTecnicoBadge activo={e.activo} />,
+    },
+    {
+      key: 'acciones',
+      label: '',
+      align: 'right',
+      render: (e) => (
+        <div className="flex items-center justify-end gap-1.5" onClick={(ev) => ev.stopPropagation()}>
+          <button
+            onClick={() => {
+              setResetTarget(e);
+              setPinReset(null);
+            }}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-condor-700 hover:bg-condor-50"
+            title="Resetear PIN"
+          >
+            <KeyRound size={14} />
+          </button>
+          <button
+            onClick={() => setConfirmDesactivar(e)}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50"
+            title={e.activo ? 'Desactivar' : 'Reactivar'}
+          >
+            {e.activo ? <UserX size={14} /> : <UserCheck size={14} />}
+          </button>
+        </div>
+      ),
+    },
+  ];
+
   if (error && !loading) {
     return (
       <EmptyState
@@ -207,93 +302,14 @@ export default function PersonalPage() {
         </button>
       </div>
 
-      {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
-        </div>
-      ) : filtrados.length === 0 ? (
-        <EmptyState title="Sin técnicos" description="Prueba ajustando la búsqueda." />
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtrados.map((e) => {
-            const monto = Number(e.monto_generado) || 0;
-            const ultima = monto === 0 ? formatRelativo(e.ultima_orden) : null;
-            return (
-            <div key={e.id} className={`card p-5 ${!e.activo ? 'opacity-60' : ''}`}>
-              <div className="flex items-start justify-between gap-2 mb-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="h-11 w-11 rounded-full bg-condor-900 text-white font-bold flex items-center justify-center shrink-0">
-                    {iniciales(e.nombre)}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="font-heading font-semibold text-gray-900 truncate">{e.nombre}</p>
-                    <p className="text-xs text-gray-400 font-mono">{e.codigo}</p>
-                  </div>
-                </div>
-                {!e.activo && (
-                  <span className="shrink-0 text-[10px] font-bold bg-gray-200 text-gray-600 rounded-full px-2 py-0.5">
-                    Inactivo
-                  </span>
-                )}
-              </div>
-
-              <div className="space-y-1 text-xs text-gray-500 mb-4">
-                <p className="font-mono">{formatRut(e.rut)}</p>
-                <p className="flex items-center gap-1.5">
-                  <Phone size={12} /> {e.telefono || 'Sin teléfono'}
-                </p>
-                <p className="flex items-center gap-1.5">
-                  <Calendar size={12} /> Ingreso {e.fecha_ingreso ? formatFecha(e.fecha_ingreso) : '—'}
-                </p>
-              </div>
-
-              <div className={`grid gap-2 mb-4 ${monto > 0 || ultima ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                <div className="bg-gray-50 rounded-lg p-2.5 text-center">
-                  <p className="font-heading font-bold text-gray-900 text-xl">{e.total_ordenes}</p>
-                  <p className="text-[10px] text-gray-400 uppercase">Órdenes</p>
-                </div>
-                {monto > 0 ? (
-                  <div className="bg-gray-50 rounded-lg p-2.5 text-center">
-                    <p className="font-heading font-bold text-gray-900 text-sm truncate" title={formatCLP(monto)}>
-                      {formatCLP(monto)}
-                    </p>
-                    <p className="text-[10px] text-gray-400 uppercase">Generado</p>
-                  </div>
-                ) : ultima ? (
-                  <div className="bg-gray-50 rounded-lg p-2.5 text-center">
-                    <p className="font-heading font-bold text-gray-900 text-xs capitalize">{ultima}</p>
-                    <p className="text-[10px] text-gray-400 uppercase">Última orden</p>
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button onClick={() => abrirFicha(e)} className="btn-secondary flex-1 py-2 text-xs">
-                  Ver ficha
-                </button>
-                <button
-                  onClick={() => {
-                    setResetTarget(e);
-                    setPinReset(null);
-                  }}
-                  className="btn-secondary py-2 px-2.5"
-                  title="Resetear PIN"
-                >
-                  <KeyRound size={14} />
-                </button>
-                <button
-                  onClick={() => setConfirmDesactivar(e)}
-                  className="btn-secondary py-2 px-2.5"
-                  title={e.activo ? 'Desactivar' : 'Reactivar'}
-                >
-                  {e.activo ? <UserX size={14} /> : <UserCheck size={14} />}
-                </button>
-              </div>
-            </div>
-            );
-          })}
-        </div>
-      )}
+      <DataTable
+        columns={columns}
+        rows={filtrados}
+        loading={loading}
+        onRowClick={abrirFicha}
+        emptyTitle="Sin técnicos"
+        emptyDescription="Prueba ajustando la búsqueda."
+      />
 
       {/* Nuevo técnico */}
       <Modal

@@ -298,9 +298,15 @@ export async function listOrdenesAdmin({ page = 1, limit = 50, estado, q, tecnic
     params.push(Array.isArray(estado) ? estado : [estado]);
   }
   if (q) {
-    conditions.push(`(o.numero_orden_display ILIKE $${i} OR o.cliente_empresa ILIKE $${i} OR o.supervisor ILIKE $${i} OR o.direccion ILIKE $${i} OR o.comuna ILIKE $${i} OR o.descripcion_trabajo ILIKE $${i})`);
-    params.push(`%${q}%`);
-    i++;
+    // RUT normalizado (sin puntos/guión/espacios, minúscula) además del texto libre —
+    // la oficina busca clientes reales por RUT todo el tiempo, y ese dato solo vive
+    // en clientes.rut_normalizado (la orden no guarda el RUT, solo cliente_id).
+    const qNormalizado = String(q).toLowerCase().replace(/[.\-\s]/g, '');
+    conditions.push(
+      `(o.numero_orden_display ILIKE $${i} OR o.cliente_empresa ILIKE $${i} OR o.supervisor ILIKE $${i} OR o.direccion ILIKE $${i} OR o.comuna ILIKE $${i} OR o.descripcion_trabajo ILIKE $${i} OR c.rut_normalizado ILIKE $${i + 1})`
+    );
+    params.push(`%${q}%`, `%${qNormalizado}%`);
+    i += 2;
   }
   if (tecnicoId) {
     conditions.push(`EXISTS (SELECT 1 FROM orden_empleados oe WHERE oe.orden_id = o.id AND oe.empleado_id = $${i++})`);
@@ -317,12 +323,16 @@ export async function listOrdenesAdmin({ page = 1, limit = 50, estado, q, tecnic
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const offset = (page - 1) * limit;
+  // LEFT JOIN solo para poder filtrar por RUT del cliente linkeado (arriba) — se
+  // seleccionan únicamente columnas de o.*, el join no cambia la cardinalidad
+  // (cliente_id -> clientes.id es 1:1 salvo NULL).
+  const fromClause = `ordenes o LEFT JOIN clientes c ON c.id = o.cliente_id`;
 
   const { rows } = await pool.query(
-    `SELECT o.* FROM ordenes o ${where} ORDER BY o.created_at DESC LIMIT $${i} OFFSET $${i + 1}`,
+    `SELECT o.* FROM ${fromClause} ${where} ORDER BY o.created_at DESC LIMIT $${i} OFFSET $${i + 1}`,
     [...params, limit, offset]
   );
-  const { rows: countRows } = await pool.query(`SELECT count(*)::int as total FROM ordenes o ${where}`, params);
+  const { rows: countRows } = await pool.query(`SELECT count(*)::int as total FROM ${fromClause} ${where}`, params);
 
   return { ordenes: rows, total: countRows[0].total, page, limit };
 }

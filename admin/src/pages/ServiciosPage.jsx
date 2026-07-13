@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Plus, Trash2, EyeOff, AlertCircle } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Plus, Trash2, EyeOff, AlertCircle, Pencil, Check, X } from 'lucide-react';
 import DataTable from '../components/DataTable';
 import SearchInput from '../components/SearchInput';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -33,6 +33,10 @@ export default function ServiciosPage() {
   const [nuevoNombre, setNuevoNombre] = useState('');
   const [creando, setCreando] = useState(false);
   const [target, setTarget] = useState(null); // servicio a eliminar/desactivar
+  const [editandoId, setEditandoId] = useState(null);
+  const [editValue, setEditValue] = useState('');
+  const [guardandoNombre, setGuardandoNombre] = useState(false);
+  const editInputRef = useRef(null);
 
   const cargar = async () => {
     setLoading(true);
@@ -97,6 +101,41 @@ export default function ServiciosPage() {
     }
   };
 
+  const iniciarEdicion = (servicio) => {
+    setEditandoId(servicio.id);
+    setEditValue(servicio.nombre);
+    // el input recién se monta este mismo tick — foco+selección en el siguiente frame
+    requestAnimationFrame(() => editInputRef.current?.select());
+  };
+
+  const cancelarEdicion = () => {
+    setEditandoId(null);
+    setEditValue('');
+  };
+
+  const guardarNombre = async (servicio) => {
+    const nombre = editValue.trim();
+    if (!nombre) {
+      cancelarEdicion();
+      return;
+    }
+    if (nombre === servicio.nombre) {
+      cancelarEdicion();
+      return;
+    }
+    setGuardandoNombre(true);
+    try {
+      await actualizarServicio(servicio.id, { nombre });
+      setServicios((prev) => prev.map((s) => (s.id === servicio.id ? { ...s, nombre } : s)));
+      addToast(`Servicio renombrado a "${nombre}". El nuevo nombre también se ve en las órdenes históricas que lo usan.`, { type: 'success' });
+      cancelarEdicion();
+    } catch (err) {
+      addToast(`No se pudo renombrar: ${err.message}`, { type: 'error' });
+    } finally {
+      setGuardandoNombre(false);
+    }
+  };
+
   const handleEliminarOConfirmar = (servicio) => {
     if (servicio.usos > 0) {
       // No se puede eliminar: solo se ofrece desactivar
@@ -119,7 +158,52 @@ export default function ServiciosPage() {
   };
 
   const columns = [
-    { key: 'nombre', label: 'Servicio', sortable: true },
+    {
+      key: 'nombre',
+      label: 'Servicio',
+      sortable: true,
+      render: (s) =>
+        editandoId === s.id ? (
+          <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-1.5">
+            <input
+              ref={editInputRef}
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') guardarNombre(s);
+                if (e.key === 'Escape') cancelarEdicion();
+              }}
+              disabled={guardandoNombre}
+              className="input-field py-1 text-sm flex-1 min-w-0"
+            />
+            <button
+              onClick={() => guardarNombre(s)}
+              disabled={guardandoNombre}
+              title="Guardar"
+              className="shrink-0 p-1 rounded-lg text-emerald-600 hover:bg-emerald-50"
+            >
+              <Check size={15} />
+            </button>
+            <button onClick={cancelarEdicion} title="Cancelar" className="shrink-0 p-1 rounded-lg text-gray-400 hover:bg-gray-100">
+              <X size={15} />
+            </button>
+          </div>
+        ) : (
+          <div className="group/nombre flex items-center gap-1.5">
+            <span>{s.nombre}</span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                iniciarEdicion(s);
+              }}
+              title="Renombrar servicio"
+              className="shrink-0 p-1 rounded text-gray-300 opacity-0 group-hover/nombre:opacity-100 hover:text-condor-700 hover:bg-condor-50 transition-opacity"
+            >
+              <Pencil size={13} />
+            </button>
+          </div>
+        ),
+    },
     { key: 'usos', label: 'Usos', sortable: true, align: 'right' },
     {
       key: 'ultimo_uso',

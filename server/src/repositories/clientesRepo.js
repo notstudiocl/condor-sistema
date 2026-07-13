@@ -92,9 +92,13 @@ export async function upsertClienteByAirtableId(data) {
 }
 
 export async function actualizarCliente(id, data) {
+  // tipo NO usa COALESCE a propósito: es un select nullable ("Sin especificar" -> null)
+  // y su único caller (PUT /api/admin/clientes/:id, ficha 360) siempre manda el valor
+  // completo — con COALESCE, elegir "Sin especificar" nunca lograría limpiar el campo
+  // porque COALESCE($4, tipo) descarta un $4 NULL y conserva el tipo anterior.
   const { rows } = await pool.query(
     `UPDATE clientes SET
-       rut = COALESCE($2, rut), nombre = COALESCE($3, nombre), tipo = COALESCE($4, tipo),
+       rut = COALESCE($2, rut), nombre = COALESCE($3, nombre), tipo = $4,
        empresa = COALESCE($5, empresa), email = COALESCE($6, email), telefono = COALESCE($7, telefono),
        direccion = COALESCE($8, direccion), comuna = COALESCE($9, comuna), updated_at = now()
      WHERE id = $1

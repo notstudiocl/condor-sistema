@@ -107,9 +107,17 @@ router.post('/', authMiddleware, async (req, res) => {
   try {
     const data = { ...(req.body || {}), responsableId: req.user?.recordId || null };
     const result = await ordenService.createOrdenCompleta(data);
+    // Guard obligatorio (plan, resiliencia terreno #6): si el timeout global de 30s ya
+    // respondió 504 mientras esta promesa seguía corriendo, escribir la respuesta acá
+    // tira ERR_HTTP_HEADERS_SENT — sin este guard, y como ese throw ocurre fuera del
+    // try/catch de arriba (ya estamos en el then exitoso), quedaba sin capturar y
+    // tumbaba el proceso Node entero (bug real encontrado en QA: una orden lenta
+    // volteaba el backend para todos los técnicos).
+    if (res.headersSent) return;
     res.json(result);
   } catch (error) {
     console.error('Error creando orden:', error);
+    if (res.headersSent) return;
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -129,10 +137,12 @@ router.put('/:id', authMiddleware, async (req, res) => {
 
     const data = { ...(req.body || {}), responsableId: req.user?.recordId || null };
     const result = await ordenService.actualizarOrdenCompleta(ordenId, data);
+    if (res.headersSent) return; // ver comentario en POST / — mismo guard obligatorio
     if (result.notFound) return res.status(404).json({ success: false, error: 'Orden no encontrada' });
     res.json(result);
   } catch (error) {
     console.error('Error actualizando orden:', error);
+    if (res.headersSent) return;
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -146,9 +156,11 @@ router.post('/:id/reenviar', authMiddleware, async (req, res) => {
     if (!orden) return res.status(404).json({ success: false, error: 'Orden no encontrada' });
 
     const result = await ordenService.reenviarOrden(orden.id);
+    if (res.headersSent) return; // ver comentario en POST / — mismo guard obligatorio
     res.json(result);
   } catch (error) {
     console.error('Error reenviando orden:', error);
+    if (res.headersSent) return;
     res.status(500).json({ success: false, error: error.message });
   }
 });

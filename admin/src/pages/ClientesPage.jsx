@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { GitMerge, ShieldCheck, AlertTriangle, Building2, User, AlertCircle } from 'lucide-react';
+import { GitMerge, ShieldCheck, AlertTriangle, Building2, User, AlertCircle, Plus } from 'lucide-react';
 import DataTable from '../components/DataTable';
 import SearchInput from '../components/SearchInput';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import { useToast } from '../components/Toast';
-import { formatCLP, formatRut } from '../utils/format';
+import { formatCLP, formatRut, formatRutInput } from '../utils/format';
 import {
   listClientes,
   listClientesDuplicados,
   getCliente,
+  crearCliente,
   actualizarCliente,
   fusionarClientes,
   descartarDuplicadoCliente,
@@ -50,6 +51,9 @@ export default function ClientesPage() {
   const [confirmFusion, setConfirmFusion] = useState(false);
   const [fusionando, setFusionando] = useState(false);
   const [descartando, setDescartando] = useState(null);
+
+  const [nuevoOpen, setNuevoOpen] = useState(false);
+  const [creando, setCreando] = useState(false);
 
   const cargar = async () => {
     setLoading(true);
@@ -127,6 +131,33 @@ export default function ClientesPage() {
 
   const abrirFicha = (cliente) => {
     navigate(`/clientes/${cliente.id}`);
+  };
+
+  const handleCrear = async (e) => {
+    e.preventDefault();
+    const form = new FormData(e.target);
+    const data = {
+      rut: form.get('rut'),
+      nombre: form.get('nombre'),
+      tipo: form.get('tipo') || null,
+      empresa: form.get('empresa'),
+      email: form.get('email'),
+      telefono: form.get('telefono'),
+      direccion: form.get('direccion'),
+      comuna: form.get('comuna'),
+    };
+    setCreando(true);
+    try {
+      const res = await crearCliente(data);
+      setNuevoOpen(false);
+      addToast('Cliente creado.', { type: 'success' });
+      cargar();
+      navigate(`/clientes/${res.data.id}`);
+    } catch (err) {
+      addToast(`No se pudo crear el cliente: ${err.message}`, { type: 'error' });
+    } finally {
+      setCreando(false);
+    }
   };
 
   const guardarFicha = async () => {
@@ -274,7 +305,12 @@ export default function ClientesPage() {
 
       <div className="flex items-center justify-between gap-3">
         <SearchInput placeholder="Buscar RUT, nombre, empresa, email..." value={query} onChange={setQuery} className="w-80" />
-        <p className="text-sm text-gray-400 shrink-0">{filtrados.length} clientes</p>
+        <div className="flex items-center gap-3 shrink-0">
+          <p className="text-sm text-gray-400">{filtrados.length} clientes</p>
+          <button onClick={() => setNuevoOpen(true)} className="btn-primary shrink-0">
+            <Plus size={16} /> Nuevo cliente
+          </button>
+        </div>
       </div>
 
       <DataTable
@@ -285,6 +321,76 @@ export default function ClientesPage() {
         emptyTitle="Sin clientes"
         emptyDescription="Prueba ajustando la búsqueda."
       />
+
+      {/* Nuevo cliente */}
+      <Modal
+        open={nuevoOpen}
+        onClose={() => setNuevoOpen(false)}
+        title="Nuevo cliente"
+        footer={
+          <>
+            <button className="btn-secondary" onClick={() => setNuevoOpen(false)}>
+              Cancelar
+            </button>
+            <button className="btn-primary" type="submit" form="form-nuevo-cliente" disabled={creando}>
+              {creando ? 'Creando...' : 'Crear cliente'}
+            </button>
+          </>
+        }
+      >
+        <form id="form-nuevo-cliente" onSubmit={handleCrear} className="space-y-4">
+          <div>
+            <label className="label-field">Nombre (persona de contacto)</label>
+            <input name="nombre" required className="input-field" placeholder="Ej: Carla Curificil" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label-field">RUT</label>
+              <input
+                name="rut"
+                className="input-field"
+                placeholder="12.345.678-9"
+                onChange={(e) => {
+                  e.target.value = formatRutInput(e.target.value);
+                }}
+              />
+            </div>
+            <div>
+              <label className="label-field">Tipo</label>
+              <select name="tipo" className="input-field" defaultValue="">
+                <option value="">Sin especificar</option>
+                <option value="Particular">Particular</option>
+                <option value="Empresa">Empresa</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="label-field">Empresa</label>
+            <input name="empresa" className="input-field" placeholder="Ej: Burger King" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label-field">Email</label>
+              <input name="email" type="email" className="input-field" placeholder="contacto@empresa.cl" />
+            </div>
+            <div>
+              <label className="label-field">Teléfono</label>
+              <input name="telefono" className="input-field" placeholder="+56 9 1234 5678" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label-field">Dirección</label>
+              <input name="direccion" className="input-field" placeholder="Av. Los Leones 1234" />
+            </div>
+            <div>
+              <label className="label-field">Comuna</label>
+              <input name="comuna" className="input-field" placeholder="Providencia" />
+            </div>
+          </div>
+          <p className="text-xs text-gray-400">Solo el nombre es obligatorio. El resto se puede completar después.</p>
+        </form>
+      </Modal>
 
       {/* Ficha 360 */}
       <Modal open={!!ficha} onClose={() => navigate('/clientes')} title={ficha ? ficha.empresa || ficha.nombre : ''} size="lg">

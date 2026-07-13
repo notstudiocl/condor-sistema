@@ -12,6 +12,7 @@ function EstadoBadge({ estado }) {
     Completada: 'bg-emerald-500 text-white',
     Error: 'bg-red-500 text-white',
     Pendiente: 'bg-amber-400 text-black',
+    'Facturacion pendiente': 'bg-orange-500 text-white',
     Facturada: 'bg-purple-500 text-white',
   };
   return (

@@ -9,6 +9,21 @@ export function formatRut(value) {
   return `${body}-${dv}`;
 }
 
+/**
+ * Igual que formatRut pero pensada para formatear un input mientras el usuario
+ * escribe: un valor vacío devuelve '' (no '—'), para no dejar el campo "atascado"
+ * con un guión al borrar todo. Ver client/src/utils/helpers.js#formatRut (misma lógica).
+ */
+export function formatRutInput(value) {
+  if (!value) return '';
+  let clean = String(value).replace(/[^0-9kK-]/g, '').replace(/-/g, '');
+  if (clean.length < 2) return clean;
+  const dv = clean.slice(-1);
+  let body = clean.slice(0, -1);
+  body = body.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${body}-${dv}`;
+}
+
 /** Formatea un monto en CLP con separador de miles: 350000 → $350.000 */
 export function formatCLP(amount) {
   if (amount === null || amount === undefined || amount === '') return '$0';

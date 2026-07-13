@@ -22,8 +22,12 @@ export async function listar({ page = 1, limit = 50, entidad, entidadId, adminUs
   if (entidad) { conditions.push(`a.entidad = $${i++}`); params.push(entidad); }
   if (entidadId != null) { conditions.push(`a.entidad_id = $${i++}`); params.push(String(entidadId)); }
   if (adminUserId) { conditions.push(`a.admin_user_id = $${i++}`); params.push(adminUserId); }
+  // fechaHasta llega como fecha pura ("2026-07-13") desde un <input type="date"> — comparar
+  // con <= la trata como medianoche y excluye cualquier evento de ese mismo día (bug real:
+  // filtrar "Hasta: hoy" devolvía 0 resultados aunque hubiera actividad hoy). Se compara
+  // contra el inicio del día siguiente para incluir el día completo.
   if (fechaDesde) { conditions.push(`a.created_at >= $${i++}`); params.push(fechaDesde); }
-  if (fechaHasta) { conditions.push(`a.created_at <= $${i++}`); params.push(fechaHasta); }
+  if (fechaHasta) { conditions.push(`a.created_at < ($${i++}::date + interval '1 day')`); params.push(fechaHasta); }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const offset = (page - 1) * limit;
   const { rows } = await pool.query(

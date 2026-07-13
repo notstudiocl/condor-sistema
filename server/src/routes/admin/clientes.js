@@ -145,12 +145,23 @@ router.get('/:id/stats', async (req, res, next) => {
   }
 });
 
-// POST /api/admin/clientes — alta manual desde el admin
+// POST /api/admin/clientes — alta manual desde el admin (misma capacidad de
+// CRUD completo que ya tiene Personal/Servicios: la oficina puede crear/editar
+// clientes igual que un técnico los crea implícitamente al enviar una orden nueva).
 router.post('/', async (req, res, next) => {
   try {
     const { rut, nombre, tipo, empresa, email, telefono, direccion, comuna } = req.body || {};
     if (!nombre) return res.status(400).json({ success: false, error: 'nombre es requerido' });
     const cliente = await clientesRepo.crearCliente({ rut, nombre, tipo, empresa, email, telefono, direccion, comuna });
+
+    auditRepo.registrar({
+      adminUserId: req.admin?.id,
+      accion: 'crear_cliente',
+      entidad: 'clientes',
+      entidadId: String(cliente.id),
+      detalle: { nombre, empresa },
+    }).catch((err) => console.error('[admin/clientes] no se pudo registrar auditoría de creación:', err.message));
+
     res.status(201).json({ success: true, data: cliente });
   } catch (err) {
     next(err);
