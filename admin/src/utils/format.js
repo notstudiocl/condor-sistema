@@ -85,6 +85,21 @@ export function formatDuracion(inicio, termino) {
   return `${h} h ${m} min`;
 }
 
+/** Fecha/hora → "hoy", "ayer", "hace N días", "hace N meses"... para stats livianas de UI */
+export function formatRelativo(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return null;
+  const dias = Math.floor((Date.now() - d.getTime()) / 86400000);
+  if (dias <= 0) return 'hoy';
+  if (dias === 1) return 'ayer';
+  if (dias < 30) return `hace ${dias} días`;
+  const meses = Math.floor(dias / 30);
+  if (meses < 12) return `hace ${meses} mes${meses === 1 ? '' : 'es'}`;
+  const anios = Math.floor(meses / 12);
+  return `hace ${anios} año${anios === 1 ? '' : 's'}`;
+}
+
 export function iniciales(nombre) {
   if (!nombre) return '?';
   return nombre

@@ -104,16 +104,50 @@ export async function actualizarCliente(id, data) {
   return rows[0] || null;
 }
 
+// Excluye los grupos ya marcados "revisado, no son duplicados" (rut_grupos_revisados)
+// — ej. empresas con múltiples locales legítimos bajo el mismo RUT.
 export async function listarDuplicados() {
   const { rows } = await pool.query(`
-    SELECT rut_normalizado, array_agg(id) as ids, array_agg(nombre) as nombres,
-           array_agg(empresa) as empresas,
-           (SELECT count(*) FROM ordenes o WHERE o.cliente_id = ANY(array_agg(clientes.id))) as total_ordenes
-    FROM clientes
-    WHERE merged_into IS NULL AND rut_normalizado IS NOT NULL
-    GROUP BY rut_normalizado
+    SELECT c.rut_normalizado, array_agg(c.id) as ids, array_agg(c.nombre) as nombres,
+           array_agg(c.empresa) as empresas,
+           (SELECT count(*) FROM ordenes o WHERE o.cliente_id = ANY(array_agg(c.id))) as total_ordenes
+    FROM clientes c
+    LEFT JOIN rut_grupos_revisados rgr ON rgr.rut_normalizado = c.rut_normalizado
+    WHERE c.merged_into IS NULL AND c.rut_normalizado IS NOT NULL AND rgr.rut_normalizado IS NULL
+    GROUP BY c.rut_normalizado
     HAVING count(*) > 1
   `);
+  return rows;
+}
+
+// Marca un grupo de RUT como revisado ("no son duplicados, son locales/contactos
+// distintos") — lo saca de listarDuplicados() sin fusionar ni tocar las filas de clientes.
+export async function marcarGrupoRevisado(rutNormalizado, adminUserId) {
+  const { rows } = await pool.query(
+    `INSERT INTO rut_grupos_revisados (rut_normalizado, revisado_por, revisado_at)
+     VALUES ($1, $2, now())
+     ON CONFLICT (rut_normalizado) DO UPDATE SET
+       revisado_por = EXCLUDED.revisado_por, revisado_at = now()
+     RETURNING *`,
+    [rutNormalizado, adminUserId || null]
+  );
+  return rows[0];
+}
+
+// Ficha del cliente: otros locales/contactos que comparten el mismo RUT (mismo
+// rut_normalizado), excluyendo el propio y los ya fusionados. Consulta simple,
+// sin tabla nueva — ver decisión de diseño en el header de la migración 002.
+export async function getOtrosClientesMismoRut(clienteId) {
+  const cliente = await getClienteById(clienteId);
+  if (!cliente || !cliente.rut_normalizado) return [];
+  const { rows } = await pool.query(
+    `SELECT c.id, c.nombre, c.empresa, c.comuna, c.direccion,
+            (SELECT count(*)::int FROM ordenes o WHERE o.cliente_id = c.id) as total_ordenes
+     FROM clientes c
+     WHERE c.rut_normalizado = $1 AND c.id <> $2 AND c.merged_into IS NULL
+     ORDER BY c.empresa NULLS LAST, c.nombre`,
+    [cliente.rut_normalizado, clienteId]
+  );
   return rows;
 }
 

@@ -120,29 +120,46 @@ export async function createOrdenCompleta(data) {
 }
 
 /**
- * Actualiza una orden existente (usada por PUT /api/ordenes/:id — editar y reenviar).
+ * Actualiza una orden existente. Usada por:
+ *  - PUT /api/ordenes/:id (técnico, "editar y reenviar" vía ordenService.actualizarOrdenCompleta,
+ *    que siempre pasa estado:'Enviada')
+ *  - PUT /api/admin/ordenes/:id (admin, edición completa desde la ficha — no toca estado,
+ *    que se gestiona aparte vía PATCH /estado)
  * Reemplaza por completo los empleados y trabajos vinculados (delete + reinsert), igual
  * semántica que el PUT actual sobre Airtable (se sobreescribe todo lo enviado).
+ *
+ * `estado`/`fecha` usan COALESCE: si no vienen (caso admin), se conserva el valor actual
+ * en vez de pisarlo — a diferencia del resto de los campos, que SÍ se sobreescriben
+ * siempre (contrato de PUT completo: el caller reenvía el valor vigente de cada campo).
+ *
+ * `unlinkCliente: true` fuerza cliente_id a NULL (botón "Desenlazar" del admin) sin tocar
+ * el snapshot de texto (cliente_empresa/email/telefono) — a diferencia de no pasar
+ * `clienteId`, que conserva el vínculo existente vía COALESCE (comportamiento histórico,
+ * usado por el técnico, que nunca desvincula).
  */
 export async function actualizarOrdenCompleta(ordenId, data) {
   return withTransaction(async (client) => {
-    const clienteId = await resolverClienteId(client, data.clienteId);
+    const unlinkCliente = !!data.unlinkCliente;
+    const clienteId = unlinkCliente ? null : await resolverClienteId(client, data.clienteId);
     const empleadoIds = await resolverEmpleadoIds(client, data.empleadoIds || []);
     const responsableId = await resolverResponsableId(client, data.responsableId);
 
     const { rows } = await client.query(
       `UPDATE ordenes SET
-         estado = $2, cliente_id = COALESCE($3, cliente_id), cliente_empresa = $4, cliente_email = $5,
-         cliente_telefono = $6, direccion = $7, orden_compra = $8, comuna = $9, supervisor = $10,
-         hora_inicio = $11, hora_termino = $12, descripcion_trabajo = $13, observaciones = $14,
-         garantia = $15, patente_vehiculo = $16, total = $17, metodo_pago = $18, requiere_factura = $19,
-         responsable_orden_id = COALESCE($20, responsable_orden_id), updated_at = now()
+         fecha = COALESCE($2, fecha),
+         estado = COALESCE($3, estado),
+         cliente_id = CASE WHEN $4::boolean THEN NULL ELSE COALESCE($5, cliente_id) END,
+         cliente_empresa = $6, cliente_email = $7, cliente_telefono = $8,
+         direccion = $9, orden_compra = $10, comuna = $11, supervisor = $12,
+         hora_inicio = $13, hora_termino = $14, descripcion_trabajo = $15, observaciones = $16,
+         garantia = $17, patente_vehiculo = $18, total = $19, metodo_pago = $20, requiere_factura = $21,
+         responsable_orden_id = COALESCE($22, responsable_orden_id), updated_at = now()
        WHERE id = $1
        RETURNING *`,
       [
-        ordenId, data.estado || 'Enviada', clienteId, data.clienteEmpresa || null,
-        data.clienteEmail || null, data.clienteTelefono || null, data.direccion || null,
-        data.ordenCompra || null, data.comuna || null, data.supervisor || null,
+        ordenId, data.fecha || null, data.estado || null, unlinkCliente, clienteId,
+        data.clienteEmpresa || null, data.clienteEmail || null, data.clienteTelefono || null,
+        data.direccion || null, data.ordenCompra || null, data.comuna || null, data.supervisor || null,
         data.horaInicio || null, data.horaTermino || null, data.descripcionTrabajo || null,
         data.observaciones || null, data.garantia || null, data.patenteVehiculo || null,
         data.total || 0, data.metodoPago || null, data.requiereFactura || false, responsableId,
@@ -187,6 +204,28 @@ export async function agregarFoto(ordenId, { tipo, r2Key, filename, contentType,
 // son evidencia acumulativa por diseño.
 export async function eliminarFotosPorTipo(ordenId, tipo) {
   await pool.query('DELETE FROM orden_fotos WHERE orden_id = $1 AND tipo = $2', [ordenId, tipo]);
+}
+
+// Borra una foto puntual (usado por DELETE /api/admin/ordenes/:id/fotos/:fotoId). Alcance
+// por orden_id además del id de la foto — evita que alguien borre una fila de otra orden
+// adivinando el id. Devuelve la fila borrada (con r2_key) para poder limpiar R2 aparte.
+export async function eliminarFoto(fotoId, ordenId) {
+  const { rows } = await pool.query(
+    'DELETE FROM orden_fotos WHERE id = $1 AND orden_id = $2 RETURNING *',
+    [fotoId, ordenId]
+  );
+  return rows[0] || null;
+}
+
+// Próximo orden_index libre para un tipo de foto de una orden — usado al agregar fotos
+// nuevas a una orden YA EXISTENTE (admin) para no pisar la r2_key de una foto ya subida
+// (las keys son ordenes/{numero}/{tipo}/{index}-foto.ext, determinísticas por índice).
+export async function siguienteIndiceFoto(ordenId, tipo) {
+  const { rows } = await pool.query(
+    `SELECT COALESCE(MAX(orden_index), -1) + 1 as siguiente FROM orden_fotos WHERE orden_id = $1 AND tipo = $2`,
+    [ordenId, tipo]
+  );
+  return rows[0].siguiente;
 }
 
 export async function setEstado(ordenId, estado) {
@@ -286,4 +325,13 @@ export async function listOrdenesAdmin({ page = 1, limit = 50, estado, q, tecnic
   const { rows: countRows } = await pool.query(`SELECT count(*)::int as total FROM ordenes o ${where}`, params);
 
   return { ordenes: rows, total: countRows[0].total, page, limit };
+}
+
+// Elimina la orden y todo lo relacionado (orden_trabajos/orden_empleados/orden_fotos
+// vía ON DELETE CASCADE, ver 001_init.sql). Los objetos en R2 quedan huérfanos
+// deliberadamente (limpieza de storage no es crítica, no vale la latencia/complejidad
+// de borrarlos en el mismo request de una acción admin poco frecuente).
+export async function eliminarOrden(id) {
+  const { rows } = await pool.query('DELETE FROM ordenes WHERE id = $1 RETURNING id, numero_orden_display', [id]);
+  return rows[0] || null;
 }

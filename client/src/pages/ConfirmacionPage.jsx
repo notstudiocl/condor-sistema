@@ -8,6 +8,7 @@ export default function ConfirmacionPage({ orden, onNuevaOrden, onReintentar, on
   const webhookError = orden._webhookError;
   const submitError = orden._submitError;
   const airtableOk = orden._airtableOk;
+  const fotosOk = orden._fotosOk !== false;
   const webhookData = orden._webhookData;
   const webhookOk = !webhookError && !isOffline && airtableOk;
   const numeroOrden = webhookData?.numeroOrden || null;
@@ -46,7 +47,10 @@ export default function ConfirmacionPage({ orden, onNuevaOrden, onReintentar, on
       checks.push({ ok: false, text: `Error al crear registro: ${submitError}` });
     } else {
       checks.push({ ok: airtableOk, text: airtableOk ? 'Registro creado' : 'Error al crear registro' });
-      checks.push({ ok: airtableOk, text: airtableOk ? 'Fotos subidas correctamente' : 'Error al subir fotos' });
+      checks.push({
+        ok: airtableOk && fotosOk,
+        text: airtableOk && fotosOk ? 'Fotos subidas correctamente' : 'Error al subir fotos — reintenta desde el detalle de la orden',
+      });
       checks.push({
         ok: webhookData?.pdfGenerado === true,
         text: webhookData?.pdfGenerado ? 'PDF generado' : 'PDF pendiente de generar',

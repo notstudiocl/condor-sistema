@@ -79,6 +79,14 @@ export const cambiarEstadoOrden = (id, estado) =>
   request(`/admin/ordenes/${id}/estado`, { method: 'PATCH', body: JSON.stringify({ estado }) });
 export const cambiarEstadoOrdenesMasivo = (ids, estado) =>
   request('/admin/ordenes/estado-masivo', { method: 'PATCH', body: JSON.stringify({ ids, estado }) });
+export const actualizarOrdenAdmin = (id, data) =>
+  request(`/admin/ordenes/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+export const agregarFotosOrden = (id, tipo, fotos) =>
+  request(`/admin/ordenes/${id}/fotos`, { method: 'POST', body: JSON.stringify({ tipo, fotos }) });
+export const eliminarFotoOrden = (id, fotoId) =>
+  request(`/admin/ordenes/${id}/fotos/${fotoId}`, { method: 'DELETE' });
+export const regenerarPdfOrden = (id) => request(`/admin/ordenes/${id}/regenerar-pdf`, { method: 'POST' });
+export const getAuditoriaOrden = (id) => request(`/admin/ordenes/${id}/auditoria`);
 
 // ---- Clientes ----
 export const listClientes = () => request('/admin/clientes');
@@ -93,6 +101,10 @@ export const fusionarClientes = (ganadorId, perdedorId, camposResultado) =>
     method: 'POST',
     body: JSON.stringify({ ganadorId, perdedorId, camposResultado }),
   });
+export const descartarDuplicadoCliente = (rutNormalizado) =>
+  request(`/admin/clientes/duplicados/${encodeURIComponent(rutNormalizado)}/descartar`, { method: 'POST' });
+export const getClientesMismoRut = (id) => request(`/admin/clientes/${id}/mismo-rut`);
+export const buscarClientesAdmin = (q) => request(`/admin/clientes/buscar${qs({ q })}`);
 
 // ---- Empleados (técnicos) ----
 export const listEmpleados = () => request('/admin/empleados');
@@ -119,6 +131,11 @@ export const probarCanalNotificacion = (canal, body) =>
   request(`/admin/notificaciones/${canal}/test`, { method: 'POST', body: JSON.stringify(body || {}) });
 export const listNotificacionesLog = (params) => request(`/admin/notificaciones/log${qs(params)}`);
 
+// ---- Configuración general ----
+export const getLogoEmail = () => request('/admin/settings/logo');
+export const subirLogoEmail = (imageBase64) =>
+  request('/admin/settings/logo', { method: 'POST', body: JSON.stringify({ imageBase64 }) });
+
 // ---- Plantillas ----
 export const listPlantillas = () => request('/admin/plantillas');
 export const getPlantilla = (key) => request(`/admin/plantillas/${key}`);
@@ -133,11 +150,6 @@ export const enviarPruebaPlantilla = (templateKey, ordenId, destinatario) =>
     body: JSON.stringify({ templateKey, ordenId, destinatario }),
   });
 
-// ---- Configuración (kill switch de suscripción) ----
-export const getSubscriptionStatus = () => request('/admin/settings/subscription');
-export const setSubscriptionStatus = (active, message) =>
-  request('/admin/settings/subscription', { method: 'PUT', body: JSON.stringify({ active, message }) });
-
 // ---- Usuarios del admin ----
 export const listUsuarios = () => request('/admin/usuarios');
 export const crearUsuario = (data) => request('/admin/usuarios', { method: 'POST', body: JSON.stringify(data) });
@@ -145,6 +157,9 @@ export const actualizarUsuario = (id, data) =>
   request(`/admin/usuarios/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 export const resetPasswordUsuario = (id) => request(`/admin/usuarios/${id}/reset-password`, { method: 'POST' });
 export const eliminarUsuario = (id) => request(`/admin/usuarios/${id}`, { method: 'DELETE' });
+
+// ---- Auditoría ----
+export const getAuditoriaGlobal = (params) => request(`/admin/auditoria${qs(params)}`);
 
 export { request };
 export default request;

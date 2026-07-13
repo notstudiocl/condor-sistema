@@ -17,18 +17,19 @@ function WeeklyBars({ data }) {
   const barW = 34;
   const gap = 18;
   const chartH = 120;
+  const topPad = 22; // espacio para el número sobre la barra más alta, evita que se corte
   const width = data.length * (barW + gap);
 
   return (
-    <svg width="100%" height={chartH + 26} viewBox={`0 0 ${width} ${chartH + 26}`} className="max-w-full">
+    <svg width="100%" height={chartH + topPad + 26} viewBox={`0 0 ${width} ${chartH + topPad + 26}`} className="max-w-full">
       {data.map((d, i) => {
         const h = Math.max((d.cantidad / max) * chartH, 4);
         const x = i * (barW + gap);
-        const y = chartH - h;
+        const y = topPad + (chartH - h);
         return (
           <g key={d.dia}>
             <rect x={x} y={y} width={barW} height={h} rx={6} className="fill-condor-500" />
-            <text x={x + barW / 2} y={chartH + 16} textAnchor="middle" className="fill-gray-500 text-[11px]">
+            <text x={x + barW / 2} y={topPad + chartH + 16} textAnchor="middle" className="fill-gray-500 text-[11px]">
               {d.dia}
             </text>
             <text x={x + barW / 2} y={y - 6} textAnchor="middle" className="fill-gray-700 text-[11px] font-semibold">

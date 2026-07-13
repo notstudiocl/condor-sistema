@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, HeadObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 
 // Cliente genérico contra Cloudflare R2 (API compatible con S3).
 // Sin nada específico del backend HTTP: lo reusan tanto ordenService (F2b) como
@@ -59,6 +59,17 @@ export function buildPublicUrl(key) {
   const publicUrl = process.env.R2_PUBLIC_URL;
   if (!publicUrl) throw new Error('R2_PUBLIC_URL no está definida');
   return `${publicUrl.replace(/\/+$/, '')}/${key}`;
+}
+
+/**
+ * Borra un objeto de R2 — usado (best-effort, nunca crítico) cuando el admin elimina
+ * una foto puntual de una orden. Si falla, el caller solo debe loguear: la fila de
+ * orden_fotos ya se borró en Postgres, que es la fuente de verdad; un objeto huérfano
+ * en R2 no afecta nada (mismo criterio que eliminarOrden en ordenesRepo).
+ */
+export async function deleteObject(key) {
+  if (!key) return;
+  await getClient().send(new DeleteObjectCommand({ Bucket: getBucket(), Key: key }));
 }
 
 /**

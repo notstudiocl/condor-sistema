@@ -10,6 +10,7 @@ import ServiciosPage from './pages/ServiciosPage';
 import NotificacionesPage from './pages/NotificacionesPage';
 import ConfiguracionPage from './pages/ConfiguracionPage';
 import UsuariosAdminPage from './pages/UsuariosAdminPage';
+import AuditoriaPage from './pages/AuditoriaPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { ToastProvider } from './components/Toast';
 import { getSession, saveSession, clearSession } from './utils/auth';
@@ -55,6 +56,14 @@ function AppRoutes({ user, onLogin, onLogout }) {
         }
       />
       <Route
+        path="/clientes/:id"
+        element={
+          <ProtectedRoute user={user} onLogout={onLogout} title="Clientes">
+            <ClientesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/personal"
         element={
           <ProtectedRoute user={user} onLogout={onLogout} title="Personal">
@@ -91,6 +100,14 @@ function AppRoutes({ user, onLogin, onLogout }) {
         element={
           <ProtectedRoute user={user} onLogout={onLogout} title="Usuarios" roles={['admin']}>
             <UsuariosAdminPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/auditoria"
+        element={
+          <ProtectedRoute user={user} onLogout={onLogout} title="Auditoría" roles={['admin']}>
+            <AuditoriaPage />
           </ProtectedRoute>
         }
       />

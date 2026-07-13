@@ -8,6 +8,7 @@ import {
   Bell,
   Settings,
   ShieldCheck,
+  History,
 } from 'lucide-react';
 import { hasRole } from '../utils/auth';
 
@@ -28,7 +29,7 @@ function buildNav(counts) {
       items: [
         { to: '/ordenes', label: 'Órdenes', icon: ClipboardList, badge: counts.porFacturar, badgeTone: 'orange' },
         { to: '/clientes', label: 'Clientes', icon: Users, badge: counts.duplicados, badgeTone: 'red' },
-        { to: '/personal', label: 'Personal', icon: UserCog },
+        { to: '/personal', label: 'Personal', icon: UserCog, hint: 'Técnicos de terreno' },
         { to: '/servicios', label: 'Servicios', icon: Wrench },
       ],
     },
@@ -37,7 +38,8 @@ function buildNav(counts) {
       items: [
         { to: '/notificaciones', label: 'Notificaciones', icon: Bell },
         { to: '/configuracion', label: 'Configuración', icon: Settings, roles: ['admin'] },
-        { to: '/usuarios', label: 'Usuarios', icon: ShieldCheck, roles: ['admin'] },
+        { to: '/usuarios', label: 'Usuarios', icon: ShieldCheck, roles: ['admin'], hint: 'Personal de oficina' },
+        { to: '/auditoria', label: 'Auditoría', icon: History, roles: ['admin'], hint: 'Historial de cambios' },
       ],
     },
   ];
@@ -80,7 +82,10 @@ function NavContent({ user, nav, onNavigate }) {
                   >
                     <span className="flex items-center gap-2.5 min-w-0">
                       <item.icon size={17} className="shrink-0" />
-                      <span className="truncate">{item.label}</span>
+                      <span className="min-w-0 flex flex-col leading-tight">
+                        <span className="truncate">{item.label}</span>
+                        {item.hint && <span className="truncate text-[10px] font-normal text-white/40">{item.hint}</span>}
+                      </span>
                     </span>
                     {!!item.badge && (
                       <span

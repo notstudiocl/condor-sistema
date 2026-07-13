@@ -18,12 +18,48 @@ router.get('/', async (_req, res, next) => {
   }
 });
 
+// GET /api/admin/clientes/buscar?q= — buscador usado para reasignar el cliente de una
+// orden desde su ficha (mismo mecanismo de búsqueda que /api/clientes/buscar del técnico,
+// clientesRepo.buscarClientes, expuesto acá detrás de adminAuthMiddleware).
+router.get('/buscar', async (req, res, next) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    if (q.length < 2) return res.json({ success: true, data: [] });
+    const clientes = await clientesRepo.buscarClientes(q);
+    res.json({ success: true, data: clientes });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/admin/clientes/duplicados — grupos con rut_normalizado repetido (detección
 // server-side, ver plan: 7 grupos reales detectados en la auditoría de Airtable)
 router.get('/duplicados', async (_req, res, next) => {
   try {
     const duplicados = await clientesRepo.listarDuplicados();
     res.json({ success: true, data: duplicados });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/admin/clientes/duplicados/:rutNormalizado/descartar — marca el grupo
+// como "revisado, no son duplicados" (ej. empresa con múltiples locales legítimos).
+// No requiere rol admin: es una acción sobre datos, no de configuración sensible.
+router.post('/duplicados/:rutNormalizado/descartar', async (req, res, next) => {
+  try {
+    const rutNormalizado = req.params.rutNormalizado;
+    const revisado = await clientesRepo.marcarGrupoRevisado(rutNormalizado, req.admin?.id);
+
+    await auditRepo.registrar({
+      adminUserId: req.admin?.id,
+      accion: 'descartar_duplicado_cliente',
+      entidad: 'clientes',
+      entidadId: rutNormalizado,
+      detalle: { rutNormalizado },
+    }).catch((err) => console.error('[admin/clientes] no se pudo registrar auditoría de descarte:', err.message));
+
+    res.json({ success: true, data: revisado });
   } catch (err) {
     next(err);
   }
@@ -79,6 +115,17 @@ router.get('/:id/ordenes', async (req, res, next) => {
       [Number(req.params.id)]
     );
     res.json({ success: true, data: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/admin/clientes/:id/mismo-rut — otros locales/contactos con el mismo RUT
+// (consulta directa por rut_normalizado, sin tabla nueva — ver plan de RUT compartido)
+router.get('/:id/mismo-rut', async (req, res, next) => {
+  try {
+    const otros = await clientesRepo.getOtrosClientesMismoRut(Number(req.params.id));
+    res.json({ success: true, data: otros });
   } catch (err) {
     next(err);
   }

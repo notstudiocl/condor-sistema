@@ -522,6 +522,9 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
           payload._airtableOk = true;
           payload._recordId = result.data.recordId;
         }
+        if (result?.data?.fotosOk !== undefined) {
+          payload._fotosOk = result.data.fotosOk;
+        }
         if (result?.data?.webhookData) {
           payload._webhookData = result.data.webhookData;
         }
@@ -547,6 +550,9 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
           if (result?.data?.airtableOk) {
             payload._airtableOk = true;
             payload._recordId = result.data.recordId;
+          }
+          if (result?.data?.fotosOk !== undefined) {
+            payload._fotosOk = result.data.fotosOk;
           }
           if (result?.data?.webhookData) {
             payload._webhookData = result.data.webhookData;

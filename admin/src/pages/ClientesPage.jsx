@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { GitMerge, AlertTriangle, Building2, User, AlertCircle } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { GitMerge, ShieldCheck, AlertTriangle, Building2, User, AlertCircle } from 'lucide-react';
 import DataTable from '../components/DataTable';
 import SearchInput from '../components/SearchInput';
 import Modal from '../components/Modal';
@@ -8,7 +8,15 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import { useToast } from '../components/Toast';
 import { formatCLP, formatRut } from '../utils/format';
-import { listClientes, listClientesDuplicados, actualizarCliente, fusionarClientes, getOrdenesCliente } from '../utils/api';
+import {
+  listClientes,
+  listClientesDuplicados,
+  getCliente,
+  actualizarCliente,
+  fusionarClientes,
+  descartarDuplicadoCliente,
+  getClientesMismoRut,
+} from '../utils/api';
 
 const CAMPOS_FICHA = [
   ['rut', 'RUT'],
@@ -22,7 +30,8 @@ const CAMPOS_FICHA = [
 
 export default function ClientesPage() {
   const { addToast } = useToast();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { id: fichaId } = useParams();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -33,12 +42,14 @@ export default function ClientesPage() {
   const [ficha, setFicha] = useState(null);
   const [fichaOrdenes, setFichaOrdenes] = useState([]);
   const [fichaEdit, setFichaEdit] = useState(null);
+  const [mismoRut, setMismoRut] = useState([]);
   const [guardando, setGuardando] = useState(false);
 
   const [grupoFusion, setGrupoFusion] = useState(null);
   const [ganador, setGanador] = useState(null);
   const [confirmFusion, setConfirmFusion] = useState(false);
   const [fusionando, setFusionando] = useState(false);
+  const [descartando, setDescartando] = useState(null);
 
   const cargar = async () => {
     setLoading(true);
@@ -58,16 +69,43 @@ export default function ClientesPage() {
     cargar();
   }, []);
 
-  // Deep-link desde el detalle de una orden (?ficha=123) abre la ficha directamente.
+  // La ficha 360 tiene su propia ruta (/clientes/:id) para que quede en el historial
+  // del navegador: al volver de "Ver orden" o "Otros locales con este RUT" (que
+  // navegan a nuevas rutas), history.back() reabre esta misma ficha automáticamente.
   useEffect(() => {
-    const fichaId = searchParams.get('ficha');
-    if (fichaId && clientes.length > 0) {
-      const c = clientes.find((x) => String(x.id) === fichaId);
-      if (c) abrirFicha(c);
-      setSearchParams({}, { replace: true });
+    if (!fichaId) {
+      setFicha(null);
+      setFichaEdit(null);
+      setFichaOrdenes([]);
+      setMismoRut([]);
+      return;
     }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getCliente(fichaId);
+        if (cancelled) return;
+        setFicha(res.data);
+        setFichaEdit({ ...res.data });
+        setFichaOrdenes(res.data.ultimasOrdenes || []);
+      } catch (err) {
+        if (cancelled) return;
+        addToast(`No se pudo cargar el cliente: ${err.message}`, { type: 'error' });
+        navigate('/clientes', { replace: true });
+        return;
+      }
+      try {
+        const rutRes = await getClientesMismoRut(fichaId);
+        if (!cancelled) setMismoRut(rutRes.data || []);
+      } catch {
+        if (!cancelled) setMismoRut([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientes]);
+  }, [fichaId]);
 
   const gruposConDatos = useMemo(() => {
     const clientesPorId = new Map(clientes.map((c) => [String(c.id), c]));
@@ -87,16 +125,8 @@ export default function ClientesPage() {
     );
   }, [clientes, query]);
 
-  const abrirFicha = async (cliente) => {
-    setFicha(cliente);
-    setFichaEdit({ ...cliente });
-    setFichaOrdenes([]);
-    try {
-      const res = await getOrdenesCliente(cliente.id);
-      setFichaOrdenes(res.data || []);
-    } catch {
-      // silencioso — la ficha igual es útil sin el historial
-    }
+  const abrirFicha = (cliente) => {
+    navigate(`/clientes/${cliente.id}`);
   };
 
   const guardarFicha = async () => {
@@ -105,6 +135,7 @@ export default function ClientesPage() {
       await actualizarCliente(ficha.id, {
         rut: fichaEdit.rut,
         nombre: fichaEdit.nombre,
+        tipo: fichaEdit.tipo,
         empresa: fichaEdit.empresa,
         email: fichaEdit.email,
         telefono: fichaEdit.telefono,
@@ -112,7 +143,7 @@ export default function ClientesPage() {
         comuna: fichaEdit.comuna,
       });
       addToast('Cambios guardados.', { type: 'success' });
-      setFicha(null);
+      navigate('/clientes');
       cargar();
     } catch (err) {
       addToast(`No se pudo guardar: ${err.message}`, { type: 'error' });
@@ -124,6 +155,19 @@ export default function ClientesPage() {
   const abrirFusion = (grupo) => {
     setGrupoFusion(grupo);
     setGanador(grupo.clientes.slice().sort((a, b) => b.total_ordenes - a.total_ordenes)[0].id);
+  };
+
+  const descartarGrupo = async (grupo) => {
+    setDescartando(grupo.rutNormalizado);
+    try {
+      await descartarDuplicadoCliente(grupo.rutNormalizado);
+      addToast('Grupo marcado como revisado: no volverá a aparecer como duplicado.', { type: 'success' });
+      cargar();
+    } catch (err) {
+      addToast(`No se pudo descartar: ${err.message}`, { type: 'error' });
+    } finally {
+      setDescartando(null);
+    }
   };
 
   const confirmarFusion = async () => {
@@ -203,15 +247,26 @@ export default function ClientesPage() {
             <AlertTriangle size={18} className="text-red-500 shrink-0 mt-0.5" />
             <p className="text-sm text-red-800">
               <span className="font-semibold">{gruposConDatos.length} grupo{gruposConDatos.length === 1 ? '' : 's'}</span>{' '}
-              de clientes con el mismo RUT detectado{gruposConDatos.length === 1 ? '' : 's'}. Fusionarlos evita historiales
-              partidos.
+              de clientes con el mismo RUT detectado{gruposConDatos.length === 1 ? '' : 's'}. Fusiona solo si es el
+              <span className="font-semibold"> mismo local o contacto</span> duplicado por error — si son
+              <span className="font-semibold"> locales distintos de una misma empresa</span> (ej. distintas sucursales),
+              marca el grupo como "No son duplicados".
             </p>
           </div>
           <div className="flex gap-2 flex-wrap shrink-0">
             {gruposConDatos.map((g, i) => (
-              <button key={i} onClick={() => abrirFusion(g)} className="btn-accent py-1.5 px-3 text-xs shrink-0">
-                <GitMerge size={13} /> Fusionar {g.clientes[0].empresa || g.clientes[0].nombre}
-              </button>
+              <div key={i} className="flex items-center gap-1.5 shrink-0">
+                <button onClick={() => abrirFusion(g)} className="btn-accent py-1.5 px-3 text-xs shrink-0">
+                  <GitMerge size={13} /> Fusionar {g.clientes[0].empresa || g.clientes[0].nombre}
+                </button>
+                <button
+                  onClick={() => descartarGrupo(g)}
+                  disabled={descartando === g.rutNormalizado}
+                  className="btn-secondary py-1.5 px-3 text-xs shrink-0"
+                >
+                  <ShieldCheck size={13} /> {descartando === g.rutNormalizado ? 'Marcando...' : 'No son duplicados'}
+                </button>
+              </div>
             ))}
           </div>
         </div>
@@ -232,10 +287,10 @@ export default function ClientesPage() {
       />
 
       {/* Ficha 360 */}
-      <Modal open={!!ficha} onClose={() => setFicha(null)} title={ficha ? ficha.empresa || ficha.nombre : ''} size="lg">
+      <Modal open={!!ficha} onClose={() => navigate('/clientes')} title={ficha ? ficha.empresa || ficha.nombre : ''} size="lg">
         {ficha && fichaEdit && (
           <div className="space-y-5">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div className="bg-gray-50 rounded-lg p-3">
                 <p className="text-[11px] text-gray-400 uppercase">Órdenes</p>
                 <p className="font-heading font-bold text-lg text-gray-900">{ficha.total_ordenes}</p>
@@ -243,14 +298,6 @@ export default function ClientesPage() {
               <div className="bg-gray-50 rounded-lg p-3">
                 <p className="text-[11px] text-gray-400 uppercase">Total histórico</p>
                 <p className="font-heading font-bold text-lg text-gray-900">{formatCLP(ficha.total_historico)}</p>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-[11px] text-gray-400 uppercase">Tipo</p>
-                <p className="font-heading font-bold text-lg text-gray-900">{ficha.tipo || '—'}</p>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-[11px] text-gray-400 uppercase">Comuna</p>
-                <p className="font-heading font-bold text-lg text-gray-900 truncate">{ficha.comuna || '—'}</p>
               </div>
             </div>
 
@@ -303,6 +350,26 @@ export default function ClientesPage() {
                   onChange={(e) => setFichaEdit((f) => ({ ...f, direccion: e.target.value }))}
                 />
               </div>
+              <div>
+                <label className="label-field">Tipo</label>
+                <select
+                  className="input-field"
+                  value={fichaEdit.tipo || ''}
+                  onChange={(e) => setFichaEdit((f) => ({ ...f, tipo: e.target.value || null }))}
+                >
+                  <option value="">Sin especificar</option>
+                  <option value="Particular">Particular</option>
+                  <option value="Empresa">Empresa</option>
+                </select>
+              </div>
+              <div>
+                <label className="label-field">Comuna</label>
+                <input
+                  className="input-field"
+                  value={fichaEdit.comuna || ''}
+                  onChange={(e) => setFichaEdit((f) => ({ ...f, comuna: e.target.value }))}
+                />
+              </div>
             </div>
 
             {fichaOrdenes.length > 0 && (
@@ -310,10 +377,40 @@ export default function ClientesPage() {
                 <h3 className="text-sm font-semibold text-gray-800 mb-2">Últimas órdenes</h3>
                 <div className="divide-y divide-gray-100 border border-gray-100 rounded-lg overflow-hidden max-h-48 overflow-y-auto">
                   {fichaOrdenes.slice(0, 10).map((o) => (
-                    <div key={o.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                    <button
+                      key={o.id}
+                      onClick={() => navigate(`/ordenes/${o.id}`)}
+                      className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-gray-50 transition-colors"
+                    >
                       <span className="text-gray-700">OT-{o.numero_orden_display}</span>
                       <span className="font-medium text-gray-800">{formatCLP(o.total)}</span>
-                    </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {mismoRut.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-gray-800 mb-2">Otros locales con este RUT</h3>
+                <div className="divide-y divide-gray-100 border border-gray-100 rounded-lg overflow-hidden max-h-48 overflow-y-auto">
+                  {mismoRut.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => navigate(`/clientes/${c.id}`)}
+                      className="w-full flex items-center justify-between gap-3 px-3 py-2.5 text-sm text-left hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-800 truncate">{c.empresa || c.nombre}</p>
+                        <p className="text-xs text-gray-400 truncate">
+                          {c.comuna || 'Sin comuna'}
+                          {c.direccion ? ` · ${c.direccion}` : ''}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-xs font-semibold text-gray-500">
+                        {c.total_ordenes} orden{c.total_ordenes === 1 ? '' : 'es'}
+                      </span>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -353,7 +450,8 @@ export default function ClientesPage() {
                 {grupoFusion.clientes.reduce((acc, c) => acc + (c.id !== ganador ? Number(c.total_ordenes) : 0), 0)} órdenes
               </span>{' '}
               de los registros descartados quedarán vinculadas al registro resultante. Esta acción queda registrada en la
-              auditoría (soft merge, reversible manualmente).
+              auditoría (soft merge, reversible manualmente). Úsala solo si es el mismo local o contacto duplicado por
+              error — si son locales distintos de una misma empresa, cierra este modal y usa "No son duplicados".
             </div>
 
             <div className="overflow-x-auto">

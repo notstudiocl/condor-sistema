@@ -1,7 +1,7 @@
 import * as notificacionesRepo from '../../repositories/notificacionesRepo.js';
 import { enviarEmail } from './resend.js';
 import { enviarTelegram } from './telegram.js';
-import { emailClienteDefault, emailInternoDefault, telegramDefault } from './defaultTemplates.js';
+import { emailClienteDefault, emailInternoDefault, telegramDefault, getLogoUrlConFallback, ORDEN_EJEMPLO } from './defaultTemplates.js';
 import { buildPdfFilename, formatFecha } from '../pdf/template.js';
 
 // Orquesta los 3 mensajes de una orden completada: email al cliente, email interno
@@ -62,8 +62,13 @@ const DEFAULT_RENDERERS = {
 
 // Exportado para que routes/admin/plantillas.js reuse EXACTAMENTE la misma lógica de
 // override-o-default en preview/enviar-prueba (nunca debe divergir del envío real).
-export async function renderPlantilla(templateKey, orden, ctx, defaultFn = DEFAULT_RENDERERS[templateKey]) {
-  const fallback = defaultFn(orden, ctx);
+export async function renderPlantilla(templateKey, orden, ctx = {}, defaultFn = DEFAULT_RENDERERS[templateKey]) {
+  // logoUrl siempre resuelto acá (configurado en el admin o el fallback hardcodeado) —
+  // así ningún caller (dispatch real, preview, enviar-prueba, buildDefaultEditable) se
+  // olvida de pasarlo y el logo nunca queda roto en un email.
+  const logoUrl = ctx.logoUrl || (await getLogoUrlConFallback());
+  const fullCtx = { ...ctx, logoUrl };
+  const fallback = defaultFn(orden, fullCtx);
   let override = null;
   try {
     override = await notificacionesRepo.getTemplate(templateKey);
@@ -79,6 +84,43 @@ export async function renderPlantilla(templateKey, orden, ctx, defaultFn = DEFAU
   const text = override.bloques && override.bloques.length > 0 ? renderBloques(override.bloques, vars) : fallback.text;
 
   return { subject: asunto, html, text };
+}
+
+// Convierte el resultado de un default de código (renderizado sobre una orden real o
+// de ejemplo) en una plantilla "editable": cada valor de `vars` que aparece tal cual en
+// el texto se reemplaza por su token {{var}}. Así, lo que el admin ve al abrir el editor
+// -y lo que guardaría si presiona "Guardar" sin tocar nada- sigue siendo dinámico para
+// los campos soportados, en vez de quedar una foto congelada de una sola orden.
+export function templatizarConVariables(text, vars) {
+  if (!text) return text || '';
+  const entries = Object.entries(vars)
+    .filter(([, value]) => value != null && String(value).length >= 2)
+    .sort((a, b) => String(b[1]).length - String(a[1]).length);
+  let out = text;
+  for (const [key, value] of entries) {
+    out = out.split(String(value)).join(`{{${key}}}`);
+  }
+  return out;
+}
+
+// Arma la representación editable del default de código de un template, para que
+// GET /api/admin/plantillas nunca muestre el editor vacío cuando no hay override
+// guardado. Se renderiza sobre ORDEN_EJEMPLO (no depende de que exista una orden real
+// en la base — importante en una base recién migrada) y se templatiza con las variables
+// soportadas por el editor.
+export async function buildDefaultEditable(templateKey) {
+  const defaultFn = DEFAULT_RENDERERS[templateKey];
+  if (!defaultFn) return { asunto: null, bloques: [] };
+
+  const logoUrl = await getLogoUrlConFallback();
+  const ctx = { pdfUrl: 'https://ejemplo.condoralcantarillados.cl/OT-00123.pdf', logoUrl };
+  const rendered = defaultFn(ORDEN_EJEMPLO, ctx);
+  const vars = buildVariables(ORDEN_EJEMPLO, ctx);
+
+  const asunto = rendered.subject ? templatizarConVariables(rendered.subject, vars) : null;
+  const cuerpo = templatizarConVariables(rendered.html || rendered.text, vars);
+
+  return { asunto, bloques: cuerpo ? [cuerpo] : [] };
 }
 
 async function attemptSend(ordenId, canal, plantilla, destinatario, sendFn) {

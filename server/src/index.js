@@ -13,11 +13,12 @@ import adminEmpleadosRoutes from './routes/admin/empleados.js';
 import adminServiciosRoutes from './routes/admin/servicios.js';
 import adminNotificacionesRoutes from './routes/admin/notificaciones.js';
 import adminPlantillasRoutes from './routes/admin/plantillas.js';
-import adminSettingsRoutes from './routes/admin/settings.js';
 import adminUsuariosRoutes from './routes/admin/usuarios.js';
 import adminDashboardRoutes from './routes/admin/dashboard.js';
+import adminSettingsRoutes from './routes/admin/settings.js';
+import adminAuditoriaRoutes from './routes/admin/auditoria.js';
 import { errorHandler } from './middleware/errorHandler.js';
-import * as notificacionesRepo from './repositories/notificacionesRepo.js';
+import { getSubscriptionStatus, subscriptionGate } from './middleware/subscriptionGate.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -41,17 +42,10 @@ app.use((req, res, next) => {
   next();
 });
 
-// Kill switch de suscripción — leído desde Postgres (app_settings), reemplaza las
-// antiguas env vars SUBSCRIPTION_ACTIVE/SUBSCRIPTION_MESSAGE.
-app.get('/api/subscription-status', async (_req, res) => {
-  try {
-    const status = await notificacionesRepo.getSubscriptionStatus();
-    res.json({ success: true, data: status });
-  } catch (error) {
-    console.error('Error leyendo subscription-status:', error.message);
-    // Nunca bloquear el envío de órdenes por un error leyendo el kill switch.
-    res.json({ success: true, data: { active: true, message: null } });
-  }
+// Endpoint público consultado por la app de terreno (SubscriptionBanner.jsx) para
+// mostrar el aviso de suspensión. Estado real vive en SUBSCRIPTION_ACTIVE/SUBSCRIPTION_MESSAGE.
+app.get('/api/subscription-status', (_req, res) => {
+  res.json({ success: true, data: getSubscriptionStatus() });
 });
 
 app.get('/api/health', (_req, res) => {
@@ -63,6 +57,11 @@ app.use('/api', tecnicosRoutes); // /api/tecnicos-lista (público), /api/tecnico
 app.use('/api', serviciosRoutes); // /api/servicios
 app.use('/api/clientes', clientesRoutes);
 app.use('/api/ordenes', ordenesRoutes);
+
+// Kill switch: bloquea TODO /api/admin/* (incluido el login) si el servicio está
+// suspendido — se monta antes de adminAuthMiddleware en cada ruta admin.
+app.use('/api/admin', subscriptionGate);
+
 app.use('/api/admin/auth', adminAuthRoutes);
 app.use('/api/admin/ordenes', adminOrdenesRoutes);
 app.use('/api/admin/clientes', adminClientesRoutes);
@@ -70,9 +69,10 @@ app.use('/api/admin/empleados', adminEmpleadosRoutes);
 app.use('/api/admin/servicios', adminServiciosRoutes);
 app.use('/api/admin/notificaciones', adminNotificacionesRoutes);
 app.use('/api/admin/plantillas', adminPlantillasRoutes);
-app.use('/api/admin/settings', adminSettingsRoutes);
 app.use('/api/admin/usuarios', adminUsuariosRoutes);
 app.use('/api/admin/dashboard', adminDashboardRoutes);
+app.use('/api/admin/settings', adminSettingsRoutes);
+app.use('/api/admin/auditoria', adminAuditoriaRoutes);
 
 app.use(errorHandler);
 

@@ -40,7 +40,8 @@ export async function listTodos() {
   const { rows } = await pool.query(`
     SELECT e.*,
       (SELECT count(*) FROM orden_empleados oe WHERE oe.empleado_id = e.id) as total_ordenes,
-      (SELECT COALESCE(sum(o.total),0) FROM orden_empleados oe JOIN ordenes o ON o.id = oe.orden_id WHERE oe.empleado_id = e.id) as monto_generado
+      (SELECT COALESCE(sum(o.total),0) FROM orden_empleados oe JOIN ordenes o ON o.id = oe.orden_id WHERE oe.empleado_id = e.id) as monto_generado,
+      (SELECT max(o.created_at) FROM orden_empleados oe JOIN ordenes o ON o.id = oe.orden_id WHERE oe.empleado_id = e.id) as ultima_orden
     FROM empleados e ORDER BY e.nombre
   `);
   return rows;
@@ -114,7 +115,8 @@ export async function getEmpleadoConStats(id) {
   const { rows } = await pool.query(
     `SELECT e.*,
        (SELECT count(*) FROM orden_empleados oe WHERE oe.empleado_id = e.id) as total_ordenes,
-       (SELECT COALESCE(sum(o.total),0) FROM orden_empleados oe JOIN ordenes o ON o.id = oe.orden_id WHERE oe.empleado_id = e.id) as monto_generado
+       (SELECT COALESCE(sum(o.total),0) FROM orden_empleados oe JOIN ordenes o ON o.id = oe.orden_id WHERE oe.empleado_id = e.id) as monto_generado,
+       (SELECT max(o.created_at) FROM orden_empleados oe JOIN ordenes o ON o.id = oe.orden_id WHERE oe.empleado_id = e.id) as ultima_orden
      FROM empleados e WHERE e.id = $1`,
     [id]
   );

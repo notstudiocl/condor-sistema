@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import * as ordenesRepo from '../repositories/ordenesRepo.js';
-import * as notificacionesRepo from '../repositories/notificacionesRepo.js';
 import * as ordenService from '../services/ordenService.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { getSubscriptionStatus } from '../middleware/subscriptionGate.js';
 
 const router = Router();
 
@@ -55,8 +55,8 @@ function shapeOrden(orden) {
   };
 }
 
-async function checkSubscriptionOrReject(res) {
-  const status = await notificacionesRepo.getSubscriptionStatus();
+function checkSubscriptionOrReject(res) {
+  const status = getSubscriptionStatus();
   if (!status.active) {
     res.status(403).json({
       success: false,
@@ -102,7 +102,7 @@ router.get('/:id', async (req, res, next) => {
 // POST /api/ordenes — crear orden completa: idempotencia, cliente, orden+trabajos,
 // fotos/firma a R2, PDF (Gotenberg) y notificaciones (fire-and-forget) vía ordenService.
 router.post('/', authMiddleware, async (req, res) => {
-  if (!(await checkSubscriptionOrReject(res))) return;
+  if (!checkSubscriptionOrReject(res)) return;
 
   try {
     const data = { ...(req.body || {}), responsableId: req.user?.recordId || null };
@@ -116,7 +116,7 @@ router.post('/', authMiddleware, async (req, res) => {
 
 // PUT /api/ordenes/:id — editar y reenviar (regenera PDF + notificaciones vía ordenService)
 router.put('/:id', authMiddleware, async (req, res) => {
-  if (!(await checkSubscriptionOrReject(res))) return;
+  if (!checkSubscriptionOrReject(res)) return;
 
   try {
     const { id } = req.params;
@@ -139,7 +139,7 @@ router.put('/:id', authMiddleware, async (req, res) => {
 
 // POST /api/ordenes/:id/reenviar — regenerar PDF + reenviar notificaciones
 router.post('/:id/reenviar', authMiddleware, async (req, res) => {
-  if (!(await checkSubscriptionOrReject(res))) return;
+  if (!checkSubscriptionOrReject(res)) return;
 
   try {
     const orden = await resolverOrdenPorParam(req.params.id);

@@ -46,7 +46,9 @@ function dispararNotificaciones(orden, ctx) {
   return promise;
 }
 
-function parseBase64Image(base64) {
+// Exportada — reusada por routes/admin/ordenes.js (POST /:id/fotos) para subir fotos
+// nuevas a una orden ya existente con el mismo parseo/validación que usa la creación.
+export function parseBase64Image(base64) {
   const match = /^data:image\/(\w+);base64,(.+)$/.exec(base64 || '');
   if (!match) return null;
   const subtype = match[1].toLowerCase();
@@ -444,3 +446,33 @@ export async function reenviarNotificacionesOrden(ordenId) {
 // "ordenService.reenviarOrden"; mismo comportamiento que reenviarNotificacionesOrden,
 // exportado con ambos nombres para no depender de que F3 tenga que adivinar cuál usar.
 export { reenviarNotificacionesOrden as reenviarOrden };
+
+/**
+ * Regenera SOLO el PDF de una orden ya existente, con los datos ACTUALES en DB —
+ * usado por POST /api/admin/ordenes/:id/regenerar-pdf tras una edición desde el admin.
+ * A diferencia de reenviarNotificacionesOrden/reenviarOrden, esta función NO dispara
+ * notificaciones (email/Telegram): regenerar el PDF después de cada edición administrativa
+ * no debe reenviar avisos al cliente cada vez. Reemplaza la fila 'pdf' en vez de acumular
+ * (mismo criterio 1:1 por orden que el resto del pipeline, ver finalizarOrdenYResponder).
+ */
+export async function regenerarPdf(ordenId) {
+  const orden = await ordenesRepo.getOrdenById(ordenId);
+  if (!orden) {
+    return { success: false, notFound: true, error: 'Orden no encontrada' };
+  }
+
+  const resultadoPdf = await generarYSubirPdf(orden);
+  if (!resultadoPdf.ok) {
+    return { success: false, error: resultadoPdf.error || 'No se pudo generar el PDF' };
+  }
+
+  await ordenesRepo.eliminarFotosPorTipo(orden.id, 'pdf');
+  await ordenesRepo.agregarFoto(orden.id, {
+    tipo: 'pdf', r2Key: resultadoPdf.pdfKey, contentType: 'application/pdf', ordenIndex: 0,
+  });
+
+  return {
+    success: true,
+    data: { pdfUrl: resultadoPdf.pdfUrl, pdfGenerado: true, numeroOrden: orden.numero_orden_display },
+  };
+}

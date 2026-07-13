@@ -1,16 +1,128 @@
-import { useEffect, useState } from 'react';
-import { ShieldAlert, Mail, MessageCircle, Power, Loader2 } from 'lucide-react';
-import ConfirmDialog from '../components/ConfirmDialog';
+import { useEffect, useRef, useState } from 'react';
+import { Mail, MessageCircle, Loader2, Image as ImageIcon, Upload } from 'lucide-react';
 import { SkeletonText } from '../components/Skeleton';
 import { useToast } from '../components/Toast';
 import {
-  getSubscriptionStatus,
-  setSubscriptionStatus,
   listCanalesNotificacion,
   getCanalNotificacion,
   actualizarCanalNotificacion,
   probarCanalNotificacion,
+  getLogoEmail,
+  subirLogoEmail,
 } from '../utils/api';
+
+const LOGO_MAX_BYTES = 2 * 1024 * 1024;
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function LogoEmailCard() {
+  const { addToast } = useToast();
+  const fileInputRef = useRef(null);
+  const [loading, setLoading] = useState(true);
+  const [logoUrl, setLogoUrl] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [archivo, setArchivo] = useState(null);
+  const [subiendo, setSubiendo] = useState(false);
+
+  const cargar = async () => {
+    setLoading(true);
+    try {
+      const res = await getLogoEmail();
+      setLogoUrl(res.data.url);
+    } catch (err) {
+      addToast(`No se pudo cargar el logo actual: ${err.message}`, { type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const elegirArchivo = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      addToast('Selecciona un archivo de imagen (PNG, JPG o WebP).', { type: 'error' });
+      return;
+    }
+    if (file.size > LOGO_MAX_BYTES) {
+      addToast('La imagen supera el máximo de 2MB.', { type: 'error' });
+      return;
+    }
+    setArchivo(file);
+    setPreviewUrl(URL.createObjectURL(file));
+  };
+
+  const subir = async () => {
+    if (!archivo) return;
+    setSubiendo(true);
+    try {
+      const imageBase64 = await fileToBase64(archivo);
+      const res = await subirLogoEmail(imageBase64);
+      setLogoUrl(res.data.url);
+      setArchivo(null);
+      setPreviewUrl(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      addToast('Logo actualizado. Se usará en los próximos correos enviados.', { type: 'success' });
+    } catch (err) {
+      addToast(`No se pudo subir el logo: ${err.message}`, { type: 'error' });
+    } finally {
+      setSubiendo(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="card p-5">
+        <SkeletonText lines={3} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="card p-5 space-y-4">
+      <h3 className="font-heading font-semibold text-gray-900 flex items-center gap-2">
+        <ImageIcon size={16} className="text-gray-400" /> Logo para correos
+      </h3>
+      <p className="text-sm text-gray-500">
+        Se usa en el encabezado de los emails al cliente y el email interno de notificación de OT. Si no se sube
+        ninguno, se usa el logo por defecto del sistema.
+      </p>
+
+      <div className="flex items-center gap-4">
+        <div className="w-40 h-20 rounded-lg border border-dashed border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden shrink-0">
+          {previewUrl || logoUrl ? (
+            <img src={previewUrl || logoUrl} alt="Logo actual" className="max-w-full max-h-full object-contain" />
+          ) : (
+            <span className="text-[11px] text-gray-400 text-center px-2">Sin logo personalizado</span>
+          )}
+        </div>
+        <div className="flex-1 space-y-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            onChange={elegirArchivo}
+            className="block w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-condor-50 file:text-condor-700 hover:file:bg-condor-100"
+          />
+          <button className="btn-primary py-2 px-3 text-xs" onClick={subir} disabled={!archivo || subiendo}>
+            {subiendo ? 'Subiendo...' : <><Upload size={13} /> Subir</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function CanalCard({ canal, icon: Icon, label, extraFields }) {
   const { addToast } = useToast();
@@ -136,130 +248,10 @@ function CanalCard({ canal, icon: Icon, label, extraFields }) {
   );
 }
 
-function KillSwitch() {
-  const { addToast } = useToast();
-  const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState(null);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [mensaje, setMensaje] = useState('');
-  const [aplicando, setAplicando] = useState(false);
-
-  const cargar = async () => {
-    setLoading(true);
-    try {
-      const res = await getSubscriptionStatus();
-      setStatus(res.data);
-      setMensaje(res.data.message || '');
-    } catch (err) {
-      addToast(`No se pudo cargar el estado de suscripción: ${err.message}`, { type: 'error' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    cargar();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const suspender = async () => {
-    setAplicando(true);
-    try {
-      await setSubscriptionStatus(false, mensaje || 'Servicio suspendido temporalmente.');
-      addToast('Suscripción suspendida. La app de terreno mostrará el mensaje a los técnicos.', { type: 'success' });
-      setConfirmOpen(false);
-      cargar();
-    } catch (err) {
-      addToast(`No se pudo suspender: ${err.message}`, { type: 'error' });
-    } finally {
-      setAplicando(false);
-    }
-  };
-
-  const reactivar = async () => {
-    setAplicando(true);
-    try {
-      await setSubscriptionStatus(true, null);
-      addToast('Suscripción reactivada.', { type: 'success' });
-      cargar();
-    } catch (err) {
-      addToast(`No se pudo reactivar: ${err.message}`, { type: 'error' });
-    } finally {
-      setAplicando(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="card p-5">
-        <SkeletonText lines={3} />
-      </div>
-    );
-  }
-
-  return (
-    <div className={`card p-5 space-y-4 ${!status.active ? 'border-red-300 ring-1 ring-red-200' : ''}`}>
-      <div className="flex items-center justify-between">
-        <h3 className="font-heading font-semibold text-gray-900 flex items-center gap-2">
-          <Power size={16} className={status.active ? 'text-emerald-500' : 'text-red-500'} />
-          Kill switch de suscripción
-        </h3>
-        <span
-          className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-            status.active ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
-          }`}
-        >
-          {status.active ? 'Servicio activo' : 'Servicio suspendido'}
-        </span>
-      </div>
-      <p className="text-sm text-gray-500">
-        Al suspender, la app de terreno bloquea la creación de nuevas órdenes y muestra el mensaje configurado a todos
-        los técnicos. Úsalo solo si hay un problema de pago o contrato con Condor.
-      </p>
-      {!status.active && status.message && (
-        <div className="bg-red-50 border border-red-100 rounded-lg px-3 py-2 text-sm text-red-800">{status.message}</div>
-      )}
-
-      {status.active ? (
-        <>
-          <div>
-            <label className="label-field">Mensaje que verán los técnicos al suspender</label>
-            <input
-              className="input-field"
-              value={mensaje}
-              onChange={(e) => setMensaje(e.target.value)}
-              placeholder="Servicio suspendido temporalmente. Contacta a la oficina."
-            />
-          </div>
-          <button className="btn-accent py-2 px-3 text-xs" onClick={() => setConfirmOpen(true)}>
-            <ShieldAlert size={14} /> Suspender servicio
-          </button>
-        </>
-      ) : (
-        <button className="btn-primary py-2 px-3 text-xs" onClick={reactivar} disabled={aplicando}>
-          {aplicando ? 'Reactivando...' : 'Reactivar servicio'}
-        </button>
-      )}
-
-      <ConfirmDialog
-        open={confirmOpen}
-        onClose={() => setConfirmOpen(false)}
-        onConfirm={suspender}
-        loading={aplicando}
-        danger
-        requireText="SUSPENDER"
-        title="Suspender el servicio"
-        message="Esto bloqueará la creación de nuevas órdenes en la app de terreno para todos los técnicos, de inmediato. Queda registrado en auditoría."
-        confirmLabel="Suspender"
-      />
-    </div>
-  );
-}
-
 export default function ConfiguracionPage() {
   return (
     <div className="space-y-4">
-      <KillSwitch />
+      <LogoEmailCard />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <CanalCard
           canal="resend"

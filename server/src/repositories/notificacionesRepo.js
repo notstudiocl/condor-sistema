@@ -115,6 +115,10 @@ export async function eliminarTemplateOverride(templateKey) {
   await pool.query('DELETE FROM notification_templates WHERE template_key = $1', [templateKey]);
 }
 
+// Config genérica key/value en app_settings — usada por config operativa editable desde
+// el admin (p.ej. el logo de los correos, key 'logo_email_url'). NO confundir con el kill
+// switch de suscripción, que vive en variables de entorno de EasyPanel a propósito
+// (ver middleware/subscriptionGate.js) — ninguna de las dos apps puede leerlo ni editarlo.
 export async function getSetting(key) {
   const { rows } = await pool.query('SELECT value FROM app_settings WHERE key = $1', [key]);
   return rows[0]?.value ?? null;
@@ -126,17 +130,4 @@ export async function setSetting(key, value, updatedBy) {
      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = now()`,
     [key, JSON.stringify(value), updatedBy]
   );
-}
-
-// Kill switch de suscripción — reemplaza las env vars SUBSCRIPTION_ACTIVE/SUBSCRIPTION_MESSAGE.
-// Sin fila en app_settings = suscripción activa por defecto (nunca bloquear por ausencia de config).
-export async function getSubscriptionStatus() {
-  const value = await getSetting('subscription_active');
-  if (value === null) return { active: true, message: null };
-  if (typeof value === 'boolean') return { active: value, message: null };
-  return { active: value.active !== false, message: value.message || null };
-}
-
-export async function setSubscriptionActive(active, message, updatedBy) {
-  await setSetting('subscription_active', { active: !!active, message: message || null }, updatedBy);
 }

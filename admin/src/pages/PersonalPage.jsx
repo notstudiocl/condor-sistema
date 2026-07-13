@@ -1,13 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, KeyRound, Copy, Check, Phone, Calendar, UserX, UserCheck, AlertCircle } from 'lucide-react';
+import { Plus, KeyRound, Copy, Check, Phone, Calendar, UserX, UserCheck, AlertCircle, Smartphone } from 'lucide-react';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import SearchInput from '../components/SearchInput';
 import EmptyState from '../components/EmptyState';
 import { SkeletonCard } from '../components/Skeleton';
 import { useToast } from '../components/Toast';
-import { formatCLP, formatRut, formatFecha, iniciales } from '../utils/format';
+import { formatCLP, formatRut, formatFecha, formatRelativo, iniciales } from '../utils/format';
 import { listEmpleados, getEmpleado, crearEmpleado, actualizarEmpleado, resetPinEmpleado } from '../utils/api';
+
+// Convierte los datos crudos del empleado (API) al estado editable del form de la ficha.
+function toFichaForm(data) {
+  return {
+    nombre: data.nombre || '',
+    rut: data.rut || '',
+    telefono: data.telefono || '',
+    usuario: data.usuario || '',
+    activo: data.activo ?? true,
+    fechaIngreso: data.fecha_ingreso ? String(data.fecha_ingreso).slice(0, 10) : '',
+    especialidades: Array.isArray(data.especialidades) ? data.especialidades.join(', ') : '',
+  };
+}
 
 function PinRevelado({ pin, label }) {
   const [copiado, setCopiado] = useState(false);
@@ -40,6 +53,8 @@ export default function PersonalPage() {
 
   const [query, setQuery] = useState('');
   const [ficha, setFicha] = useState(null);
+  const [fichaForm, setFichaForm] = useState(null);
+  const [guardandoFicha, setGuardandoFicha] = useState(false);
   const [nuevoOpen, setNuevoOpen] = useState(false);
   const [creando, setCreando] = useState(false);
   const [pinNuevo, setPinNuevo] = useState(null);
@@ -122,11 +137,46 @@ export default function PersonalPage() {
 
   const abrirFicha = async (e) => {
     setFicha({ ...e, ultimasOrdenes: [] });
+    setFichaForm(toFichaForm(e));
     try {
       const res = await getEmpleado(e.id);
       setFicha(res.data);
+      setFichaForm(toFichaForm(res.data));
     } catch {
       // silencioso — la ficha básica ya se ve
+    }
+  };
+
+  const cerrarFicha = () => {
+    setFicha(null);
+    setFichaForm(null);
+  };
+
+  const handleGuardarFicha = async (e) => {
+    e.preventDefault();
+    if (!ficha || !fichaForm) return;
+    setGuardandoFicha(true);
+    try {
+      const especialidades = fichaForm.especialidades
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const res = await actualizarEmpleado(ficha.id, {
+        nombre: fichaForm.nombre,
+        rut: fichaForm.rut,
+        telefono: fichaForm.telefono,
+        usuario: fichaForm.usuario,
+        activo: fichaForm.activo,
+        fechaIngreso: fichaForm.fechaIngreso || null,
+        especialidades,
+      });
+      setFicha((prev) => ({ ...prev, ...res.data }));
+      addToast('Cambios guardados.', { type: 'success' });
+      cargar();
+    } catch (err) {
+      addToast(`No se pudieron guardar los cambios: ${err.message}`, { type: 'error' });
+    } finally {
+      setGuardandoFicha(false);
     }
   };
 
@@ -144,6 +194,12 @@ export default function PersonalPage() {
 
   return (
     <div className="space-y-4">
+      <p className="text-sm text-gray-500 flex items-center gap-1.5">
+        <Smartphone size={14} className="text-gray-400 shrink-0" />
+        Técnicos que usan la app móvil de terreno (Usuario + PIN) — distinto de los{' '}
+        <span className="font-medium text-gray-600">Usuarios</span> del panel de oficina.
+      </p>
+
       <div className="flex items-center justify-between gap-3">
         <SearchInput placeholder="Buscar por nombre, RUT o código..." value={query} onChange={setQuery} className="w-80" />
         <button onClick={() => setNuevoOpen(true)} className="btn-primary shrink-0">
@@ -159,7 +215,10 @@ export default function PersonalPage() {
         <EmptyState title="Sin técnicos" description="Prueba ajustando la búsqueda." />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtrados.map((e) => (
+          {filtrados.map((e) => {
+            const monto = Number(e.monto_generado) || 0;
+            const ultima = monto === 0 ? formatRelativo(e.ultima_orden) : null;
+            return (
             <div key={e.id} className={`card p-5 ${!e.activo ? 'opacity-60' : ''}`}>
               <div className="flex items-start justify-between gap-2 mb-3">
                 <div className="flex items-center gap-3 min-w-0">
@@ -188,17 +247,24 @@ export default function PersonalPage() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 mb-4">
+              <div className={`grid gap-2 mb-4 ${monto > 0 || ultima ? 'grid-cols-2' : 'grid-cols-1'}`}>
                 <div className="bg-gray-50 rounded-lg p-2.5 text-center">
-                  <p className="font-heading font-bold text-gray-900">{e.total_ordenes}</p>
+                  <p className="font-heading font-bold text-gray-900 text-xl">{e.total_ordenes}</p>
                   <p className="text-[10px] text-gray-400 uppercase">Órdenes</p>
                 </div>
-                <div className="bg-gray-50 rounded-lg p-2.5 text-center">
-                  <p className="font-heading font-bold text-gray-900 text-sm truncate" title={formatCLP(e.monto_generado)}>
-                    {formatCLP(e.monto_generado)}
-                  </p>
-                  <p className="text-[10px] text-gray-400 uppercase">Generado</p>
-                </div>
+                {monto > 0 ? (
+                  <div className="bg-gray-50 rounded-lg p-2.5 text-center">
+                    <p className="font-heading font-bold text-gray-900 text-sm truncate" title={formatCLP(monto)}>
+                      {formatCLP(monto)}
+                    </p>
+                    <p className="text-[10px] text-gray-400 uppercase">Generado</p>
+                  </div>
+                ) : ultima ? (
+                  <div className="bg-gray-50 rounded-lg p-2.5 text-center">
+                    <p className="font-heading font-bold text-gray-900 text-xs capitalize">{ultima}</p>
+                    <p className="text-[10px] text-gray-400 uppercase">Última orden</p>
+                  </div>
+                ) : null}
               </div>
 
               <div className="flex items-center gap-2">
@@ -224,7 +290,8 @@ export default function PersonalPage() {
                 </button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -301,11 +368,28 @@ export default function PersonalPage() {
         )}
       </Modal>
 
-      {/* Ficha */}
-      <Modal open={!!ficha} onClose={() => setFicha(null)} title={ficha ? ficha.nombre : ''} size="lg">
-        {ficha && (
+      {/* Ficha — datos reales editables, guardado real vía PUT */}
+      <Modal
+        open={!!ficha}
+        onClose={cerrarFicha}
+        title={ficha ? ficha.nombre : ''}
+        size="lg"
+        footer={
+          ficha && (
+            <>
+              <button className="btn-secondary" onClick={cerrarFicha}>
+                Cerrar
+              </button>
+              <button className="btn-primary" type="submit" form="form-editar-tecnico" disabled={guardandoFicha}>
+                {guardandoFicha ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+            </>
+          )
+        }
+      >
+        {ficha && fichaForm && (
           <div className="space-y-5">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className={`grid grid-cols-2 gap-3 ${Number(ficha.monto_generado ?? ficha.montoGenerado ?? 0) > 0 ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
               <div className="bg-gray-50 rounded-lg p-3">
                 <p className="text-[11px] text-gray-400 uppercase">Código</p>
                 <p className="font-heading font-bold text-lg text-gray-900 font-mono">{ficha.codigo}</p>
@@ -314,15 +398,88 @@ export default function PersonalPage() {
                 <p className="text-[11px] text-gray-400 uppercase">Órdenes</p>
                 <p className="font-heading font-bold text-lg text-gray-900">{ficha.total_ordenes ?? ficha.totalOrdenes ?? 0}</p>
               </div>
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-[11px] text-gray-400 uppercase">Generado</p>
-                <p className="font-heading font-bold text-lg text-gray-900">{formatCLP(ficha.monto_generado ?? ficha.montoGenerado ?? 0)}</p>
-              </div>
+              {Number(ficha.monto_generado ?? ficha.montoGenerado ?? 0) > 0 && (
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-[11px] text-gray-400 uppercase">Generado</p>
+                  <p className="font-heading font-bold text-lg text-gray-900">{formatCLP(ficha.monto_generado ?? ficha.montoGenerado ?? 0)}</p>
+                </div>
+              )}
               <div className="bg-gray-50 rounded-lg p-3">
                 <p className="text-[11px] text-gray-400 uppercase">Estado</p>
-                <p className="font-heading font-bold text-lg text-gray-900">{ficha.activo ? 'Activo' : 'Inactivo'}</p>
+                <p className="font-heading font-bold text-lg text-gray-900">{fichaForm.activo ? 'Activo' : 'Inactivo'}</p>
               </div>
             </div>
+
+            <form id="form-editar-tecnico" onSubmit={handleGuardarFicha} className="space-y-4">
+              <div>
+                <label className="label-field">Nombre completo</label>
+                <input
+                  className="input-field"
+                  required
+                  value={fichaForm.nombre}
+                  onChange={(ev) => setFichaForm((f) => ({ ...f, nombre: ev.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label-field">RUT</label>
+                  <input
+                    className="input-field"
+                    placeholder="12.345.678-9"
+                    value={fichaForm.rut}
+                    onChange={(ev) => setFichaForm((f) => ({ ...f, rut: ev.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="label-field">Teléfono</label>
+                  <input
+                    className="input-field"
+                    placeholder="+56 9 1234 5678"
+                    value={fichaForm.telefono}
+                    onChange={(ev) => setFichaForm((f) => ({ ...f, telefono: ev.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label-field">Usuario (login app móvil)</label>
+                  <input
+                    className="input-field"
+                    required
+                    value={fichaForm.usuario}
+                    onChange={(ev) => setFichaForm((f) => ({ ...f, usuario: ev.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="label-field">Fecha de ingreso</label>
+                  <input
+                    type="date"
+                    className="input-field"
+                    value={fichaForm.fechaIngreso}
+                    onChange={(ev) => setFichaForm((f) => ({ ...f, fechaIngreso: ev.target.value }))}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="label-field">Especialidades</label>
+                <input
+                  className="input-field"
+                  placeholder="Ej: Hidrojet, CCTV, Fosas sépticas"
+                  value={fichaForm.especialidades}
+                  onChange={(ev) => setFichaForm((f) => ({ ...f, especialidades: ev.target.value }))}
+                />
+                <p className="text-xs text-gray-400 mt-1">Separadas por coma.</p>
+              </div>
+              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  className="rounded border-gray-300"
+                  checked={fichaForm.activo}
+                  onChange={(ev) => setFichaForm((f) => ({ ...f, activo: ev.target.checked }))}
+                />
+                Activo (puede iniciar sesión en la app de terreno)
+              </label>
+            </form>
 
             <div>
               <h3 className="text-sm font-semibold text-gray-800 mb-2">Últimas órdenes</h3>

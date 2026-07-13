@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, KeyRound, Trash2, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Plus, KeyRound, Trash2, ShieldCheck, AlertCircle, Building2 } from 'lucide-react';
 import DataTable from '../components/DataTable';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -13,7 +13,7 @@ const ROL_LABEL = { admin: 'Administrador', oficina: 'Oficina' };
 
 const MATRIZ_PERMISOS = [
   { seccion: 'Dashboard, Órdenes, Clientes, Personal, Servicios, Notificaciones', oficina: true, admin: true },
-  { seccion: 'Configuración (kill switch, claves Resend/Telegram)', oficina: false, admin: true },
+  { seccion: 'Configuración (claves Resend/Telegram)', oficina: false, admin: true },
   { seccion: 'Usuarios del panel', oficina: false, admin: true },
   { seccion: 'Eliminar órdenes', oficina: false, admin: true },
 ];
@@ -230,6 +230,12 @@ export default function UsuariosAdminPage() {
 
   return (
     <div className="space-y-4">
+      <p className="text-sm text-gray-500 flex items-center gap-1.5">
+        <Building2 size={14} className="text-gray-400 shrink-0" />
+        Personal de oficina que usa este panel (email + contraseña) — distinto del{' '}
+        <span className="font-medium text-gray-600">Personal</span> técnico de terreno.
+      </p>
+
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-gray-500">{usuarios.length} usuario{usuarios.length === 1 ? '' : 's'} del panel</p>
         <button onClick={() => setNuevoOpen(true)} className="btn-primary shrink-0">

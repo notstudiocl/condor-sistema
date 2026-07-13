@@ -1,4 +1,5 @@
 import { formatFecha, formatHora } from '../pdf/template.js';
+import { getSetting } from '../../repositories/notificacionesRepo.js';
 
 // Puerto fiel de las plantillas del flujo n8n original:
 //   - "Notificación Cliente"   (n8n-nodes-base.gmail, id 3438be48-...)
@@ -17,6 +18,53 @@ import { formatFecha, formatHora } from '../pdf/template.js';
 // para el template_key correspondiente, dispatch.js la usa en su lugar.
 
 const LOGO_URL = 'https://raw.githubusercontent.com/notstudiocl/condor-sistema/main/client/public/condor-logo.png';
+
+// Logo configurable desde el admin (Configuración -> "Logo para correos"): se sube a R2
+// (branding/logo.png) y la URL pública queda en app_settings['logo_email_url']. Si nunca
+// se configuró nada, se usa el LOGO_URL de arriba — un email nunca debe quedar sin logo.
+export async function getLogoUrlConFallback() {
+  try {
+    const value = await getSetting('logo_email_url');
+    const url = typeof value === 'string' ? value : value?.url;
+    return url || LOGO_URL;
+  } catch (err) {
+    console.error('[notificaciones] no se pudo leer logo_email_url, uso el default de código:', err.message);
+    return LOGO_URL;
+  }
+}
+
+// Orden de ejemplo, 100% en memoria (no depende de que exista una orden real en la
+// base) — usada por dispatch.buildDefaultEditable para que el editor de plantillas del
+// admin siempre pueda mostrar los defaults de código con datos realistas, incluso en
+// una base recién migrada sin órdenes todavía.
+export const ORDEN_EJEMPLO = {
+  id: 0,
+  numero_orden_display: '00123',
+  fecha: new Date().toISOString().slice(0, 10),
+  estado: 'Completada',
+  cliente_empresa: 'Comercial Ejemplo Ltda.',
+  cliente_email: 'contacto@ejemplo.cl',
+  cliente_telefono: '+56 9 1234 5678',
+  cliente: { rut: '76.123.456-7' },
+  direccion: 'Av. Providencia 1234',
+  comuna: 'Providencia',
+  orden_compra: 'OC-001',
+  supervisor: 'Juan Pérez',
+  hora_inicio: `${new Date().toISOString().slice(0, 10)}T08:30:00`,
+  hora_termino: `${new Date().toISOString().slice(0, 10)}T12:00:00`,
+  empleados: [{ nombre: 'Carlos Méndez' }, { nombre: 'Diego Silva' }],
+  patente_vehiculo: 'AB-CD-12',
+  trabajos: [
+    { servicio_nombre: 'Hora Camión Hidrojet', cantidad: 2 },
+    { servicio_nombre: 'Destape de alcantarillado', cantidad: 1 },
+  ],
+  descripcion_trabajo: 'Se realizó destape e hidrolavado de cámaras de alcantarillado en el sector indicado.',
+  observaciones: 'Cliente solicita visita de seguimiento en 3 meses.',
+  total: 350000,
+  metodo_pago: 'Transferencia',
+  requiere_factura: true,
+  garantia: '3 meses',
+};
 
 function formatCLP(total) {
   const n = Number(total || 0);
@@ -54,10 +102,11 @@ function personalTexto(orden) {
 // ============================================================
 // Email Cliente — "su orden fue completada"
 // ============================================================
-export function emailClienteDefault(orden, { pdfUrl } = {}) {
+export function emailClienteDefault(orden, { pdfUrl, logoUrl } = {}) {
   const numeroOrden = orden.numero_orden_display || 'S/N';
   const fecha = formatFecha(orden.fecha);
   const clienteNombre = orden.cliente_empresa || 'Cliente';
+  const logo = logoUrl || LOGO_URL;
 
   const subject = `Orden de Trabajo N° ${numeroOrden} - Condor Alcantarillados`;
 
@@ -83,7 +132,7 @@ export function emailClienteDefault(orden, { pdfUrl } = {}) {
 
   <tr>
     <td style="padding:28px 40px 20px;text-align:center;border-bottom:2px solid #e2e8f0;">
-      <img src="${LOGO_URL}" alt="Condor Alcantarillados" width="200" style="display:block;margin:0 auto 10px;width:200px;max-width:200px;height:auto;" />
+      <img src="${logo}" alt="Condor Alcantarillados" width="200" style="display:block;margin:0 auto 10px;width:200px;max-width:200px;height:auto;" />
       <p style="margin:0;font-size:11px;color:#94a3b8;font-family:Helvetica,Arial,sans-serif;letter-spacing:0.5px;">Soluciones Sanitarias &bull; Transportes de Residuos &bull; Hidrojet</p>
     </td>
   </tr>
@@ -210,9 +259,10 @@ export function emailClienteDefault(orden, { pdfUrl } = {}) {
 // ============================================================
 // Email Interno — "OT completada" (alcantarilladoscondor@gmail.com)
 // ============================================================
-export function emailInternoDefault(orden, { pdfUrl } = {}) {
+export function emailInternoDefault(orden, { pdfUrl, logoUrl } = {}) {
   const numeroOrden = orden.numero_orden_display || 'S/N';
   const fecha = formatFecha(orden.fecha);
+  const logo = logoUrl || LOGO_URL;
 
   const subject = `[OT ${numeroOrden}] Completada — ${orden.cliente_empresa || 'Sin cliente'} — ${orden.comuna || ''}`;
 
@@ -243,7 +293,7 @@ export function emailInternoDefault(orden, { pdfUrl } = {}) {
 
   <tr>
     <td style="padding:24px 28px 16px;text-align:center;border-bottom:2px solid #e2e8f0;">
-      <img src="${LOGO_URL}" alt="Condor Alcantarillados" width="180" style="display:block;margin:0 auto;width:180px;max-width:180px;height:auto;" />
+      <img src="${logo}" alt="Condor Alcantarillados" width="180" style="display:block;margin:0 auto;width:180px;max-width:180px;height:auto;" />
     </td>
   </tr>
 

@@ -12,11 +12,18 @@ export async function registrar({ adminUserId, accion, entidad, entidadId, detal
   );
 }
 
-export async function listar({ page = 1, limit = 50, entidad }) {
+// Lista paginada con filtros opcionales. Usada tanto por la vista global
+// (GET /api/admin/auditoria, todos los filtros) como por el historial de una orden
+// puntual (GET /api/admin/ordenes/:id/auditoria, solo entidad+entidadId).
+export async function listar({ page = 1, limit = 50, entidad, entidadId, adminUserId, fechaDesde, fechaHasta } = {}) {
   const conditions = [];
   const params = [];
   let i = 1;
-  if (entidad) { conditions.push(`entidad = $${i++}`); params.push(entidad); }
+  if (entidad) { conditions.push(`a.entidad = $${i++}`); params.push(entidad); }
+  if (entidadId != null) { conditions.push(`a.entidad_id = $${i++}`); params.push(String(entidadId)); }
+  if (adminUserId) { conditions.push(`a.admin_user_id = $${i++}`); params.push(adminUserId); }
+  if (fechaDesde) { conditions.push(`a.created_at >= $${i++}`); params.push(fechaDesde); }
+  if (fechaHasta) { conditions.push(`a.created_at <= $${i++}`); params.push(fechaHasta); }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const offset = (page - 1) * limit;
   const { rows } = await pool.query(
@@ -25,5 +32,6 @@ export async function listar({ page = 1, limit = 50, entidad }) {
      ${where} ORDER BY a.created_at DESC LIMIT $${i} OFFSET $${i + 1}`,
     [...params, limit, offset]
   );
-  return rows;
+  const { rows: countRows } = await pool.query(`SELECT count(*)::int as total FROM audit_log a ${where}`, params);
+  return { rows, total: countRows[0].total, page, limit };
 }

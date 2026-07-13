@@ -4,7 +4,7 @@ import Modal from './Modal';
 
 /**
  * Diálogo de confirmación genérico. Soporta `requireText` para acciones
- * destructivas críticas (ej. kill switch: escribir "SUSPENDER").
+ * destructivas críticas (ej. escribir el nombre exacto antes de eliminar).
  */
 export default function ConfirmDialog({
   open,

@@ -4,7 +4,7 @@ import * as ordenesRepo from '../../repositories/ordenesRepo.js';
 import { buildPublicUrl } from '../../services/storage/r2.js';
 import { enviarEmail } from '../../services/notifications/resend.js';
 import { enviarTelegram } from '../../services/notifications/telegram.js';
-import { renderPlantilla, VARIABLE_WHITELIST, buildVariables } from '../../services/notifications/dispatch.js';
+import { renderPlantilla, VARIABLE_WHITELIST, buildVariables, buildDefaultEditable } from '../../services/notifications/dispatch.js';
 import { adminAuthMiddleware } from '../../middleware/adminAuth.js';
 import { requireRole } from '../../middleware/requireRole.js';
 
@@ -34,23 +34,39 @@ function pdfUrlDeOrden(orden) {
   return pdfFoto ? buildPublicUrl(pdfFoto.r2_key) : null;
 }
 
+// Arma la respuesta de un template: el override guardado si existe, o si no el default
+// de código ya "templatizado" (buildDefaultEditable) — el editor del admin nunca debe
+// mostrarse vacío, con o sin override.
+async function plantillaResponse(templateKey, override) {
+  if (override) {
+    return {
+      templateKey,
+      tieneOverride: true,
+      asunto: override.asunto ?? null,
+      bloques: override.bloques ?? [],
+      activo: override.activo ?? true,
+      updatedBy: override.updated_by ?? null,
+      updatedAt: override.updated_at ?? null,
+    };
+  }
+  const def = await buildDefaultEditable(templateKey);
+  return {
+    templateKey,
+    tieneOverride: false,
+    asunto: def.asunto,
+    bloques: def.bloques,
+    activo: true,
+    updatedBy: null,
+    updatedAt: null,
+  };
+}
+
 // GET /api/admin/plantillas — las 3 plantillas, marcando cuáles tienen override
 router.get('/', adminAuthMiddleware, async (_req, res, next) => {
   try {
     const overrides = await Promise.all(TEMPLATE_KEYS.map((key) => notificacionesRepo.getTemplate(key)));
-    res.json({
-      success: true,
-      data: TEMPLATE_KEYS.map((key, i) => ({
-        templateKey: key,
-        tieneOverride: !!overrides[i],
-        asunto: overrides[i]?.asunto ?? null,
-        bloques: overrides[i]?.bloques ?? [],
-        activo: overrides[i]?.activo ?? true,
-        updatedBy: overrides[i]?.updated_by ?? null,
-        updatedAt: overrides[i]?.updated_at ?? null,
-      })),
-      variablesDisponibles: VARIABLE_WHITELIST,
-    });
+    const data = await Promise.all(TEMPLATE_KEYS.map((key, i) => plantillaResponse(key, overrides[i])));
+    res.json({ success: true, data, variablesDisponibles: VARIABLE_WHITELIST });
   } catch (err) {
     next(err);
   }
@@ -60,19 +76,8 @@ router.get('/', adminAuthMiddleware, async (_req, res, next) => {
 router.get('/:key', adminAuthMiddleware, validarTemplateKey, async (req, res, next) => {
   try {
     const override = await notificacionesRepo.getTemplate(req.params.key);
-    res.json({
-      success: true,
-      data: {
-        templateKey: req.params.key,
-        tieneOverride: !!override,
-        asunto: override?.asunto ?? null,
-        bloques: override?.bloques ?? [],
-        activo: override?.activo ?? true,
-        updatedBy: override?.updated_by ?? null,
-        updatedAt: override?.updated_at ?? null,
-      },
-      variablesDisponibles: VARIABLE_WHITELIST,
-    });
+    const data = await plantillaResponse(req.params.key, override);
+    res.json({ success: true, data, variablesDisponibles: VARIABLE_WHITELIST });
   } catch (err) {
     next(err);
   }

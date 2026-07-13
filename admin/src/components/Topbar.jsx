@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Search, LogOut, ChevronDown, Menu } from 'lucide-react';
 import { iniciales } from '../utils/format';
+import NotificationBell from './NotificationBell';
 
 const ROL_LABEL = { admin: 'Administrador', oficina: 'Oficina' };
 
@@ -62,8 +63,9 @@ export default function Topbar({ title, user, onLogout, onOpenMobileNav }) {
         </div>
       </div>
 
-      <div className="ml-auto flex items-center gap-3" ref={menuRef}>
-        <div className="relative">
+      <div className="ml-auto flex items-center gap-1.5">
+        <NotificationBell />
+        <div className="relative" ref={menuRef}>
           <button
             onClick={() => setMenuOpen((o) => !o)}
             className="flex items-center gap-2.5 pl-1.5 pr-2 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"

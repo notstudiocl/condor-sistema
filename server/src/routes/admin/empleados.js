@@ -66,17 +66,56 @@ router.post('/', async (req, res, next) => {
   }
 });
 
+// Compara antes/después solo para los campos que vinieron en el body (evita
+// registrar en auditoría campos que ni siquiera se intentaron cambiar).
+function diffCamposEmpleado(antes, despues, enviados) {
+  const cambios = {};
+  for (const [campo, key] of Object.entries({
+    rut: 'rut', nombre: 'nombre', activo: 'activo', telefono: 'telefono',
+    usuario: 'usuario', fecha_ingreso: 'fechaIngreso', especialidades: 'especialidades',
+  })) {
+    if (enviados[key] === undefined) continue;
+    const a = antes[campo];
+    const b = despues[campo];
+    const iguales = Array.isArray(a) || Array.isArray(b)
+      ? JSON.stringify(a || []) === JSON.stringify(b || [])
+      : String(a ?? '') === String(b ?? '');
+    if (!iguales) cambios[campo] = { antes: a ?? null, despues: b ?? null };
+  }
+  return cambios;
+}
+
 // PUT /api/admin/empleados/:id — edición de datos (incluye activar/desactivar)
 router.put('/:id', async (req, res, next) => {
   try {
+    const id = Number(req.params.id);
     const { rut, nombre, activo, telefono, usuario, fechaIngreso, especialidades } = req.body || {};
-    const empleado = await empleadosRepo.actualizarEmpleado(Number(req.params.id), {
+
+    const antes = await empleadosRepo.getEmpleadoById(id);
+    if (!antes) return res.status(404).json({ success: false, error: 'Técnico no encontrado' });
+
+    const empleado = await empleadosRepo.actualizarEmpleado(id, {
       rut, nombre, activo, telefono, usuario, fechaIngreso, especialidades,
     });
     if (!empleado) return res.status(404).json({ success: false, error: 'Técnico no encontrado' });
+
+    const cambios = diffCamposEmpleado(antes, empleado, { rut, nombre, activo, telefono, usuario, fechaIngreso, especialidades });
+    if (Object.keys(cambios).length > 0) {
+      auditRepo.registrar({
+        adminUserId: req.admin?.id,
+        accion: 'editar_empleado',
+        entidad: 'empleados',
+        entidadId: id,
+        detalle: { nombre: empleado.nombre, cambios },
+      }).catch((err) => console.error('[admin/empleados] no se pudo registrar auditoría de edición:', err.message));
+    }
+
     const { pin_hash, ...safe } = empleado;
     res.json({ success: true, data: safe });
   } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ success: false, error: 'Ya existe otro técnico con ese usuario o RUT' });
+    }
     next(err);
   }
 });

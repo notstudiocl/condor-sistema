@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import ExcelJS from 'exceljs';
 import { Download, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 import DataTable from '../components/DataTable';
 import FilterChips from '../components/FilterChips';
@@ -14,25 +15,34 @@ import { listOrdenes, listEmpleados, cambiarEstadoOrden, cambiarEstadoOrdenesMas
 
 const PAGE_SIZE = 50;
 
-function exportCsv(rows) {
-  const headers = ['numero_orden_display', 'fecha', 'estado', 'cliente_empresa', 'supervisor', 'comuna', 'total'];
-  const lines = [headers.join(',')];
+const EXPORT_COLUMNS = [
+  { key: 'numero_orden_display', label: 'OT', width: 12 },
+  { key: 'fecha', label: 'Fecha', width: 14 },
+  { key: 'estado', label: 'Estado', width: 18 },
+  { key: 'cliente_empresa', label: 'Cliente', width: 28 },
+  { key: 'supervisor', label: 'Supervisor', width: 24 },
+  { key: 'comuna', label: 'Comuna', width: 18 },
+  { key: 'total', label: 'Total', width: 14 },
+];
+
+async function exportExcel(rows) {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Órdenes');
+
+  sheet.columns = EXPORT_COLUMNS.map((c) => ({ header: c.label, key: c.key, width: c.width }));
+  sheet.getRow(1).font = { bold: true };
+  sheet.getRow(1).alignment = { vertical: 'middle' };
+
   rows.forEach((r) => {
-    lines.push(
-      headers
-        .map((h) => {
-          const v = r[h] ?? '';
-          const s = String(v).replace(/"/g, '""');
-          return /[",\n]/.test(s) ? `"${s}"` : s;
-        })
-        .join(',')
-    );
+    sheet.addRow(Object.fromEntries(EXPORT_COLUMNS.map((c) => [c.key, r[c.key] ?? ''])));
   });
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `ordenes_condor_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `ordenes_condor_${new Date().toISOString().slice(0, 10)}.xlsx`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -246,9 +256,15 @@ export default function OrdenesListPage() {
             }}
             className="w-72"
           />
-          <button onClick={() => exportCsv(ordenes)} className="btn-secondary shrink-0" title="Exporta la página actual">
+          <button
+            onClick={() =>
+              exportExcel(ordenes).catch((err) => addToast(`No se pudo exportar: ${err.message}`, { type: 'error' }))
+            }
+            className="btn-secondary shrink-0"
+            title="Exporta la página actual"
+          >
             <Download size={15} />
-            <span className="hidden sm:inline">Exportar CSV</span>
+            <span className="hidden sm:inline">Exportar a Excel</span>
           </button>
         </div>
       </div>
