@@ -1,0 +1,8 @@
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+!server/.env.example
+.git
+n8n
+migration
