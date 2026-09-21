@@ -205,9 +205,16 @@ data.{ airtableOk, recordId, webhookOk, webhookError, duplicate, fotosOk,
 
 `numero_orden` (viene de la secuencia `ordenes_numero_seq`), `numero_orden_display` (GENERATED), `id`, `created_at`, `updated_at` son automáticos en Postgres. No incluirlos en el create/update.
 
-## PDF y notificaciones (reemplazo de n8n)
+## PDF y notificaciones (n8n quedó solo como cartero opcional)
 
-Ya no existe n8n en el flujo — todo vive en `server/src/services/`.
+El trabajo pesado (guardar, subir a R2, generar PDF con Gotenberg, renderizar plantillas) vive en `server/src/services/`. n8n ya NO orquesta nada: en **modo híbrido** solo entrega los mensajes que el backend le manda listos (mismo patrón que `hya-sistema`).
+
+### Modo híbrido vía n8n (`notifications/webhookN8n.js`)
+
+- Con URL de webhook (`app_settings.webhook_notificaciones_url`, editable en Configuración → "Envío vía n8n"; fallback env `WEBHOOK_NOTIFICACIONES_URL`, hoy seteada en `condor-app`), `dispatchNotificaciones` hace UN POST con `{ evento, emails:[{plantilla,to,cc,from,replyTo,subject,html}], telegram:{texto}, pdfs:[{nombre,url}], orden }`. Se sigue registrando una fila de `notificacion_log` por mensaje.
+- Workflow: **"Condor 360 — Notificaciones (híbrido motor)"** (id `xHDVroUIki70ilfa`) en el n8n NUEVO y compartido `infra-n8n.f8ihph.easypanel.host` (proyecto EasyPanel "infra", donde también vive Gotenberg), path `/webhook/condor-notificaciones`. Usa la credencial Resend "Resend HYA" (es la cuenta Resend de NotStudio, dominio verificado `noreply.notstudio.cl` — por eso el remitente default es `notificaciones@noreply.notstudio.cl`) y el bot "Hermes NotStudio" al chat `-5133715111`. Las credenciales de API de ese n8n están en `hya-sistema/.env` (`N8N_NUEVO_API_*`). El n8n VIEJO (`n8n.virtualkeys.store`) solo atiende a la app antigua y se apaga tras el corte.
+- Sin URL: envío in-process con las credenciales de `notification_channels` (lo descrito abajo).
+- **Modo desarrollo**: `app_settings.email_dev_redirect` o env `EMAIL_DEV_REDIRECT` (hoy `admin@notstudio.cl` en `condor-app`) redirige TODOS los correos a esa casilla con `[DEV → real]` en el asunto. Telegram no se redirige. **Quitarlo al pasar a producción.**
 
 - **`pdf/gotenberg.js`**: `renderPdf(html)` — POST multipart a `${GOTENBERG_URL}/forms/chromium/convert/html` (mismos parámetros que el nodo n8n original: márgenes 0in, `preferCssPageSize=true`, `pdfFormat=PDF/A-3b`), timeout 15s, lanza si falla (el caller decide degradar).
 - **`pdf/template.js`**: `buildHtml(orden)` es un puerto fiel del Code node "Generar HTML" de n8n — header/footer fijos, tabla de trabajos, grid de fotos antes/después, firma, logo embebido en base64. También arma el nombre de archivo: `OT-{numero}_{cliente}_{supervisor}_{fecha}.pdf`.
