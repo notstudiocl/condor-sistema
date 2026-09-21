@@ -1,9 +1,13 @@
-const CACHE_NAME = 'condor-sistema-v1';
+const CACHE_NAME = 'condor-sistema-v2';
+
+// Base path derivado del scope con que se registró el SW (main.jsx usa BASE_URL):
+// '/condor-sistema/' en GitHub Pages, '/' en condor.notstudio.cl.
+const BASE = new URL(self.registration.scope).pathname;
 
 const PRECACHE_URLS = [
-  '/condor-sistema/',
-  '/condor-sistema/index.html',
-  '/condor-sistema/condor-logo.png',
+  BASE,
+  BASE + 'index.html',
+  BASE + 'condor-logo.png',
 ];
 
 // Install: pre-cache app shell
@@ -33,11 +37,15 @@ self.addEventListener('fetch', (event) => {
   // Don't cache API calls — offline layer handles those
   if (url.pathname.startsWith('/api') || url.hostname !== location.hostname) return;
 
+  // El admin panel vive bajo {BASE}admin/ en el mismo origen — es otra app, no se cachea ni se
+  // le sirve el index.html de terreno como fallback offline.
+  if (url.pathname.startsWith(BASE + 'admin')) return;
+
   // HTML navigation: Network First
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request)
-        .catch(() => caches.match('/condor-sistema/index.html'))
+        .catch(() => caches.match(BASE + 'index.html'))
     );
     return;
   }
@@ -52,6 +60,6 @@ self.addEventListener('fetch', (event) => {
           return response;
         })
       )
-      .catch(() => caches.match('/condor-sistema/index.html'))
+      .catch(() => caches.match(BASE + 'index.html'))
   );
 });

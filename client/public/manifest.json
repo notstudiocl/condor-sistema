@@ -2,7 +2,7 @@
   "name": "Condor 360 - Órdenes de Trabajo",
   "short_name": "Condor 360",
   "description": "Sistema de Órdenes de Trabajo",
-  "start_url": "/condor-sistema/",
+  "start_url": ".",
   "display": "standalone",
   "background_color": "#1E3A8A",
   "theme_color": "#1E3A8A",
