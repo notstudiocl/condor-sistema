@@ -75,6 +75,7 @@ export const listOrdenes = (params) => request(`/admin/ordenes${qs(params)}`);
 export const getOrden = (id) => request(`/admin/ordenes/${id}`);
 export const crearOrdenAdmin = (data) => request('/admin/ordenes', { method: 'POST', body: JSON.stringify(data) });
 export const getNotificacionesOrden = (id) => request(`/admin/ordenes/${id}/notificaciones`);
+export const eliminarOrden = (id) => request(`/admin/ordenes/${id}`, { method: 'DELETE' });
 export const reenviarOrden = (id) => request(`/admin/ordenes/${id}/reenviar`, { method: 'POST' });
 export const cambiarEstadoOrden = (id, estado) =>
   request(`/admin/ordenes/${id}/estado`, { method: 'PATCH', body: JSON.stringify({ estado }) });

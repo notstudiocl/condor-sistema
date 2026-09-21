@@ -19,6 +19,7 @@ import EmptyState from '../components/EmptyState';
 import { SkeletonText, SkeletonTable } from '../components/Skeleton';
 import { useToast } from '../components/Toast';
 import { formatFechaHora } from '../utils/format';
+import { getSession, hasRole, ROLES } from '../utils/auth';
 import {
   listPlantillas,
   guardarPlantilla,
@@ -250,9 +251,12 @@ function PlantillasTab() {
             <button className="btn-secondary py-2 px-3 text-xs" onClick={abrirPreview}>
               <Eye size={13} /> Previsualizar
             </button>
-            <button className="btn-secondary py-2 px-3 text-xs" onClick={() => setPruebaOpen(true)}>
-              <Send size={13} /> Enviar prueba
-            </button>
+            {/* POST /plantillas/enviar-prueba exige rol admin en el backend */}
+            {hasRole(getSession()?.user, [ROLES.ADMIN]) && (
+              <button className="btn-secondary py-2 px-3 text-xs" onClick={() => setPruebaOpen(true)}>
+                <Send size={13} /> Enviar prueba
+              </button>
+            )}
             {t?.tieneOverride && (
               <button className="btn-secondary py-2 px-3 text-xs text-gray-500" onClick={restaurar}>
                 <RotateCcw size={13} /> Restaurar default

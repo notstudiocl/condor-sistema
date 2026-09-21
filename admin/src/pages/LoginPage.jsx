@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Mail, Lock, Loader2 } from 'lucide-react';
 import { loginAdmin } from '../utils/api';
+import { APP_VERSION } from '../version';
 
 const logoUrl = import.meta.env.BASE_URL + 'condor-logo.png';
-const APP_VERSION = '1.0.0';
 
 export default function LoginPage({ onLogin }) {
   const [email, setEmail] = useState('');

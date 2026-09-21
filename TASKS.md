@@ -8,10 +8,6 @@ Rama `feat/postgres-migration` — versión NUEVA de Condor 360 (Postgres + R2 +
   - Partió en 410 órdenes; Airtable iba en la OT-00654. Verificar al terminar: conteos, adjuntos fallidos y `ordenes_numero_seq >= MAX(numero_orden)`.
 - [ ] **Orden de prueba end-to-end en el entorno hosteado** - crear desde terreno → Postgres → fotos R2 → PDF Gotenberg → log de notificaciones
   - Hacerla después de que termine la migración (para no chocar con la secuencia) y borrarla al final.
-- [ ] **Admin: botón "Eliminar orden"** - el backend ya expone `DELETE /api/admin/ordenes/:id` (solo rol admin), falta `eliminarOrden` en `admin/src/utils/api.js` y el botón con confirmación
-- [ ] **Admin: ocultar "Enviar prueba" de plantillas para rol `oficina`** - hoy se ve y da 403
-- [ ] **Admin: versión sincronizada** - `LoginPage.jsx` tiene `APP_VERSION='1.0.0'` hardcodeado, desalineado del client (2.0.0)
-- [ ] **Limpieza legacy del backend** - `server/.env.example` documenta Airtable/n8n viejo; `services/airtable.js` y la dependencia npm `airtable` son código muerto; import sin usar en `ConfiguracionPage.jsx`
 - [ ] **Apuntar los frontends a `https://condor.notstudio.cl/api`** - hoy llaman a `condor-condor-app.f8ihph.easypanel.host` (funciona, pero el dominio propio debe quedar horneado en la PWA antes de que los técnicos la instalen)
   - Depende del registro DNS.
 
@@ -32,6 +28,10 @@ Rama `feat/postgres-migration` — versión NUEVA de Condor 360 (Postgres + R2 +
 
 ## Done
 
+- [x] ~~Admin: botón "Eliminar orden" (solo rol admin, con confirmación)~~ (2026-09-21)
+- [x] ~~Admin: "Enviar prueba" de plantillas oculto para rol oficina~~ (2026-09-21)
+- [x] ~~Admin: versión sincronizada con el client (`admin/src/version.js`, 2.0.0)~~ (2026-09-21)
+- [x] ~~Limpieza legacy: `airtable.js` + deps `airtable`/`multer` fuera, `.env.example` reescrito, import muerto~~ (2026-09-21)
 - [x] ~~Hostear backend, app de terreno y admin en EasyPanel (servicios `condor-app`, `condor-terreno`, `condor-admin`)~~ (2026-09-21)
 - [x] ~~Base path configurable: terreno en `/`, admin en `/admin/` de `condor.notstudio.cl`~~ (2026-09-21)
 - [x] ~~Notificaciones híbridas vía n8n de infra, igual que H&A (workflow `xHDVroUIki70ilfa`) + modo desarrollo de correos~~ (2026-09-21)

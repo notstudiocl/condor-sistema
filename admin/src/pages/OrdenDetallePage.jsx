@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { getSession, hasRole, ROLES } from '../utils/auth';
 import {
   ArrowLeft,
   FileText,
@@ -39,6 +40,7 @@ import {
   getOrden,
   getNotificacionesOrden,
   reenviarOrden,
+  eliminarOrden,
   cambiarEstadoOrden,
   actualizarOrdenAdmin,
   crearOrdenAdmin,
@@ -204,6 +206,10 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [confirmReenviar, setConfirmReenviar] = useState(false);
+  // Eliminar es solo-admin también en el backend (requireRole); ocultarlo acá es solo UX.
+  const puedeEliminar = hasRole(getSession()?.user, [ROLES.ADMIN]);
+  const [confirmEliminar, setConfirmEliminar] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
   const [reenviando, setReenviando] = useState(false);
   const [confirmEstado, setConfirmEstado] = useState(null);
 
@@ -291,6 +297,19 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
   const openViewer = (i) => {
     setViewerIndex(i);
     setViewerOpen(true);
+  };
+
+  const handleEliminar = async () => {
+    setEliminando(true);
+    try {
+      await eliminarOrden(orden.id);
+      addToast(`OT-${orden.numero_orden_display} eliminada`, { type: 'success' });
+      navigate('/ordenes');
+    } catch (err) {
+      addToast(`No se pudo eliminar: ${err.message}`, { type: 'error' });
+      setEliminando(false);
+      setConfirmEliminar(false);
+    }
   };
 
   const handleReenviar = async () => {
@@ -587,6 +606,11 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
               <button onClick={entrarEdicion} className="btn-primary">
                 <Pencil size={15} /> Editar orden
               </button>
+              {puedeEliminar && (
+                <button onClick={() => setConfirmEliminar(true)} className="btn-secondary text-red-600" title="Eliminar orden">
+                  <Trash2 size={15} /> Eliminar
+                </button>
+              )}
             </>
           )}
         </div>
@@ -1193,6 +1217,17 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
         title="Reenviar orden"
         message="Se regenerará el PDF y se reenviarán las notificaciones de esta orden (email al cliente, email interno y Telegram)."
         confirmLabel="Reenviar"
+      />
+
+      <ConfirmDialog
+        open={confirmEliminar}
+        onClose={() => setConfirmEliminar(false)}
+        onConfirm={handleEliminar}
+        loading={eliminando}
+        danger
+        title="Eliminar orden"
+        message={orden ? `Se eliminará OT-${orden.numero_orden_display} con sus trabajos, fotos y PDF. Esta acción no se puede deshacer.` : ''}
+        confirmLabel="Eliminar orden"
       />
 
       <ConfirmDialog

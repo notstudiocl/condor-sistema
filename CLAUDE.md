@@ -22,10 +22,7 @@ Este repo está en plena migración de **Airtable + n8n** a **Postgres self-host
 - **Pendiente**: el corte final (última corrida de `migration/migrate.mjs --finalize` el día que se congele Airtable, `AUTH_ENFORCE=enforce`, redirigir la app antigua al link nuevo, credenciales Resend/Telegram desde el admin). `main` y el servicio `clientes/condor-api` **no se tocan sin instrucción explícita del usuario.** El archivo de plan `~/.claude/plans/dynamic-splashing-heron.md` ya no existe.
 - **Gaps conocidos, no bloqueantes, pendientes de resolver** (ver detalle en cada sección):
   - `.github/workflows/deploy.yml` (GitHub Pages) es solo de la app ANTIGUA en `main` — la versión nueva no usa Pages, se despliega en EasyPanel (ver arriba).
-  - `server/.env.example` sigue documentando el stack viejo (Airtable/n8n) — desactualizado, no reflejar variables reales.
   - El `server/.env` local (raíz, no trackeado) sigue en modo Airtable; el entorno real Postgres/R2/Gotenberg vive en `server/.env.staging`.
-  - `server/src/services/airtable.js` y la dependencia npm `airtable` siguen en el repo pero son código muerto (nada los importa desde `server/src`) — candidatos a limpieza, no afectan el comportamiento actual.
-  - Admin: falta `eliminarOrden` en `admin/src/utils/api.js` (el backend expone `DELETE /api/admin/ordenes/:id` para rol admin, pero no hay botón/función que lo llame). El botón "Enviar prueba" de plantillas es visible para rol `oficina` aunque el backend exige rol `admin` (403 al hacer clic, en vez de estar oculto). `ConfiguracionPage.jsx` importa `listCanalesNotificacion` pero nunca lo usa.
 
 ## Datos de la empresa
 
@@ -84,7 +81,6 @@ condor-sistema/
 │   │   ├── services/               # ordenService.js (orquestador), pdf/ (gotenberg.js, template.js), storage/r2.js, notifications/ (resend, telegram, dispatch, defaultTemplates)
 │   │   ├── routes/                 # auth.js, tecnicos.js, clientes.js, servicios.js, ordenes.js (técnico) + admin/*.js (10 routers)
 │   │   ├── middleware/             # auth.js (JWT técnico), adminAuth.js (JWT admin), requireRole.js, subscriptionGate.js, rateLimiter.js, errorHandler.js
-│   │   ├── services/airtable.js    # CÓDIGO MUERTO — nada lo importa, ver "Estado de la migración"
 │   │   └── index.js                # Monta todo, ~340 líneas
 │   └── scripts/test-pdf-manual.mjs
 ├── migration/                    # Paquete standalone — migración histórica ÚNICA Airtable → Postgres+R2 (fuera del Dockerfile)
@@ -116,7 +112,7 @@ export const APP_VERSION = '2.0.0';
 ```
 Se muestra en AppFooter (Dashboard, DetalleOrden), LoginPage (footer inline, gris) y ConfirmacionPage (footer inline, blanco translúcido).
 
-El **admin** no tiene un `version.js` equivalente: `admin/src/pages/LoginPage.jsx` tiene `APP_VERSION` **hardcodeado localmente** como `'1.0.0'` — desincronizado del client, gap conocido de nomenclatura.
+El **admin** tiene su propio `admin/src/version.js` con la misma versión — subirlas juntas.
 
 ## Autenticación — dos sistemas separados
 
@@ -497,7 +493,7 @@ App Vite+React+Tailwind **separada** de `client/` (sin workspace compartido, `ad
 
 - **Dashboard**: KPIs (hoy/semana/por facturar con suma CLP/facturado del mes, agregados en SQL con corte de día `America/Santiago`), gráfico de barras semanal SVG a mano, top servicios del mes, últimas 6 órdenes, "pendientes de facturar más antiguas" con botón inline "Marcar facturada" (optimista + Deshacer).
 - **Órdenes** (lista): paginación real server-side, filtros por estado (chips con contadores reales), búsqueda, selección múltiple + "Marcar como Facturada" en lote, cambio de estado inline por fila, export a Excel (solo la página cargada, no el dataset completo), botón "Nueva orden".
-- **Órdenes** (detalle/edición, la pantalla más grande — también sirve `/ordenes/nueva`): edición completa (horas, patente, trabajos+cantidad, descripción/observaciones, cliente vía buscador con link/unlink, pago, equipo, fotos con agregar/marcar-eliminar), botón "Reenviar" (regenera PDF + reintenta notificaciones, lee el resultado real por canal en vez de asumir éxito), botón "Cambiar estado", botón "Ver PDF", historial de auditoría expandible por orden. Al crear manualmente, la orden nace `'Enviada'` **sin fotos/PDF/notificaciones** — se completan después desde la ficha. **No tiene botón "Eliminar orden"** en la UI (gap, ver "Estado de la migración").
+- **Órdenes** (detalle/edición, la pantalla más grande — también sirve `/ordenes/nueva`): edición completa (horas, patente, trabajos+cantidad, descripción/observaciones, cliente vía buscador con link/unlink, pago, equipo, fotos con agregar/marcar-eliminar), botón "Reenviar" (regenera PDF + reintenta notificaciones, lee el resultado real por canal en vez de asumir éxito), botón "Cambiar estado", botón "Ver PDF", historial de auditoría expandible por orden. Al crear manualmente, la orden nace `'Enviada'` **sin fotos/PDF/notificaciones** — se completan después desde la ficha. Botón "Eliminar" visible solo para rol admin (con confirmación; los objetos de R2 quedan huérfanos a propósito).
 - **Clientes**: alta/edición completa, detección de duplicados por `rut_normalizado` con acciones "Fusionar" (soft merge, `merged_into`, elige un registro "ganador") y "No son duplicados" (marca `rut_grupos_revisados`, para casos como una misma empresa con varios locales que comparten RUT), "Otros locales con este RUT" en la ficha.
 - **Personal**: layout de tabla (`DataTable`), técnicos con stats reales (total órdenes, monto generado), alta con **PIN aleatorio mostrado una sola vez**, ficha editable completa (nombre/RUT/teléfono/usuario/fecha ingreso/especialidades/activo), "Resetear PIN" (idem, una sola vez), activar/desactivar (soft toggle, sin eliminación real). Distinta de "Usuarios" — aclarado textualmente en la propia página.
 - **Servicios**: CRUD con rename inline, activar/desactivar (Deshacer), eliminar **solo si `usos === 0`** (si tiene usos, el botón se convierte en "desactivar" automáticamente — protección explícita contra huérfanos).
@@ -654,7 +650,7 @@ APP_ENCRYPTION_KEY           # obligatoria — cifra/descifra credenciales Resen
 
 Credenciales de Resend/Telegram **no son env vars** — viven cifradas en Postgres, se configuran desde el admin.
 
-⚠️ `server/.env.example` (el único `.env*` trackeado en git) está **desactualizado** — todavía documenta `AIRTABLE_API_KEY`, `WEBHOOK_OT_N8N_URL`, `MOCK_MODE`. No usarlo como referencia real; usar la lista de arriba.
+`server/.env.example` (el único `.env*` trackeado en git) documenta estas mismas variables, más `WEBHOOK_NOTIFICACIONES_URL` y `EMAIL_DEV_REDIRECT`.
 
 ### `client/.env` / `client/.env.local`
 ```

@@ -3,7 +3,6 @@ import { Mail, MessageCircle, Loader2, Image as ImageIcon, Upload, Webhook } fro
 import { SkeletonText } from '../components/Skeleton';
 import { useToast } from '../components/Toast';
 import {
-  listCanalesNotificacion,
   getCanalNotificacion,
   actualizarCanalNotificacion,
   probarCanalNotificacion,
