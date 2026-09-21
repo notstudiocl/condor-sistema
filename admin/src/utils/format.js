@@ -35,6 +35,11 @@ export function formatCLP(amount) {
 /** ISO/Date → DD/MM/YYYY en zona horaria Chile */
 export function formatFecha(value) {
   if (!value) return '—';
+  // Fecha pura 'YYYY-MM-DD' (columna `date` de Postgres, p.ej. ordenes.fecha): NO pasa por Date.
+  // new Date('2026-09-21') es medianoche UTC y en America/Santiago cae el día ANTERIOR — todas las
+  // fechas de órdenes se mostraban un día antes en el panel.
+  const pura = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value));
+  if (pura) return `${pura[3]}-${pura[2]}-${pura[1]}`;
   try {
     const d = new Date(value);
     if (isNaN(d.getTime())) return String(value);

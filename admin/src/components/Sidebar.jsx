@@ -11,8 +11,11 @@ import {
   History,
 } from 'lucide-react';
 import { hasRole } from '../utils/auth';
+import { APP_VERSION } from '../version';
 
 const logoUrl = import.meta.env.BASE_URL + 'condor-logo.png';
+// La app de terreno vive en la raíz del mismo dominio (el panel cuelga de {raíz}admin/).
+const TERRENO_URL = import.meta.env.BASE_URL.replace(/admin\/$/, '');
 
 /**
  * `badge` es un número opcional mostrado como pill al lado del ítem
@@ -104,8 +107,24 @@ function NavContent({ user, nav, onNavigate }) {
         })}
       </nav>
 
-      <div className="px-3 py-3 border-t border-white/10 shrink-0">
-        <p className="px-3 text-[11px] text-white/35">Condor 360 &middot; Admin</p>
+      <div className="px-3 pt-3 pb-4 shrink-0">
+        <a
+          href={TERRENO_URL}
+          className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-white/80 hover:bg-white/5 hover:text-white transition-colors"
+        >
+          <Wrench size={17} className="shrink-0 text-accent-500" />
+          Ir a la app de terreno
+        </a>
+        <div className="mt-2 pt-3 px-3 border-t border-white/10 text-[11px] leading-relaxed text-white/35">
+          <p>Condor Alcantarillados</p>
+          <p>
+            Sistema integral desarrollado por{' '}
+            <a href="https://notstudio.cl" target="_blank" rel="noopener noreferrer" className="underline hover:text-white/60">
+              NotStudio.cl
+            </a>{' '}
+            &middot; v{APP_VERSION}
+          </p>
+        </div>
       </div>
     </>
   );

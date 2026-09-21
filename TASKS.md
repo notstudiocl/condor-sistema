@@ -25,6 +25,8 @@ Rama `feat/postgres-migration` — versión NUEVA de Condor 360 (Postgres + R2 +
 
 ## Done
 
+- [x] ~~Admin: pie del sidebar ("Ir a la app de terreno" + créditos + versión) y bloque de usuario del topbar al estilo H&A~~ (2026-09-21)
+- [x] ~~Bug: el admin mostraba TODAS las fechas de órdenes un día antes (fecha pura parseada como UTC)~~ (2026-09-21)
 - [x] ~~Switch Terreno | Oficina en el login de ambas apps (`components/AppSwitch.jsx`, copia gemela en cada app)~~ (2026-09-21)
 - [x] ~~Dominio `condor.notstudio.cl` operativo: DNS, certificado Let's Encrypt, rutas `/`, `/admin`, `/api` verificadas; frontends apuntando a `https://condor.notstudio.cl/api`~~ (2026-09-21)
 - [x] ~~Admin: botón "Eliminar orden" (solo rol admin, con confirmación)~~ (2026-09-21)
