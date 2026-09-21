@@ -11,6 +11,7 @@ Rama `feat/postgres-migration` — versión NUEVA de Condor 360 (Postgres + R2 +
 
 ## Waiting On
 
+- [ ] **Desactivar el técnico de pruebas `matias` (NotStudio Pruebas, TCN039) al hacer el corte** - aparece en "Personal asignado" de todos los técnicos mientras esté activo
 - [ ] **OK para mandar un mensaje de prueba al grupo de Telegram de Condor** - Matías, since 2026-09-21
   - Chat `-5133715111` con el bot "Hermes NotStudio"; falta confirmar que Hermes está en ese grupo.
 - [ ] **Cambiar la contraseña temporal de `admin@notstudio.cl`** - Matías, since 2026-09-21
@@ -24,6 +25,7 @@ Rama `feat/postgres-migration` — versión NUEVA de Condor 360 (Postgres + R2 +
 
 ## Done
 
+- [x] ~~Switch Terreno | Oficina en el login de ambas apps (`components/AppSwitch.jsx`, copia gemela en cada app)~~ (2026-09-21)
 - [x] ~~Dominio `condor.notstudio.cl` operativo: DNS, certificado Let's Encrypt, rutas `/`, `/admin`, `/api` verificadas; frontends apuntando a `https://condor.notstudio.cl/api`~~ (2026-09-21)
 - [x] ~~Admin: botón "Eliminar orden" (solo rol admin, con confirmación)~~ (2026-09-21)
 - [x] ~~Admin: "Enviar prueba" de plantillas oculto para rol oficina~~ (2026-09-21)

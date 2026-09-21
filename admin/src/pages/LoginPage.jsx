@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Mail, Lock, Loader2 } from 'lucide-react';
 import { loginAdmin } from '../utils/api';
 import { APP_VERSION } from '../version';
+import AppSwitch from '../components/AppSwitch';
 
 const logoUrl = import.meta.env.BASE_URL + 'condor-logo.png';
 
@@ -54,6 +55,8 @@ export default function LoginPage({ onLogin }) {
       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-blue-500 to-transparent" />
 
       <div className="relative z-10 w-full max-w-sm flex flex-col items-center">
+        <AppSwitch />
+
         <img src={logoUrl} alt="Condor 360" className="h-20 object-contain mb-3" />
         <p className="text-blue-600 text-sm font-medium tracking-widest uppercase mb-10">Panel de Oficina</p>
 
