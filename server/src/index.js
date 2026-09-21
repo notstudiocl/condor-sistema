@@ -74,6 +74,12 @@ app.use('/api/admin/dashboard', adminDashboardRoutes);
 app.use('/api/admin/settings', adminSettingsRoutes);
 app.use('/api/admin/auditoria', adminAuditoriaRoutes);
 
+// 404 JSON uniforme para cualquier /api desconocida — mismo cuerpo que devuelve requireNotstudio,
+// así una sección oculta es indistinguible de una ruta que no existe.
+app.use('/api', (_req, res) => {
+  res.status(404).json({ success: false, error: 'Ruta no encontrada' });
+});
+
 app.use(errorHandler);
 
 app.listen(PORT, () => {

@@ -1,4 +1,7 @@
 import bcrypt from 'bcrypt';
+
+// Lecturas de personas (login terreno, listas del wizard, stats del admin) + upsert de la
+// migración histórica. Las ESCRITURAS de gestión viven en personasRepo.js.
 import { pool } from '../db/pool.js';
 
 function normalizarRut(rut) {
@@ -16,6 +19,7 @@ export async function findByCredencial(input) {
 }
 
 export async function verificarPin(empleado, pin) {
+  if (!empleado?.pin_hash) return false;
   return bcrypt.compare(String(pin), empleado.pin_hash);
 }
 
@@ -24,14 +28,11 @@ export async function getEmpleadoById(id) {
   return rows[0] || null;
 }
 
-export async function isEmpleadoActivo(id) {
-  const { rows } = await pool.query('SELECT activo FROM empleados WHERE id = $1', [id]);
-  return rows[0]?.activo === true;
-}
-
 export async function listActivos() {
   const { rows } = await pool.query(
-    `SELECT id, nombre, usuario, telefono, codigo FROM empleados WHERE activo = true ORDER BY nombre`
+    // pin_hash IS NOT NULL: tras la unificación `empleados` también guarda gente de oficina sin
+    // acceso terreno — no deben aparecer como técnicos asignables en el wizard.
+    `SELECT id, nombre, usuario, telefono, codigo FROM empleados WHERE activo = true AND pin_hash IS NOT NULL ORDER BY nombre`
   );
   return rows;
 }
@@ -45,28 +46,6 @@ export async function listTodos() {
     FROM empleados e ORDER BY e.nombre
   `);
   return rows;
-}
-
-function generarPin() {
-  return String(Math.floor(1000 + Math.random() * 9000));
-}
-
-export async function crearEmpleado(data) {
-  const pin = data.pin || generarPin();
-  const pinHash = await bcrypt.hash(pin, 10);
-  const { rows: seqRows } = await pool.query(
-    `SELECT COALESCE(MAX(numero_secuencial), 0) + 1 as next FROM empleados`
-  );
-  const numeroSecuencial = seqRows[0].next;
-  const { rows } = await pool.query(
-    `INSERT INTO empleados (rut, nombre, activo, telefono, usuario, pin_hash, fecha_ingreso, especialidades, numero_secuencial, airtable_record_id)
-     VALUES ($1,$2,COALESCE($3,true),$4,$5,$6,$7,$8,$9,$10)
-     RETURNING *`,
-    [data.rut || null, data.nombre, data.activo, data.telefono || null, data.usuario,
-     pinHash, data.fechaIngreso || null, data.especialidades || null, numeroSecuencial,
-     data.airtableRecordId || null]
-  );
-  return { empleado: rows[0], pin };
 }
 
 export async function upsertEmpleadoByAirtableId(data) {
@@ -87,27 +66,6 @@ export async function upsertEmpleadoByAirtableId(data) {
      data.airtableRecordId]
   );
   return rows[0];
-}
-
-export async function resetearPin(empleadoId) {
-  const pin = generarPin();
-  const pinHash = await bcrypt.hash(pin, 10);
-  await pool.query('UPDATE empleados SET pin_hash = $1, updated_at = now() WHERE id = $2', [pinHash, empleadoId]);
-  return pin;
-}
-
-export async function actualizarEmpleado(id, data) {
-  const { rows } = await pool.query(
-    `UPDATE empleados SET
-       rut = COALESCE($2, rut), nombre = COALESCE($3, nombre), activo = COALESCE($4, activo),
-       telefono = COALESCE($5, telefono), usuario = COALESCE($6, usuario),
-       fecha_ingreso = COALESCE($7, fecha_ingreso), especialidades = COALESCE($8, especialidades),
-       updated_at = now()
-     WHERE id = $1
-     RETURNING *`,
-    [id, data.rut, data.nombre, data.activo, data.telefono, data.usuario, data.fechaIngreso, data.especialidades]
-  );
-  return rows[0] || null;
 }
 
 // Stats + últimas órdenes para la ficha del técnico en el admin.

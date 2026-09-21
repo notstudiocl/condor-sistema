@@ -2,7 +2,7 @@ import { Router } from 'express';
 import * as notificacionesRepo from '../../repositories/notificacionesRepo.js';
 import * as auditRepo from '../../repositories/auditRepo.js';
 import { adminAuthMiddleware } from '../../middleware/adminAuth.js';
-import { requireRole } from '../../middleware/requireRole.js';
+import { requireRole, requireNotstudio } from '../../middleware/requireRole.js';
 import { uploadBuffer, buildPublicUrl } from '../../services/storage/r2.js';
 import { WEBHOOK_SETTING_KEY } from '../../services/notifications/webhookN8n.js';
 
@@ -75,9 +75,10 @@ router.post('/logo', async (req, res, next) => {
   }
 });
 
+// Integraciones (webhook de n8n): exclusivas de NotStudio — 404 para cualquier otro rol.
 // GET /api/admin/settings/webhook-notificaciones — URL del webhook de n8n (modo híbrido).
 // `envFallback` avisa si hay una env var que seguiría activa aunque se borre el setting.
-router.get('/webhook-notificaciones', async (_req, res, next) => {
+router.get('/webhook-notificaciones', requireNotstudio, async (_req, res, next) => {
   try {
     const value = await notificacionesRepo.getSetting(WEBHOOK_SETTING_KEY);
     const url = typeof value === 'string' ? value : value?.url || null;
@@ -89,7 +90,7 @@ router.get('/webhook-notificaciones', async (_req, res, next) => {
 
 // PUT /api/admin/settings/webhook-notificaciones — { url } (vacío/null = volver al envío
 // directo desde el backend con las credenciales de Resend/Telegram).
-router.put('/webhook-notificaciones', async (req, res, next) => {
+router.put('/webhook-notificaciones', requireNotstudio, async (req, res, next) => {
   try {
     const url = String(req.body?.url || '').trim();
     if (url && !/^https:\/\/\S+$/i.test(url)) {

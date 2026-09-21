@@ -4,11 +4,36 @@ import { pool } from '../db/pool.js';
 // de config/usuarios. Nunca debe tumbar la operación principal si falla (se llama
 // "best effort" desde las rutas: try/catch + log, jamás awaited de forma que un
 // fallo de auditoría revierta una transacción de negocio ya confirmada).
+// Claves cuyo valor NUNCA debe quedar en claro en audit_log. `pin`/`clave` por igualdad exacta
+// (evita falsos positivos tipo "shipping"); el resto por contención (password/passwordHash,
+// invite_token/botToken, apiKey/api_key, secret...). Se aplica a TODO detalle, recursivo, aunque
+// el endpoint que audita ni siquiera use ese campo.
+const CLAVES_EXACTAS = new Set(['pin', 'clave', 'pinhash', 'newpin', 'pinnuevo']);
+const CLAVES_PARCIALES = ['password', 'passwd', 'contrasena', 'contraseña', 'token', 'secret', 'apikey', 'authorization'];
+const MAX_PROFUNDIDAD = 8;
+
+function esClaveSensible(key) {
+  const k = String(key).toLowerCase().replace(/[_\-\s]/g, '');
+  return CLAVES_EXACTAS.has(k) || CLAVES_PARCIALES.some((s) => k.includes(s));
+}
+
+export function redactarSecretos(valor, profundidad = 0) {
+  if (valor === null || typeof valor !== 'object') return valor;
+  if (profundidad >= MAX_PROFUNDIDAD) return '[…]';
+  if (Array.isArray(valor)) return valor.map((v) => redactarSecretos(v, profundidad + 1));
+  const salida = {};
+  for (const [key, v] of Object.entries(valor)) {
+    if (esClaveSensible(key)) salida[key] = v === null || v === undefined || v === '' ? v : '[oculto]';
+    else salida[key] = redactarSecretos(v, profundidad + 1);
+  }
+  return salida;
+}
+
 export async function registrar({ adminUserId, accion, entidad, entidadId, detalle }) {
   await pool.query(
     `INSERT INTO audit_log (admin_user_id, accion, entidad, entidad_id, detalle)
      VALUES ($1,$2,$3,$4,$5)`,
-    [adminUserId || null, accion, entidad, entidadId != null ? String(entidadId) : null, detalle ? JSON.stringify(detalle) : null]
+    [adminUserId || null, accion, entidad, entidadId != null ? String(entidadId) : null, detalle ? JSON.stringify(redactarSecretos(detalle)) : null]
   );
 }
 
@@ -32,7 +57,7 @@ export async function listar({ page = 1, limit = 50, entidad, entidadId, adminUs
   const offset = (page - 1) * limit;
   const { rows } = await pool.query(
     `SELECT a.*, u.email as admin_email, u.nombre as admin_nombre
-     FROM audit_log a LEFT JOIN admin_users u ON u.id = a.admin_user_id
+     FROM audit_log a LEFT JOIN empleados u ON u.id = a.admin_user_id
      ${where} ORDER BY a.created_at DESC LIMIT $${i} OFFSET $${i + 1}`,
     [...params, limit, offset]
   );

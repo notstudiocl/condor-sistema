@@ -3,7 +3,7 @@ import * as notificacionesRepo from '../../repositories/notificacionesRepo.js';
 import { enviarEmail } from '../../services/notifications/resend.js';
 import { enviarTelegram } from '../../services/notifications/telegram.js';
 import { adminAuthMiddleware } from '../../middleware/adminAuth.js';
-import { requireRole } from '../../middleware/requireRole.js';
+import { requireNotstudio } from '../../middleware/requireRole.js';
 
 const router = Router();
 const CANALES_VALIDOS = ['resend', 'telegram'];
@@ -40,7 +40,7 @@ router.get('/log', adminAuthMiddleware, async (req, res, next) => {
 });
 
 // GET /api/admin/notificaciones — estado de los 2 canales (para la pantalla Configuración)
-router.get('/', adminAuthMiddleware, requireRole('admin'), async (_req, res, next) => {
+router.get('/', adminAuthMiddleware, requireNotstudio, async (_req, res, next) => {
   try {
     const channels = await notificacionesRepo.listChannels();
     res.json({ success: true, data: channels.map((c) => ({ canal: c.canal, activo: c.activo, config: c.config, secretLast4: c.secret_last4, updatedAt: c.updated_at })) });
@@ -50,7 +50,7 @@ router.get('/', adminAuthMiddleware, requireRole('admin'), async (_req, res, nex
 });
 
 // GET /api/admin/notificaciones/:canal — detalle con secreto SIEMPRE enmascarado (re_••••3kFa)
-router.get('/:canal', adminAuthMiddleware, requireRole('admin'), validarCanal, async (req, res, next) => {
+router.get('/:canal', adminAuthMiddleware, requireNotstudio, validarCanal, async (req, res, next) => {
   try {
     const { canal } = req.params;
     const channel = await notificacionesRepo.getChannel(canal);
@@ -84,7 +84,7 @@ router.get('/:canal', adminAuthMiddleware, requireRole('admin'), validarCanal, a
 
 // PUT /api/admin/notificaciones/:canal — activo/config siempre se pisan; secret solo si
 // viene no-vacío (input vacío = "no toco la credencial guardada", nunca se re-muestra).
-router.put('/:canal', adminAuthMiddleware, requireRole('admin'), validarCanal, async (req, res, next) => {
+router.put('/:canal', adminAuthMiddleware, requireNotstudio, validarCanal, async (req, res, next) => {
   try {
     const { canal } = req.params;
     const { activo, config, secret } = req.body || {};
@@ -117,7 +117,7 @@ router.put('/:canal', adminAuthMiddleware, requireRole('admin'), validarCanal, a
 // POST /api/admin/notificaciones/:canal/test — envía un mensaje de prueba REAL.
 // Nunca usa datos falsos silenciosos: si el canal está inactivo/sin credenciales,
 // resend.js / telegram.js lanzan y acá se traduce a un 502 explícito.
-router.post('/:canal/test', adminAuthMiddleware, requireRole('admin'), validarCanal, async (req, res) => {
+router.post('/:canal/test', adminAuthMiddleware, requireNotstudio, validarCanal, async (req, res) => {
   const { canal } = req.params;
   try {
     if (canal === 'resend') {

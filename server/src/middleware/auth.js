@@ -1,11 +1,15 @@
 import jwt from 'jsonwebtoken';
-import * as empleadosRepo from '../repositories/empleadosRepo.js';
+import * as personasRepo from '../repositories/personasRepo.js';
 
 // JWT_SECRET es obligatorio — sin default inseguro. Si falta, el servidor no debe arrancar.
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
   throw new Error('JWT_SECRET no está definida — obligatoria para arrancar el servidor');
 }
+
+// Comparte JWT_SECRET con middleware/adminAuth.js. Lo que separa ambos espacios de tokens es el
+// claim `aud`: el token del panel lleva aud:'admin'; el de terreno NO lleva `aud` (así los tokens
+// de técnicos emitidos antes de la unificación siguen valiendo). Cada middleware rechaza al otro.
 
 // Técnicos de terreno: sesión larga (30 días por defecto) — señal mala, no se puede
 // pedir re-login seguido. La revocación real ocurre vía empleado.activo en cada request.
@@ -27,8 +31,9 @@ export function generateToken(user) {
  *   - AUTH_ENFORCE=enforce: requests sin token se rechazan con 401.
  * Un token presente pero inválido/expirado SIEMPRE se rechaza con 401, en ambos modos
  * — eso no es "cliente viejo silencioso", es un intento de auth que falló de verdad.
- * Un token válido de un empleado ya no activo SIEMPRE se rechaza con 403 (revocación
- * inmediata), también en ambos modos.
+ * Un token válido de una persona ya no activa, o a la que se le quitó el PIN (acceso terreno),
+ * SIEMPRE se rechaza con 403 (revocación inmediata), también en ambos modos. El estado se relee
+ * de la DB en cada request: nunca se confía en el payload del JWT.
  */
 export async function authMiddleware(req, res, next) {
   const enforce = process.env.AUTH_ENFORCE === 'enforce';
@@ -53,9 +58,14 @@ export async function authMiddleware(req, res, next) {
     return res.status(401).json({ success: false, error: 'Token inválido o expirado' });
   }
 
+  // Un token del panel (aud:'admin') no sirve para la app de terreno.
+  if (decoded.aud === 'admin' || !(decoded.recordId || decoded.id)) {
+    return res.status(401).json({ success: false, error: 'Token inválido o expirado' });
+  }
+
   try {
-    const activo = await empleadosRepo.isEmpleadoActivo(decoded.recordId);
-    if (!activo) {
+    const estado = await personasRepo.obtenerEstadoAcceso(decoded.recordId || decoded.id);
+    if (!estado || !estado.activo || !estado.tienePin) {
       return res.status(403).json({ success: false, error: 'Usuario inactivo. Contacte al administrador.' });
     }
   } catch (err) {

@@ -5,7 +5,7 @@ import * as empleadosRepo from '../repositories/empleadosRepo.js';
 import * as serviciosRepo from '../repositories/serviciosRepo.js';
 import * as ordenesRepo from '../repositories/ordenesRepo.js';
 import * as notificacionesRepo from '../repositories/notificacionesRepo.js';
-import * as adminUsersRepo from '../repositories/adminUsersRepo.js';
+import * as personasRepo from '../repositories/personasRepo.js';
 
 let failures = 0;
 function check(label, cond) {
@@ -29,12 +29,13 @@ async function main() {
   check('cliente creado con id', !!cliente.id);
 
   console.log('\n2. Técnicos (2)');
-  const { empleado: tec1, pin: pin1 } = await empleadosRepo.crearEmpleado({
-    nombre: 'Técnico Smoke Uno', usuario: `smoke.uno.${Date.now()}`, activo: true,
+  const { persona: tec1Pub, pin: pin1 } = await personasRepo.crearPersona({
+    nombre: 'Técnico Smoke Uno', usuario: `smoke.uno.${Date.now()}`, accesoTerreno: true,
   });
-  const { empleado: tec2 } = await empleadosRepo.crearEmpleado({
-    nombre: 'Técnico Smoke Dos', usuario: `smoke.dos.${Date.now()}`, activo: true,
+  const { persona: tec2 } = await personasRepo.crearPersona({
+    nombre: 'Técnico Smoke Dos', usuario: `smoke.dos.${Date.now()}`, accesoTerreno: true,
   });
+  const tec1 = await empleadosRepo.getEmpleadoById(tec1Pub.id); // fila completa (con pin_hash)
   check('empleado 1 con código TCN generado', /^TCN\d{3}$/.test(tec1.codigo));
   check('PIN se hasheó (no queda en claro)', tec1.pin_hash !== pin1 && tec1.pin_hash.startsWith('$2'));
   const verificaPin = await empleadosRepo.verificarPin(tec1, pin1);
@@ -153,12 +154,21 @@ async function main() {
   const decrypted = await notificacionesRepo.getDecryptedSecret('resend');
   check('getDecryptedSecret (uso interno) recupera el valor exacto', decrypted.secret === 're_smoketest_1234567890abcdef');
 
-  console.log('\n15. admin_users');
-  const adminUser = await adminUsersRepo.crearAdminUser({ email: `smoke-${Date.now()}@notstudio.cl`, password: 'test-password-123', nombre: 'Admin Smoke Test', rol: 'admin' });
-  check('admin_user creado', !!adminUser.id);
-  const found = await adminUsersRepo.findByEmail(adminUser.email);
-  const passOk = await adminUsersRepo.verificarPassword(found, 'test-password-123');
-  check('password hasheado y verificable', passOk === true);
+  console.log('\n15. Persona con acceso al panel (tabla unificada empleados)');
+  const { persona: adminUser } = await personasRepo.crearPersona({ email: `Smoke-${Date.now()}@NotStudio.cl`, nombre: 'Admin Smoke Test', rol: 'admin' });
+  check('persona creada sin PIN ni código TCN', !!adminUser.id && adminUser.tiene_pin === false && adminUser.codigo === null);
+  check('sin contraseña todavía NO tiene panel', adminUser.tiene_panel === false);
+  await personasRepo.setPassword(adminUser.id, 'test-password-123');
+  const found = await personasRepo.findByEmail(adminUser.email.toUpperCase());
+  check('email normalizado a minúsculas y búsqueda case-insensitive', found?.email === adminUser.email && found.email === found.email.toLowerCase());
+  check('password hasheado y verificable', (await personasRepo.verificarPassword(found, 'test-password-123')) === true);
+  check('con email+password+rol admin SÍ tiene panel', (await personasRepo.obtenerEstadoAcceso(adminUser.id)).tienePanel === true);
+  await personasRepo.actualizarPersona(adminUser.id, { rol: 'tecnico' });
+  check('degradar a tecnico corta el panel de inmediato', (await personasRepo.obtenerEstadoAcceso(adminUser.id)).tienePanel === false);
+  for (let i = 0; i < 5; i++) await personasRepo.registrarFalloLogin(adminUser.id);
+  check('5 fallos seguidos bloquean la cuenta', personasRepo.estaBloqueada(await personasRepo.findByEmail(adminUser.email)) === true);
+  const token = await personasRepo.crearInvitacion(adminUser.id);
+  check('invitación vigente se encuentra por token', (await personasRepo.findByInviteToken(token))?.id === adminUser.id);
 
   console.log('\n16. Paginación admin');
   const pagina = await ordenesRepo.listOrdenesAdmin({ page: 1, limit: 10 });
@@ -170,7 +180,7 @@ async function main() {
   await pool.query('DELETE FROM servicios WHERE id = $1', [servicio.id]);
   await pool.query('DELETE FROM empleados WHERE id = ANY($1)', [[tec1.id, tec2.id]]);
   await pool.query('DELETE FROM clientes WHERE id = ANY($1)', [[cliente.id, clienteDuplicado.id, clienteRutInvalido.id]]);
-  await pool.query('DELETE FROM admin_users WHERE id = $1', [adminUser.id]);
+  await pool.query('DELETE FROM empleados WHERE id = $1', [adminUser.id]);
   await pool.query(`DELETE FROM notification_channels WHERE canal = 'resend'`);
   console.log('  limpieza OK\n');
 
