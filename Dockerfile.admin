@@ -5,7 +5,7 @@ COPY admin/package*.json ./
 RUN npm ci
 COPY admin/ ./
 # Vite hornea VITE_API_URL en el bundle al construir — cambiarlo exige rebuild.
-ARG VITE_API_URL=https://condor-condor-app.f8ihph.easypanel.host/api
+ARG VITE_API_URL=https://condor.notstudio.cl/api
 ENV VITE_API_URL=$VITE_API_URL
 # Base path bajo condor.notstudio.cl (GitHub Pages usa el default de vite.config.js)
 ARG VITE_BASE=/admin/

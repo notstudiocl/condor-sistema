@@ -8,13 +8,9 @@ Rama `feat/postgres-migration` — versión NUEVA de Condor 360 (Postgres + R2 +
   - Partió en 410 órdenes; Airtable iba en la OT-00654. Verificar al terminar: conteos, adjuntos fallidos y `ordenes_numero_seq >= MAX(numero_orden)`.
 - [ ] **Orden de prueba end-to-end en el entorno hosteado** - crear desde terreno → Postgres → fotos R2 → PDF Gotenberg → log de notificaciones
   - Hacerla después de que termine la migración (para no chocar con la secuencia) y borrarla al final.
-- [ ] **Apuntar los frontends a `https://condor.notstudio.cl/api`** - hoy llaman a `condor-condor-app.f8ihph.easypanel.host` (funciona, pero el dominio propio debe quedar horneado en la PWA antes de que los técnicos la instalen)
-  - Depende del registro DNS.
 
 ## Waiting On
 
-- [ ] **Registro DNS en Cloudflare** - Matías, since 2026-09-21
-  - `A condor → 31.97.241.33`, DNS only (nube gris). Rutas `/`, `/admin`, `/api` ya creadas en EasyPanel.
 - [ ] **OK para mandar un mensaje de prueba al grupo de Telegram de Condor** - Matías, since 2026-09-21
   - Chat `-5133715111` con el bot "Hermes NotStudio"; falta confirmar que Hermes está en ese grupo.
 - [ ] **Cambiar la contraseña temporal de `admin@notstudio.cl`** - Matías, since 2026-09-21
@@ -28,6 +24,7 @@ Rama `feat/postgres-migration` — versión NUEVA de Condor 360 (Postgres + R2 +
 
 ## Done
 
+- [x] ~~Dominio `condor.notstudio.cl` operativo: DNS, certificado Let's Encrypt, rutas `/`, `/admin`, `/api` verificadas; frontends apuntando a `https://condor.notstudio.cl/api`~~ (2026-09-21)
 - [x] ~~Admin: botón "Eliminar orden" (solo rol admin, con confirmación)~~ (2026-09-21)
 - [x] ~~Admin: "Enviar prueba" de plantillas oculto para rol oficina~~ (2026-09-21)
 - [x] ~~Admin: versión sincronizada con el client (`admin/src/version.js`, 2.0.0)~~ (2026-09-21)
