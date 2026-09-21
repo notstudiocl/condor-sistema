@@ -5,8 +5,9 @@ import { getDecryptedSecret } from '../../repositories/notificacionesRepo.js';
 
 const RESEND_TIMEOUT_MS = 15000;
 const RESEND_API_URL = 'https://api.resend.com/emails';
-const DEFAULT_FROM = 'Notificaciones - No Responder <no-reply@notstudio.cl>';
-const DEFAULT_REPLY_TO = 'alcantarilladoscondor@gmail.com';
+// El dominio verificado en la cuenta Resend de NotStudio es noreply.notstudio.cl (no la raíz).
+export const DEFAULT_FROM = 'Condor Alcantarillados <notificaciones@noreply.notstudio.cl>';
+export const DEFAULT_REPLY_TO = 'alcantarilladoscondor@gmail.com';
 
 /**
  * Envía un email vía Resend. La API key nunca sale de este módulo en claro

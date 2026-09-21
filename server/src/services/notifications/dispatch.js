@@ -1,8 +1,9 @@
 import * as notificacionesRepo from '../../repositories/notificacionesRepo.js';
-import { enviarEmail } from './resend.js';
+import { enviarEmail, DEFAULT_FROM, DEFAULT_REPLY_TO } from './resend.js';
 import { enviarTelegram } from './telegram.js';
 import { emailClienteDefault, emailInternoDefault, telegramDefault, getLogoUrlConFallback, ORDEN_EJEMPLO } from './defaultTemplates.js';
 import { buildPdfFilename, formatFecha } from '../pdf/template.js';
+import { getWebhookUrl, enviarWebhookNotificacion, payloadOrden } from './webhookN8n.js';
 
 // Orquesta los 3 mensajes de una orden completada: email al cliente, email interno
 // (copia a alcantarilladoscondor@gmail.com) y Telegram interno. Ningún canal puede
@@ -123,6 +124,17 @@ export async function buildDefaultEditable(templateKey) {
   return { asunto, bloques: cuerpo ? [cuerpo] : [] };
 }
 
+async function getDevRedirect() {
+  try {
+    const value = await notificacionesRepo.getSetting('email_dev_redirect');
+    const email = typeof value === 'string' ? value : value?.email || null;
+    return email || process.env.EMAIL_DEV_REDIRECT || null;
+  } catch (err) {
+    console.error('[notificaciones] no se pudo leer email_dev_redirect:', err.message);
+    return process.env.EMAIL_DEV_REDIRECT || null;
+  }
+}
+
 async function attemptSend(ordenId, canal, plantilla, destinatario, sendFn) {
   let ok = false;
   let error = null;
@@ -154,23 +166,74 @@ export async function dispatchNotificaciones(orden, { pdfUrl, pdfBuffer } = {}) 
     renderPlantilla('telegram_ot', orden, ctx, telegramDefault),
   ]);
 
+  // MODO DESARROLLO: con app_settings 'email_dev_redirect' (o env EMAIL_DEV_REDIRECT), TODOS
+  // los correos —cliente e interno— van a esa casilla, con el destinatario real anotado en
+  // el asunto. Telegram no se redirige. Borrar el setting/env al pasar a producción real.
+  const devRedirect = await getDevRedirect();
+  const clienteEmail = devRedirect && orden.cliente_email ? devRedirect : orden.cliente_email;
+  const correoInterno = devRedirect || CORREO_INTERNO;
+  const ccCliente = devRedirect ? null : CORREO_INTERNO;
+  if (devRedirect) {
+    emailCliente.subject = `[DEV → ${orden.cliente_email}] ${emailCliente.subject}`;
+    emailInterno.subject = `[DEV → ${CORREO_INTERNO}] ${emailInterno.subject}`;
+  }
+
+  // MODO HÍBRIDO (ver webhookN8n.js): con webhook configurado, n8n entrega los 3 mensajes.
+  // Un solo POST, pero se registra una fila de notificacion_log por mensaje para que el
+  // historial del admin se vea igual que en el envío in-process.
+  const webhookUrl = await getWebhookUrl();
+  if (webhookUrl) {
+    let remitente = {};
+    try {
+      remitente = (await notificacionesRepo.getChannel('resend'))?.config || {};
+    } catch (err) {
+      console.error('[notificaciones] no se pudo leer config de Resend, uso remitente default:', err.message);
+    }
+    const from = remitente.fromEmail || DEFAULT_FROM;
+    const replyTo = remitente.replyTo || DEFAULT_REPLY_TO;
+
+    const emails = [];
+    if (clienteEmail) {
+      emails.push({ plantilla: 'email_cliente', to: clienteEmail, cc: ccCliente, from, replyTo, subject: emailCliente.subject, html: emailCliente.html });
+    }
+    emails.push({ plantilla: 'email_interno', to: correoInterno, cc: null, from, replyTo, subject: emailInterno.subject, html: emailInterno.html });
+
+    const payload = payloadOrden({ orden, emails, telegramTexto: telegramMsg.text, pdfUrl, pdfNombre: buildPdfFilename(orden) });
+    let error = null;
+    try {
+      await enviarWebhookNotificacion(webhookUrl, payload);
+    } catch (err) {
+      error = err;
+    }
+    const entrega = () => {
+      if (error) throw error;
+    };
+    return Promise.all([
+      clienteEmail
+        ? attemptSend(orden.id, 'resend', 'email_cliente', clienteEmail, entrega)
+        : attemptSend(orden.id, 'resend', 'email_cliente', null, () => {
+            throw new Error('Orden sin email de cliente registrado');
+          }),
+      attemptSend(orden.id, 'resend', 'email_interno', correoInterno, entrega),
+      attemptSend(orden.id, 'telegram', 'telegram_ot', 'telegram', entrega),
+    ]);
+  }
+
   const attachments =
     pdfBuffer && Buffer.isBuffer(pdfBuffer)
       ? [{ filename: buildPdfFilename(orden), content: pdfBuffer.toString('base64') }]
       : undefined;
 
-  const clienteEmail = orden.cliente_email;
-
   const results = await Promise.allSettled([
     clienteEmail
       ? attemptSend(orden.id, 'resend', 'email_cliente', clienteEmail, () =>
-          enviarEmail({ to: clienteEmail, cc: CORREO_INTERNO, subject: emailCliente.subject, html: emailCliente.html, attachments })
+          enviarEmail({ to: clienteEmail, cc: ccCliente, subject: emailCliente.subject, html: emailCliente.html, attachments })
         )
       : attemptSend(orden.id, 'resend', 'email_cliente', null, () => {
           throw new Error('Orden sin email de cliente registrado');
         }),
-    attemptSend(orden.id, 'resend', 'email_interno', CORREO_INTERNO, () =>
-      enviarEmail({ to: CORREO_INTERNO, subject: emailInterno.subject, html: emailInterno.html, attachments })
+    attemptSend(orden.id, 'resend', 'email_interno', correoInterno, () =>
+      enviarEmail({ to: correoInterno, subject: emailInterno.subject, html: emailInterno.html, attachments })
     ),
     attemptSend(orden.id, 'telegram', 'telegram_ot', 'telegram', () => enviarTelegram({ text: telegramMsg.text })),
   ]);

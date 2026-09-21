@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Mail, MessageCircle, Loader2, Image as ImageIcon, Upload } from 'lucide-react';
+import { Mail, MessageCircle, Loader2, Image as ImageIcon, Upload, Webhook } from 'lucide-react';
 import { SkeletonText } from '../components/Skeleton';
 import { useToast } from '../components/Toast';
 import {
@@ -9,6 +9,8 @@ import {
   probarCanalNotificacion,
   getLogoEmail,
   subirLogoEmail,
+  getWebhookNotificaciones,
+  guardarWebhookNotificaciones,
 } from '../utils/api';
 
 const LOGO_MAX_BYTES = 2 * 1024 * 1024;
@@ -248,17 +250,89 @@ function CanalCard({ canal, icon: Icon, label, extraFields }) {
   );
 }
 
+// Modo híbrido: con una URL acá, el backend arma los correos/Telegram y n8n los entrega.
+// Vacío = el backend envía directo con las credenciales de Resend/Telegram de abajo.
+function WebhookN8nCard() {
+  const { addToast } = useToast();
+  const [loading, setLoading] = useState(true);
+  const [url, setUrl] = useState('');
+  const [envFallback, setEnvFallback] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+
+  useEffect(() => {
+    getWebhookNotificaciones()
+      .then((res) => {
+        setUrl(res.data?.url || '');
+        setEnvFallback(Boolean(res.data?.envFallback));
+      })
+      .catch((err) => addToast(err.message || 'No se pudo cargar el webhook', { type: 'error' }))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function guardar() {
+    setGuardando(true);
+    try {
+      await guardarWebhookNotificaciones(url.trim());
+      addToast(url.trim() ? 'Webhook guardado. Las notificaciones saldrán vía n8n.' : 'Webhook eliminado. El sistema enviará directo.', { type: 'success' });
+    } catch (err) {
+      addToast(err.message || 'No se pudo guardar el webhook', { type: 'error' });
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="card p-5">
+        <SkeletonText lines={3} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="card p-5 space-y-4">
+      <h3 className="font-heading font-semibold text-gray-900 flex items-center gap-2">
+        <Webhook size={16} className="text-gray-400" /> Envío vía n8n (webhook)
+      </h3>
+      <p className="text-xs text-gray-500">
+        Con una URL configurada, el sistema arma los correos y el mensaje de Telegram y n8n los entrega. Si se deja
+        vacío, el sistema los envía directamente usando las credenciales de Resend y Telegram de más abajo.
+      </p>
+      <div>
+        <label className="label-field">URL del webhook</label>
+        <input
+          className="input-field"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://infra-n8n.f8ihph.easypanel.host/webhook/condor-notificaciones"
+        />
+        {envFallback && !url.trim() && (
+          <p className="text-xs text-amber-600 mt-1">
+            Hay un webhook definido por variable de entorno en el servidor: seguirá activo aunque este campo quede vacío.
+          </p>
+        )}
+      </div>
+      <div className="pt-2 border-t border-gray-100">
+        <button className="btn-primary py-2 px-3 text-xs" onClick={guardar} disabled={guardando}>
+          {guardando ? 'Guardando...' : 'Guardar'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function ConfiguracionPage() {
   return (
     <div className="space-y-4">
       <LogoEmailCard />
+      <WebhookN8nCard />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <CanalCard
           canal="resend"
           icon={Mail}
           label="Resend (Email)"
           extraFields={[
-            { key: 'fromEmail', label: 'Remitente (From)', placeholder: 'Notificaciones <no-reply@notstudio.cl>' },
+            { key: 'fromEmail', label: 'Remitente (From)', placeholder: 'Condor Alcantarillados <notificaciones@noreply.notstudio.cl>' },
             { key: 'replyTo', label: 'Responder a (Reply-To)', placeholder: 'alcantarilladoscondor@gmail.com' },
           ]}
         />

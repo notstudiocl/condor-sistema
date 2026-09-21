@@ -4,6 +4,7 @@ import * as auditRepo from '../../repositories/auditRepo.js';
 import { adminAuthMiddleware } from '../../middleware/adminAuth.js';
 import { requireRole } from '../../middleware/requireRole.js';
 import { uploadBuffer, buildPublicUrl } from '../../services/storage/r2.js';
+import { WEBHOOK_SETTING_KEY } from '../../services/notifications/webhookN8n.js';
 
 // Configuración operativa editable desde el admin. El kill switch de suscripción NO
 // vive acá — quedó a propósito en variables de entorno de EasyPanel, fuera del alcance
@@ -69,6 +70,44 @@ router.post('/logo', async (req, res, next) => {
       .catch((err) => console.error('[admin/settings] no se pudo registrar auditoría del logo:', err.message));
 
     res.json({ success: true, data: { url } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/admin/settings/webhook-notificaciones — URL del webhook de n8n (modo híbrido).
+// `envFallback` avisa si hay una env var que seguiría activa aunque se borre el setting.
+router.get('/webhook-notificaciones', async (_req, res, next) => {
+  try {
+    const value = await notificacionesRepo.getSetting(WEBHOOK_SETTING_KEY);
+    const url = typeof value === 'string' ? value : value?.url || null;
+    res.json({ success: true, data: { url, envFallback: Boolean(process.env.WEBHOOK_NOTIFICACIONES_URL) } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/admin/settings/webhook-notificaciones — { url } (vacío/null = volver al envío
+// directo desde el backend con las credenciales de Resend/Telegram).
+router.put('/webhook-notificaciones', async (req, res, next) => {
+  try {
+    const url = String(req.body?.url || '').trim();
+    if (url && !/^https:\/\/\S+$/i.test(url)) {
+      return res.status(400).json({ success: false, error: 'La URL del webhook debe comenzar con https://' });
+    }
+    await notificacionesRepo.setSetting(WEBHOOK_SETTING_KEY, { url: url || null }, req.admin?.id || null);
+
+    auditRepo
+      .registrar({
+        adminUserId: req.admin?.id,
+        accion: 'actualizar_webhook_notificaciones',
+        entidad: 'app_settings',
+        entidadId: WEBHOOK_SETTING_KEY,
+        detalle: { url: url || null },
+      })
+      .catch((err) => console.error('[admin/settings] no se pudo registrar auditoría del webhook:', err.message));
+
+    res.json({ success: true, data: { url: url || null } });
   } catch (err) {
     next(err);
   }

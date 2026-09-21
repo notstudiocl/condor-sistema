@@ -136,6 +136,9 @@ export const listNotificacionesLog = (params) => request(`/admin/notificaciones/
 export const getLogoEmail = () => request('/admin/settings/logo');
 export const subirLogoEmail = (imageBase64) =>
   request('/admin/settings/logo', { method: 'POST', body: JSON.stringify({ imageBase64 }) });
+export const getWebhookNotificaciones = () => request('/admin/settings/webhook-notificaciones');
+export const guardarWebhookNotificaciones = (url) =>
+  request('/admin/settings/webhook-notificaciones', { method: 'PUT', body: JSON.stringify({ url }) });
 
 // ---- Plantillas ----
 export const listPlantillas = () => request('/admin/plantillas');
