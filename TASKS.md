@@ -16,13 +16,13 @@ Rama `feat/postgres-migration` — versión NUEVA de Condor 360 (Postgres + R2 +
 
 ## Someday
 
-- [ ] **Apagar el backend viejo (`clientes/condor-api`) y el n8n viejo** cuando se confirme que nadie usa la app antigua (2–3 semanas)
 - [ ] **Cancelar Airtable** tras el período de respaldo
 - [ ] **Cerrar el puerto externo de Postgres (54320)** - solo se necesita abierto para correr `migration/` desde fuera
 - [ ] **Indicador de progreso al subir fotos en el wizard**
 
 ## Done
 
+- [x] ~~Backend viejo `clientes/condor-api` detenido (junto con gotenberg, hya-api y simyt-api del mismo proyecto, todos sin uso) y los 2 workflows de Condor desactivados en el n8n viejo~~ (2026-09-22)
 - [x] ~~Usuarios de prueba eliminados (técnico matias, matias@notstudio.cl, oficina@notstudio.cl)~~ (2026-09-22)
 - [x] ~~CORTE A PRODUCCIÓN: main = código nuevo, EasyPanel despliega desde main, la URL vieja de Pages sirve la app nueva, migración final (656 órdenes), redirección de correos apagada, AUTH_ENFORCE=enforce, técnico de pruebas desactivado~~ (2026-09-22)
 - [x] ~~Correo de respuesta (Reply-To) e interno de Condor configurables desde Correos, aplicados a todo correo del sistema; botón Ver PDF en la lista de órdenes (modal, como H&A)~~ (2026-09-22)
