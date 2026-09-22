@@ -4,8 +4,8 @@ Rama `feat/postgres-migration` — versión NUEVA de Condor 360 (Postgres + R2 +
 
 ## Active
 
-- [ ] **Migración de datos Airtable → Postgres (corrida completa con `--finalize`)** - en curso desde 2026-09-21
-  - Partió en 410 órdenes; Airtable iba en la OT-00654. Verificar al terminar: conteos, adjuntos fallidos y `ordenes_numero_seq >= MAX(numero_orden)`.
+- [ ] **🔴 INCIDENTE PRODUCCIÓN (app antigua): desde 2026-09-20 las órdenes quedan sin fotos, sin PDF y sin correo** - reportado por el cliente por audio
+  - Causa probable: Airtable rechaza los adjuntos (1,66 GB usados, límite Free 1 GB). Salidas: reactivar plan pago o hacer el corte al sistema nuevo. El cliente ya fue avisado de que la actualización lo resuelve.
 - [ ] **Orden de prueba end-to-end en el entorno hosteado** - crear desde terreno → Postgres → fotos R2 → PDF Gotenberg → log de notificaciones
   - Hacerla después de que termine la migración (para no chocar con la secuencia) y borrarla al final.
 
@@ -25,6 +25,7 @@ Rama `feat/postgres-migration` — versión NUEVA de Condor 360 (Postgres + R2 +
 
 ## Done
 
+- [x] ~~Migración completa Airtable → Postgres con `--finalize`: 653 órdenes, 7.592 adjuntos, 0 fallos; secuencia en 654~~ (2026-09-21)
 - [x] ~~Admin: pie del sidebar ("Ir a la app de terreno" + créditos + versión) y bloque de usuario del topbar al estilo H&A~~ (2026-09-21)
 - [x] ~~Bug: el admin mostraba TODAS las fechas de órdenes un día antes (fecha pura parseada como UTC)~~ (2026-09-21)
 - [x] ~~Switch Terreno | Oficina en el login de ambas apps (`components/AppSwitch.jsx`, copia gemela en cada app)~~ (2026-09-21)
