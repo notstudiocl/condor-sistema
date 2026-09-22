@@ -135,6 +135,8 @@ export const listNotificacionesLog = (params) => request(`/admin/notificaciones/
 export const getLogoEmail = () => request('/admin/settings/logo');
 export const subirLogoEmail = (imageBase64) =>
   request('/admin/settings/logo', { method: 'POST', body: JSON.stringify({ imageBase64 }) });
+export const listJobs = () => request('/admin/settings/jobs');
+export const reintentarJob = (id) => request(`/admin/settings/jobs/${id}/reintentar`, { method: 'POST' });
 export const getConfiguracionGeneral = () => request('/admin/settings/general');
 export const guardarConfiguracionGeneral = (data) => request('/admin/settings/general', { method: 'PUT', body: JSON.stringify(data) });
 export const getWebhookNotificaciones = () => request('/admin/settings/webhook-notificaciones');

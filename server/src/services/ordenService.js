@@ -4,6 +4,7 @@ import * as clientesRepo from '../repositories/clientesRepo.js';
 import { uploadBuffer, buildPublicUrl } from './storage/r2.js';
 import { buildHtml, buildPdfFilename } from './pdf/template.js';
 import { renderPdf } from './pdf/gotenberg.js';
+import * as jobsRepo from '../repositories/jobsRepo.js';
 import { dispatchNotificaciones } from './notifications/dispatch.js';
 
 // Orquesta la creación completa de una orden — reemplazo del webhook n8n.
@@ -172,6 +173,32 @@ async function subirFotosYFirma(ordenId, numeroOrdenDisplay, data) {
  * queda 'Enviada' sin PDF, con botón Reintentar en el frontend — corrección de
  * resiliencia #6, nunca pantalla roja con la orden ya creada.
  */
+// Encola 'completar_orden' (1 min) y, la primera vez en 30 min, avisa a NotStudio: un PDF que
+// falla en línea suele significar Gotenberg o R2 con problemas.
+let ultimaAlertaPdf = 0;
+function encolarCompletar(ordenId, motivo) {
+  jobsRepo.encolar('completar_orden', { ordenId: String(ordenId) }, 60)
+    .then((job) => { if (job) console.log(`[ordenService] orden ${ordenId} encolada para completar (job #${job.id})`); })
+    .catch((err) => console.error('[ordenService] no se pudo encolar completar_orden:', err.message));
+  if (Date.now() - ultimaAlertaPdf > 30 * 60 * 1000) {
+    ultimaAlertaPdf = Date.now();
+    jobsRepo.encolar('alerta_notstudio', { mensaje: `PDF falló en línea para la orden ${ordenId} (queda en cola con reintentos).\nMotivo: ${motivo}` })
+      .catch((err) => console.error('[ordenService] no se pudo encolar alerta:', err.message));
+  }
+}
+
+// Handler del job 'completar_orden': PDF + notificaciones para una orden que quedó sin PDF.
+// LANZA si el PDF no se puede generar (así el worker reintenta con backoff). Si la orden ya
+// tiene PDF (alguien reenvió a mano entretanto) no hace nada.
+export async function completarOrdenPendiente(ordenId) {
+  const orden = await ordenesRepo.getOrdenById(ordenId);
+  if (!orden) return { omitido: 'orden no existe' };
+  if ((orden.fotos || []).some((f) => f.tipo === 'pdf')) return { omitido: 'ya tenía PDF' };
+  const r = await reenviarNotificacionesOrden(ordenId);
+  if (!r.data?.webhookOk) throw new Error(r.data?.webhookError || 'No se pudo generar el PDF');
+  return { pdfUrl: r.data.webhookData?.pdfUrl, notificaciones: r.data.webhookData?.notificaciones };
+}
+
 async function generarYSubirPdf(orden) {
   try {
     const html = buildHtml(orden);
@@ -378,6 +405,10 @@ async function finalizarOrdenYResponder(ordenBase, data) {
   if (resultadoPdf.ok) {
     const ordenFinal = await ordenesRepo.getOrdenById(ordenBase.id); // estado ya 'Completada'
     dispararNotificaciones(ordenFinal, { pdfUrl, pdfBuffer: resultadoPdf.pdfBuffer });
+  } else {
+    // El PDF falló en línea (Gotenberg/R2 lentos o caídos): la orden NO queda "sin PDF" hasta que
+    // alguien reenvíe a mano — el worker la completa (PDF + notificaciones) con reintentos.
+    encolarCompletar(ordenBase.id, resultadoPdf.error);
   }
 
   return respuesta;

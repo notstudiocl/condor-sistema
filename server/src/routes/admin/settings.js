@@ -5,6 +5,8 @@ import { adminAuthMiddleware } from '../../middleware/adminAuth.js';
 import { requireRole, requireNotstudio } from '../../middleware/requireRole.js';
 import { uploadBuffer, buildPublicUrl } from '../../services/storage/r2.js';
 import { WEBHOOK_SETTING_KEY } from '../../services/notifications/webhookN8n.js';
+import * as jobsRepo from '../../repositories/jobsRepo.js';
+import { alertasConfiguradas } from '../../services/notifications/alertas.js';
 
 // Configuración operativa editable desde el admin. El kill switch de suscripción NO
 // vive acá — quedó a propósito en variables de entorno de EasyPanel, fuera del alcance
@@ -168,6 +170,24 @@ router.put('/general', requireNotstudio, async (req, res, next) => {
       .registrar({ adminUserId: req.admin?.id, accion: 'configuracion_general', entidad: 'app_settings', entidadId: 'general', detalle: cambios })
       .catch((err) => console.error('[admin/settings] auditoría general:', err.message));
     res.json({ success: true, data: cambios });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Cola de trabajos — SOLO notstudio: últimos jobs y reintento manual de los fallidos.
+router.get('/jobs', requireNotstudio, async (_req, res, next) => {
+  try {
+    res.json({ success: true, data: { jobs: await jobsRepo.listar({ limit: 50 }), alertasConfiguradas: alertasConfiguradas() } });
+  } catch (err) {
+    next(err);
+  }
+});
+router.post('/jobs/:id/reintentar', requireNotstudio, async (req, res, next) => {
+  try {
+    const job = await jobsRepo.reintentar(Number(req.params.id));
+    if (!job) return res.status(404).json({ success: false, error: 'Job no encontrado o no está en error' });
+    res.json({ success: true, data: job });
   } catch (err) {
     next(err);
   }

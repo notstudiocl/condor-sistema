@@ -85,6 +85,8 @@ app.use('/api', (_req, res) => {
 
 app.use(errorHandler);
 
+import('./services/jobs/worker.js').then(({ startJobWorker }) => startJobWorker());
+
 app.listen(PORT, () => {
   console.log(`Condor API corriendo en http://localhost:${PORT}`);
 });

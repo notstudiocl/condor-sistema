@@ -1,12 +1,58 @@
 import { useEffect, useState } from 'react';
-import { Power, AlertTriangle } from 'lucide-react';
+import { Power, AlertTriangle, ListChecks, RotateCcw } from 'lucide-react';
 import { SkeletonText } from '../components/Skeleton';
 import { useToast } from '../components/Toast';
-import { getConfiguracionGeneral, guardarConfiguracionGeneral } from '../utils/api';
+import { getConfiguracionGeneral, guardarConfiguracionGeneral, listJobs, reintentarJob } from '../utils/api';
+import { formatRelativo } from '../utils/format';
 
 // Configuración General — SOLO notstudio (soporte de NotStudio). Kill switch operativo de la
 // suscripción y redirección de correos en modo desarrollo. Los valores viven en app_settings;
 // las variables de entorno de EasyPanel quedan solo como respaldo cuando no hay valor guardado.
+// Cola de trabajos: PDFs/notificaciones que fallaron en línea y el worker completa con reintentos.
+function JobsCard() {
+  const { addToast } = useToast();
+  const [data, setData] = useState(null);
+  const cargar = () => listJobs().then((r) => setData(r.data)).catch(() => setData({ jobs: [], alertasConfiguradas: false }));
+  useEffect(() => { cargar(); const t = setInterval(cargar, 15000); return () => clearInterval(t); }, []);
+  const reintentar = async (id) => {
+    try { await reintentarJob(id); addToast('Job reencolado', { type: 'success' }); cargar(); } catch (err) { addToast(err.message, { type: 'error' }); }
+  };
+  const tono = { ok: 'bg-emerald-50 text-emerald-700', error: 'bg-red-50 text-red-700', pendiente: 'bg-amber-50 text-amber-700', procesando: 'bg-blue-50 text-blue-700' };
+  if (!data) return null;
+  return (
+    <div className="card p-5 space-y-3">
+      <h3 className="font-heading font-semibold text-gray-900 flex items-center gap-2"><ListChecks size={16} className="text-gray-400" /> Cola de trabajos</h3>
+      <p className="text-xs text-gray-500">
+        Si el PDF o las notificaciones fallan al enviar una orden, quedan acá y se reintentan solos (1, 5 y 25 min). Si un trabajo agota
+        sus reintentos, NotStudio recibe una alerta por Telegram{data.alertasConfiguradas ? '' : ' (alertas sin configurar: faltan ALERTAS_TELEGRAM_* en el servidor)'}.
+      </p>
+      {data.jobs.length === 0 ? (
+        <p className="text-sm text-gray-400">Sin trabajos registrados.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="text-left text-xs text-gray-400"><th className="py-1 pr-3">#</th><th className="pr-3">Tipo</th><th className="pr-3">Orden</th><th className="pr-3">Estado</th><th className="pr-3">Intentos</th><th className="pr-3">Cuándo</th><th className="pr-3">Último error</th><th></th></tr></thead>
+            <tbody>
+              {data.jobs.map((j) => (
+                <tr key={j.id} className="border-t border-gray-100">
+                  <td className="py-1.5 pr-3 text-gray-400">{j.id}</td>
+                  <td className="pr-3">{j.tipo}</td>
+                  <td className="pr-3">{j.payload?.ordenId ? <a href={`#/ordenes/${j.payload.ordenId}`} className="text-condor-700 hover:underline">{j.payload.ordenId}</a> : '—'}</td>
+                  <td className="pr-3"><span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${tono[j.estado] || ''}`}>{j.estado}</span></td>
+                  <td className="pr-3 tabular-nums">{j.intentos}/{j.max_intentos}</td>
+                  <td className="pr-3 text-gray-500 whitespace-nowrap">{formatRelativo(j.updated_at)}</td>
+                  <td className="pr-3 text-xs text-red-600 max-w-[260px] truncate" title={j.last_error || ''}>{j.last_error || ''}</td>
+                  <td>{j.estado === 'error' && <button className="btn-secondary py-1 px-2 text-xs" onClick={() => reintentar(j.id)}><RotateCcw size={12} /> Reintentar</button>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ConfiguracionPage() {
   const { addToast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -49,7 +95,7 @@ export default function ConfiguracionPage() {
   if (error) return <div className="card p-6 text-center text-sm text-red-600">{error}</div>;
 
   return (
-    <div className="space-y-4 max-w-2xl">
+    <div className="space-y-4 max-w-4xl">
       <div className={`card p-5 space-y-4 ${form.subscription_active ? '' : 'border-red-200 bg-red-50/40'}`}>
         <h3 className="font-heading font-semibold text-gray-900 flex items-center gap-2">
           <Power size={16} className={form.subscription_active ? 'text-emerald-600' : 'text-red-600'} /> Kill switch de suscripción
@@ -85,6 +131,8 @@ export default function ConfiguracionPage() {
       <div>
         <button className="btn-primary" onClick={guardar} disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar'}</button>
       </div>
+
+      <JobsCard />
     </div>
   );
 }

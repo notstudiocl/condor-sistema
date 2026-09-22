@@ -201,6 +201,10 @@ data.{ airtableOk, recordId, webhookOk, webhookError, duplicate, fotosOk,
 
 `numero_orden` (viene de la secuencia `ordenes_numero_seq`), `numero_orden_display` (GENERATED), `id`, `created_at`, `updated_at` son automáticos en Postgres. No incluirlos en el create/update.
 
+## Cola de trabajos (`jobs`, mismo diseño que hya-sistema)
+
+Tabla `jobs` (004) + worker in-process (`services/jobs/worker.js`, polling 5 s, un job a la vez, backoff 1/5/25 min, 3 intentos, `FOR UPDATE SKIP LOCKED`). El PDF y las notificaciones se siguen intentando **en línea** al crear/editar (el técnico ve "Ver PDF" al instante cuando todo anda); si el PDF falla, `finalizarOrdenYResponder` encola `completar_orden {ordenId}` (índice único parcial: no se duplica mientras haya uno activo) y el worker lo termina vía `ordenService.completarOrdenPendiente` (regenera PDF + notifica; lanza si el PDF falla para que reintente; no hace nada si la orden ya tiene PDF). Al agotar reintentos, o la primera vez en 30 min que un PDF falla en línea, se encola `alerta_notstudio {mensaje}` → Telegram al equipo de NotStudio (`services/notifications/alertas.js`, env `ALERTAS_TELEGRAM_BOT_TOKEN`/`ALERTAS_TELEGRAM_CHAT_ID`; sin ellas solo loguea, nunca al grupo del cliente). Visible y reintentable desde Configuración → General (solo notstudio, `GET/POST /api/admin/settings/jobs`).
+
 ## PDF y notificaciones (n8n quedó solo como cartero opcional)
 
 El trabajo pesado (guardar, subir a R2, generar PDF con Gotenberg, renderizar plantillas) vive en `server/src/services/`. n8n ya NO orquesta nada: en **modo híbrido** solo entrega los mensajes que el backend le manda listos (mismo patrón que `hya-sistema`).
