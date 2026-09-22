@@ -178,7 +178,7 @@ router.put('/general', requireNotstudio, async (req, res, next) => {
 // Cola de trabajos — SOLO notstudio: últimos jobs y reintento manual de los fallidos.
 router.get('/jobs', requireNotstudio, async (_req, res, next) => {
   try {
-    res.json({ success: true, data: { jobs: await jobsRepo.listar({ limit: 50 }), alertasConfiguradas: alertasConfiguradas() } });
+    res.json({ success: true, data: { jobs: await jobsRepo.listar({ limit: 50 }), alertasConfiguradas: await alertasConfiguradas() } });
   } catch (err) {
     next(err);
   }

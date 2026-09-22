@@ -24,7 +24,7 @@ function JobsCard() {
       <h3 className="font-heading font-semibold text-gray-900 flex items-center gap-2"><ListChecks size={16} className="text-gray-400" /> Cola de trabajos</h3>
       <p className="text-xs text-gray-500">
         Si el PDF o las notificaciones fallan al enviar una orden, quedan acá y se reintentan solos (1, 5 y 25 min). Si un trabajo agota
-        sus reintentos, NotStudio recibe una alerta por Telegram{data.alertasConfiguradas ? '' : ' (alertas sin configurar: faltan ALERTAS_TELEGRAM_* en el servidor)'}.
+        sus reintentos, NotStudio recibe una alerta por Telegram{data.alertasConfiguradas ? '' : ' (alertas sin configurar: falta el webhook de n8n en Integraciones)'}.
       </p>
       {data.jobs.length === 0 ? (
         <p className="text-sm text-gray-400">Sin trabajos registrados.</p>

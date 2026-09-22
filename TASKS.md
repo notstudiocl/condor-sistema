@@ -9,7 +9,6 @@ Rama `feat/postgres-migration` — versión NUEVA de Condor 360 (Postgres + R2 +
 
 ## Waiting On
 
-- [ ] **Bot y chat de Telegram de NotStudio para las alertas** - Matías: setear `ALERTAS_TELEGRAM_BOT_TOKEN` y `ALERTAS_TELEGRAM_CHAT_ID` en `condor-app` (EasyPanel); hasta entonces las alertas solo quedan en el log
 - [ ] **Desactivar el técnico de pruebas `matias` (NotStudio Pruebas, TCN039) al hacer el corte** - aparece en "Personal asignado" de todos los técnicos mientras esté activo
 - [ ] **OK para mandar un mensaje de prueba al grupo de Telegram de Condor** - Matías, since 2026-09-21
   - Chat `-5133715111` con el bot "Hermes NotStudio"; falta confirmar que Hermes está en ese grupo.
