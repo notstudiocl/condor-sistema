@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getSession, hasRole, ROLES } from '../utils/auth';
 import {
@@ -53,25 +53,50 @@ import {
 } from '../utils/api';
 
 function PhotoViewer({ open, onClose, fotos, index, setIndex }) {
+  // Swipe horizontal en touch (sin librería): solo lectura del gesto, la navegación es la
+  // misma que los botones prev/next.
+  const touchStartX = useRef(null);
   if (!open) return null;
   const foto = fotos[index];
+  const prev = () => setIndex((i) => (i - 1 + fotos.length) % fotos.length);
+  const next = () => setIndex((i) => (i + 1) % fotos.length);
+  const onTouchStart = (e) => {
+    touchStartX.current = e.touches[0]?.clientX ?? null;
+  };
+  const onTouchEnd = (e) => {
+    if (touchStartX.current == null || fotos.length < 2) return;
+    const dx = (e.changedTouches[0]?.clientX ?? touchStartX.current) - touchStartX.current;
+    touchStartX.current = null;
+    if (Math.abs(dx) < 40) return;
+    if (dx < 0) next();
+    else prev();
+  };
   return (
-    <div className="fixed inset-0 z-[150] bg-black/90 flex items-center justify-center">
-      <button onClick={onClose} className="absolute top-4 right-4 text-white/70 hover:text-white p-2">
+    <div
+      className="fixed inset-0 z-[150] bg-black/90 flex items-center justify-center touch-pan-y select-none"
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+    >
+      <button
+        onClick={onClose}
+        className="absolute top-3 right-3 z-10 h-11 w-11 inline-flex items-center justify-center rounded-full bg-black/40 text-white/80 hover:text-white"
+        aria-label="Cerrar"
+      >
         <X size={22} />
       </button>
       {fotos.length > 1 && (
         <button
-          onClick={() => setIndex((i) => (i - 1 + fotos.length) % fotos.length)}
-          className="absolute left-4 text-white/70 hover:text-white p-2"
+          onClick={prev}
+          className="absolute left-2 sm:left-4 z-10 h-11 w-11 inline-flex items-center justify-center rounded-full bg-black/40 text-white/80 hover:text-white"
+          aria-label="Anterior"
         >
           <ChevronLeft size={28} />
         </button>
       )}
       {foto?.url ? (
-        <img src={foto.url} alt={foto.label} className="max-w-[90vw] max-h-[80vh] rounded-xl object-contain" />
+        <img src={foto.url} alt={foto.label} className="max-w-[94vw] max-h-[86dvh] rounded-xl object-contain" draggable={false} />
       ) : (
-        <div className="w-72 h-72 rounded-xl flex items-center justify-center bg-gray-800">
+        <div className="w-72 max-w-[80vw] h-72 max-h-[70dvh] rounded-xl flex items-center justify-center bg-gray-800">
           <div className="text-center text-gray-400">
             <ImageOff size={32} className="mx-auto mb-2" />
             <p className="text-sm">No se pudo cargar la imagen</p>
@@ -80,13 +105,14 @@ function PhotoViewer({ open, onClose, fotos, index, setIndex }) {
       )}
       {fotos.length > 1 && (
         <button
-          onClick={() => setIndex((i) => (i + 1) % fotos.length)}
-          className="absolute right-4 text-white/70 hover:text-white p-2"
+          onClick={next}
+          className="absolute right-2 sm:right-4 z-10 h-11 w-11 inline-flex items-center justify-center rounded-full bg-black/40 text-white/80 hover:text-white"
+          aria-label="Siguiente"
         >
           <ChevronRight size={28} />
         </button>
       )}
-      <span className="absolute bottom-5 text-white/60 text-xs">
+      <span className="absolute bottom-3 sm:bottom-5 left-1/2 -translate-x-1/2 text-white/70 text-xs bg-black/40 rounded-full px-3 py-1">
         {foto?.label} · {index + 1} / {fotos.length}
       </span>
     </div>
@@ -552,11 +578,13 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
 
   return (
     <div className="space-y-5 pb-10">
-      {/* Header sticky con acciones */}
-      <div className="sticky top-16 z-20 -mx-4 md:-mx-6 px-4 md:px-6 py-3 bg-gray-50/95 backdrop-blur border-b border-gray-200 flex flex-wrap items-center gap-3">
+      {/* Header con acciones — sticky solo en escritorio (lg+): en celular ocupa 2-3 filas y
+          pegado al Topbar dejaría casi sin espacio en horizontal (844x390). */}
+      <div className="lg:sticky lg:top-16 z-20 -mx-4 md:-mx-6 px-4 md:px-6 py-3 bg-gray-50/95 backdrop-blur border-b border-gray-200 flex flex-wrap items-center gap-x-3 gap-y-2">
         <button
           onClick={() => navigate(-1)}
-          className="p-2 -ml-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+          className="h-10 w-10 -ml-2 shrink-0 inline-flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+          aria-label="Volver"
         >
           <ArrowLeft size={18} />
         </button>
@@ -568,13 +596,13 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
         </div>
         {!esNuevaOrden && <EstadoBadge estado={orden.estado} solido />}
 
-        <div className="ml-auto flex items-center gap-2 flex-wrap">
+        <div className="w-full lg:w-auto lg:ml-auto flex items-center gap-2 flex-wrap">
           {editMode ? (
             <>
-              <button className="btn-secondary" onClick={handleCancelar} disabled={guardando}>
+              <button className="btn-secondary flex-1 sm:flex-none" onClick={handleCancelar} disabled={guardando}>
                 Cancelar
               </button>
-              <button className="btn-accent" onClick={handleGuardar} disabled={guardando}>
+              <button className="btn-accent flex-1 sm:flex-none" onClick={handleGuardar} disabled={guardando}>
                 {guardando ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
                 {guardando
                   ? esNuevaOrden ? 'Creando...' : 'Guardando...'
@@ -586,7 +614,7 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
               <select
                 value=""
                 onChange={(e) => e.target.value && setConfirmEstado(e.target.value)}
-                className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-condor-400"
+                className="flex-1 sm:flex-none min-w-0 min-h-10 lg:min-h-0 text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-condor-400"
               >
                 <option value="">Cambiar estado...</option>
                 {ESTADOS.filter((e) => e !== orden.estado).map((e) => (
@@ -618,10 +646,10 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
 
       {/* Timeline de estados — no aplica todavía en modo creación (la orden no existe) */}
       {!esNuevaOrden && (
-        <div className="card p-5">
+        <div className="card p-4 sm:p-5">
           <div className="flex items-center overflow-x-auto">
             {timeline.map((step, i) => (
-              <div key={step.estado} className="flex items-center flex-1 min-w-[110px] last:flex-initial">
+              <div key={step.estado} className="flex items-center flex-1 min-w-[96px] sm:min-w-[110px] last:flex-initial">
                 <div className="flex flex-col items-center gap-1.5">
                   <div
                     className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
@@ -647,7 +675,7 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
         {/* Columna principal */}
         <div className="lg:col-span-2 space-y-5">
           {/* Trabajo */}
-          <div className="card p-5">
+          <div className="card p-4 sm:p-5">
             <h2 className="font-heading font-semibold text-gray-900 mb-4">Trabajo realizado</h2>
 
             {editMode ? (
@@ -686,7 +714,7 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
                   <label className="label-field">Trabajos realizados</label>
                   <div className="space-y-2">
                     {form.trabajos.map((t) => (
-                      <div key={t.key} className="flex items-center gap-2">
+                      <div key={t.key} className="flex flex-wrap items-center gap-2">
                         <select
                           value={t.servicioId ? String(t.servicioId) : ''}
                           onChange={(e) => {
@@ -698,7 +726,7 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
                               actualizarTrabajo(t.key, { servicioId: Number(val), trabajo: servicio?.nombre || '' });
                             }
                           }}
-                          className="input-field flex-1 min-w-0"
+                          className="input-field flex-1 min-w-[140px]"
                         >
                           <option value="">Personalizado...</option>
                           {servicios.map((s) => (
@@ -712,7 +740,7 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
                             value={t.trabajo}
                             onChange={(e) => actualizarTrabajo(t.key, { trabajo: e.target.value })}
                             placeholder="Nombre del trabajo"
-                            className="input-field flex-1 min-w-0"
+                            className="input-field order-last sm:order-none w-full sm:w-auto sm:flex-1 sm:min-w-[160px]"
                           />
                         )}
                         <input
@@ -720,12 +748,12 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
                           min="1"
                           value={t.cantidad}
                           onChange={(e) => actualizarTrabajo(t.key, { cantidad: e.target.value })}
-                          className="input-field w-20 shrink-0"
+                          className="input-field w-16 sm:w-20 shrink-0"
                         />
                         <button
                           type="button"
                           onClick={() => quitarTrabajo(t.key)}
-                          className="shrink-0 p-2 text-gray-400 hover:text-red-600 transition-colors"
+                          className="shrink-0 h-10 w-10 inline-flex items-center justify-center text-gray-400 hover:text-red-600 transition-colors"
                           title="Quitar trabajo"
                         >
                           <Trash2 size={16} />
@@ -806,7 +834,7 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
               todavía no existe, no puede tener fotos, notificaciones ni cambios auditados. */}
           {!esNuevaOrden && (
           <>
-          <div className="card p-5">
+          <div className="card p-4 sm:p-5">
             <h2 className="font-heading font-semibold text-gray-900 mb-4">Evidencia fotográfica</h2>
 
             {editMode ? (
@@ -818,7 +846,7 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
                       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
                         {tipo === 'antes' ? 'Antes' : 'Después'}
                       </p>
-                      <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                         {existentes.map((f) => {
                           const marcada = fotosParaEliminar.includes(f.id);
                           return (
@@ -837,7 +865,7 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
                               <button
                                 type="button"
                                 onClick={() => toggleEliminarFotoExistente(f.id)}
-                                className={`absolute top-1 right-1 rounded-full p-1 ${
+                                className={`absolute top-1 right-1 rounded-full p-1.5 ${
                                   marcada ? 'bg-emerald-600 text-white' : 'bg-black/50 text-white hover:bg-red-600'
                                 }`}
                                 title={marcada ? 'Deshacer eliminación' : 'Marcar para eliminar'}
@@ -858,7 +886,7 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
                             <button
                               type="button"
                               onClick={() => quitarFotoNueva(tipo, f.tempId)}
-                              className="absolute top-1 right-1 rounded-full p-1 bg-black/50 text-white hover:bg-red-600"
+                              className="absolute top-1 right-1 rounded-full p-1.5 bg-black/50 text-white hover:bg-red-600"
                               title="Quitar"
                             >
                               <X size={12} />
@@ -890,7 +918,7 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
             ) : fotos.length === 0 ? (
               <p className="text-sm text-gray-400">Esta orden no tiene fotos registradas.</p>
             ) : (
-              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                 {fotos.map((f, i) => (
                   <button
                     key={f.id}
@@ -914,7 +942,7 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
           </div>
 
           {/* Notificaciones */}
-          <div className="card p-5">
+          <div className="card p-4 sm:p-5">
             <h2 className="font-heading font-semibold text-gray-900 mb-4">Notificaciones de esta orden</h2>
             {notificaciones.length === 0 ? (
               <p className="text-sm text-gray-400">Todavía no se ha enviado ninguna notificación para esta orden.</p>
@@ -949,7 +977,7 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
           </div>
 
           {/* Historial de cambios (auditoría) */}
-          <div className="card p-5">
+          <div className="card p-4 sm:p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-heading font-semibold text-gray-900 flex items-center gap-2">
                 <History size={16} className="text-gray-400" /> Historial de cambios
@@ -969,7 +997,7 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
               <div className="divide-y divide-gray-100">
                 {auditoriaVisible.map((a) => (
                   <div key={a.id} className="py-2.5">
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-2">
                       <p className="text-sm text-gray-800">
                         <span className="font-medium">{a.admin_nombre || a.admin_email || 'Sistema'}</span>
                         {' — '}
@@ -989,7 +1017,7 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
 
         {/* Lateral */}
         <div className="space-y-5">
-          <div className="card p-5">
+          <div className="card p-4 sm:p-5">
             <h2 className="font-heading font-semibold text-gray-900 mb-3">Cliente</h2>
 
             {editMode ? (
@@ -1093,7 +1121,7 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
             )}
           </div>
 
-          <div className="card p-5">
+          <div className="card p-4 sm:p-5">
             <h2 className="font-heading font-semibold text-gray-900 mb-3 flex items-center gap-2">
               <Wallet size={16} className="text-gray-400" /> Pago
             </h2>
@@ -1165,7 +1193,7 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
             )}
           </div>
 
-          <div className="card p-5">
+          <div className="card p-4 sm:p-5">
             <h2 className="font-heading font-semibold text-gray-900 mb-3 flex items-center gap-2">
               <Truck size={16} className="text-gray-400" /> Equipo
             </h2>

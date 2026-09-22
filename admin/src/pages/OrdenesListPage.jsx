@@ -261,7 +261,8 @@ export default function OrdenesListPage() {
     <div className="space-y-4">
       <div className="flex flex-col lg:flex-row lg:items-center gap-3 justify-between">
         <FilterChips options={estadoOptions} values={estadosActivos} onChange={handleEstadosChange} />
-        <div className="flex items-center gap-2 shrink-0">
+        {/* En celular: buscador a ancho completo y los botones en su propia fila */}
+        <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
           <SearchInput
             placeholder="Buscar OT, RUT, cliente, dirección..."
             value={query}
@@ -270,7 +271,7 @@ export default function OrdenesListPage() {
               setPage(1);
               setQuery(v);
             }}
-            className="w-72"
+            className="w-full sm:w-72"
           />
           <button
             onClick={() =>
@@ -282,20 +283,20 @@ export default function OrdenesListPage() {
             <Download size={15} />
             <span className="hidden sm:inline">Exportar a Excel</span>
           </button>
-          <button onClick={() => navigate('/ordenes/nueva')} className="btn-primary shrink-0">
+          <button onClick={() => navigate('/ordenes/nueva')} className="btn-primary shrink-0 flex-1 sm:flex-none">
             <Plus size={16} /> Nueva orden
           </button>
         </div>
       </div>
 
       {selected.length > 0 && (
-        <div className="flex items-center justify-between gap-3 bg-condor-50 border border-condor-200 rounded-xl px-4 py-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-condor-50 border border-condor-200 rounded-xl px-4 py-3">
           <p className="text-sm text-condor-900">
             <span className="font-semibold">{selected.length}</span> orden{selected.length === 1 ? '' : 'es'}{' '}
             seleccionada{selected.length === 1 ? '' : 's'} · suma{' '}
             <span className="font-semibold">{formatCLP(sumaSeleccion)}</span>
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button onClick={() => setSelected([])} className="btn-secondary py-1.5 px-3 text-xs">
               Limpiar
             </button>
@@ -327,14 +328,14 @@ export default function OrdenesListPage() {
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1}
-              className="btn-secondary py-1.5 px-2.5 disabled:opacity-40"
+              className="btn-secondary py-1.5 px-3 disabled:opacity-40"
             >
               <ChevronLeft size={15} />
             </button>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
-              className="btn-secondary py-1.5 px-2.5 disabled:opacity-40"
+              className="btn-secondary py-1.5 px-3 disabled:opacity-40"
             >
               <ChevronRight size={15} />
             </button>

@@ -158,7 +158,7 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Barras semanales */}
-        <div className="card p-5 lg:col-span-2">
+        <div className="card p-4 sm:p-5 lg:col-span-2 min-w-0">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-heading font-semibold text-gray-900">Órdenes por día — esta semana</h2>
           </div>
@@ -166,7 +166,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Top servicios del mes */}
-        <div className="card p-5">
+        <div className="card p-4 sm:p-5 min-w-0">
           <h2 className="font-heading font-semibold text-gray-900 mb-4">Top servicios del mes</h2>
           {topServicios.length === 0 ? (
             <p className="text-sm text-gray-400">Sin servicios registrados este mes.</p>
@@ -196,7 +196,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Últimas órdenes */}
         <div className="card">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b border-gray-100">
             <h2 className="font-heading font-semibold text-gray-900">Últimas órdenes</h2>
             <button
               onClick={() => navigate('/ordenes')}
@@ -213,7 +213,7 @@ export default function DashboardPage() {
                 <button
                   key={o.id}
                   onClick={() => navigate(`/ordenes/${o.id}`)}
-                  className="w-full flex items-center justify-between gap-3 px-5 py-3 hover:bg-gray-50 transition-colors text-left"
+                  className="w-full flex items-center justify-between gap-3 px-4 sm:px-5 py-3 hover:bg-gray-50 transition-colors text-left"
                 >
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">
@@ -230,7 +230,7 @@ export default function DashboardPage() {
 
         {/* Pendientes de facturar más antiguas */}
         <div className="card">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b border-gray-100">
             <h2 className="font-heading font-semibold text-gray-900">Pendientes de facturar más antiguas</h2>
           </div>
           <div className="divide-y divide-gray-100">
@@ -241,7 +241,7 @@ export default function DashboardPage() {
               const dias = o.dias ?? 0;
               const critica = dias > 14;
               return (
-                <div key={o.id} className="flex items-center justify-between gap-3 px-5 py-3">
+                <div key={o.id} className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3">
                   <button onClick={() => navigate(`/ordenes/${o.id}`)} className="min-w-0 text-left flex-1">
                     <p className="text-sm font-medium text-gray-900 truncate">
                       OT-{o.numero_orden_display} · {o.cliente_empresa || o.supervisor || 'Sin cliente'}
@@ -253,7 +253,7 @@ export default function DashboardPage() {
                   </button>
                   <button
                     onClick={() => handleMarcarFacturada(o)}
-                    className="shrink-0 text-xs font-semibold text-white bg-condor-900 hover:bg-condor-800 rounded-lg px-3 py-1.5 transition-colors"
+                    className="shrink-0 text-xs font-semibold text-white bg-condor-900 hover:bg-condor-800 rounded-lg px-3 py-1.5 min-h-10 lg:min-h-0 transition-colors"
                   >
                     Marcar facturada
                   </button>
