@@ -23,6 +23,7 @@ Rama `feat/postgres-migration` — versión NUEVA de Condor 360 (Postgres + R2 +
 
 ## Done
 
+- [x] ~~Dashboard rediseñado con KPIs de operación (sin plata): semana/mes con comparación, hidrojet, duración, por técnico, por cliente (RUT), día de la semana 6 meses, órdenes con problemas~~ (2026-09-22)
 - [x] ~~Ficha de orden por secciones (Cliente/Trabajo/Pago/Equipo/Fotos) con edición por tarjeta y acciones en la cabecera; ficha de cliente como página propia — distribución de H&A con estilo Condor~~ (2026-09-22)
 - [x] ~~Cola de trabajos en Postgres (PDF/notificaciones con reintentos) + alertas a NotStudio por Telegram, con tarjeta en Configuración → General~~ (2026-09-22)
 - [x] ~~Admin reestructurado como H&A: sidebar plano + grupo Configuración desplegable (General y Integraciones solo NotStudio; Usuarios, Correos y Auditoría para admin); kill switch y redirección de correos editables desde General; Correos = logo + historial (plantillas solo NotStudio)~~ (2026-09-22)

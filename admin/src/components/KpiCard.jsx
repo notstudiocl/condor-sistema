@@ -13,7 +13,7 @@ export default function KpiCard({ label, value, sublabel, icon: Icon, highlight 
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide truncate">{label}</p>
-          <p className="mt-2 font-heading text-2xl font-bold text-gray-900 truncate">{value}</p>
+          <p className="mt-2 font-heading text-2xl font-bold text-gray-900 truncate tabular-nums">{value}</p>
           {sublabel && <p className="mt-1 text-sm text-gray-500 truncate">{sublabel}</p>}
         </div>
         {Icon && (
