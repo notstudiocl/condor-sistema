@@ -23,6 +23,7 @@ Rama `feat/postgres-migration` — versión NUEVA de Condor 360 (Postgres + R2 +
 
 ## Done
 
+- [x] ~~Admin reestructurado como H&A: sidebar plano + grupo Configuración desplegable (General y Integraciones solo NotStudio; Usuarios, Correos y Auditoría para admin); kill switch y redirección de correos editables desde General; Correos = logo + historial (plantillas solo NotStudio)~~ (2026-09-22)
 - [x] ~~Unificación de usuarios desplegada (migración 003 aplicada en producción; admin@notstudio.cl es rol notstudio)~~ (2026-09-22)
 - [x] ~~Admin adaptado a celular (vertical y horizontal)~~ (2026-09-22)
 - [x] ~~Residuos del QA eliminados (órdenes 00655/00657/00658, clientes de prueba)~~ (2026-09-22)

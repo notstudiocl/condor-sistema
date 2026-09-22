@@ -151,8 +151,10 @@ export async function buildDefaultEditable(templateKey) {
 async function getDevRedirect() {
   try {
     const value = await notificacionesRepo.getSetting('email_dev_redirect');
-    const email = typeof value === 'string' ? value : value?.email || null;
-    return email || process.env.EMAIL_DEV_REDIRECT || null;
+    // Fila presente (aunque vacía) manda sobre la env var: vaciar el campo desde el panel apaga
+    // la redirección de verdad.
+    if (value === null || value === undefined) return process.env.EMAIL_DEV_REDIRECT || null;
+    return (typeof value === 'string' ? value : value?.email || value?.value) || null;
   } catch (err) {
     console.error('[notificaciones] no se pudo leer email_dev_redirect:', err.message);
     return process.env.EMAIL_DEV_REDIRECT || null;

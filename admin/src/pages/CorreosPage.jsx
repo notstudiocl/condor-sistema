@@ -20,6 +20,7 @@ import { SkeletonText, SkeletonTable } from '../components/Skeleton';
 import { useToast } from '../components/Toast';
 import { formatFechaHora } from '../utils/format';
 import { getSession, hasRole, ROLES } from '../utils/auth';
+import LogoEmailCard from '../components/LogoEmailCard';
 import {
   listPlantillas,
   guardarPlantilla,
@@ -456,15 +457,20 @@ function HistorialTab() {
   );
 }
 
-export default function NotificacionesPage() {
-  const [tab, setTab] = useState('plantillas');
+// Correos: el logo del encabezado y el historial de lo que efectivamente se envió (admin y
+// notstudio). Los mensajes usan los textos por defecto del sistema; el editor de plantillas
+// queda solo para notstudio (soporte), como en H&A.
+export default function CorreosPage() {
+  const esNotstudio = hasRole(getSession()?.user, [ROLES.NOTSTUDIO]);
+  const [tab, setTab] = useState('historial');
 
   return (
     <div className="space-y-4">
+      <LogoEmailCard />
       <div className="flex gap-1 border-b border-gray-200">
         {[
-          { key: 'plantillas', label: 'Plantillas', icon: FileText },
-          { key: 'historial', label: 'Historial', icon: Mail },
+          { key: 'historial', label: 'Historial de envíos', icon: Mail },
+          ...(esNotstudio ? [{ key: 'plantillas', label: 'Plantillas (NotStudio)', icon: FileText }] : []),
         ].map((t) => (
           <button
             key={t.key}
@@ -478,7 +484,7 @@ export default function NotificacionesPage() {
         ))}
       </div>
 
-      {tab === 'plantillas' ? <PlantillasTab /> : <HistorialTab />}
+      {tab === 'plantillas' && esNotstudio ? <PlantillasTab /> : <HistorialTab />}
     </div>
   );
 }

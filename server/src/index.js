@@ -18,7 +18,7 @@ import adminDashboardRoutes from './routes/admin/dashboard.js';
 import adminSettingsRoutes from './routes/admin/settings.js';
 import adminAuditoriaRoutes from './routes/admin/auditoria.js';
 import { errorHandler } from './middleware/errorHandler.js';
-import { getSubscriptionStatus, subscriptionGate } from './middleware/subscriptionGate.js';
+import { getSubscriptionStatus } from './middleware/subscriptionGate.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -44,8 +44,12 @@ app.use((req, res, next) => {
 
 // Endpoint público consultado por la app de terreno (SubscriptionBanner.jsx) para
 // mostrar el aviso de suspensión. Estado real vive en SUBSCRIPTION_ACTIVE/SUBSCRIPTION_MESSAGE.
-app.get('/api/subscription-status', (_req, res) => {
-  res.json({ success: true, data: getSubscriptionStatus() });
+app.get('/api/subscription-status', async (_req, res, next) => {
+  try {
+    res.json({ success: true, data: await getSubscriptionStatus() });
+  } catch (err) {
+    next(err);
+  }
 });
 
 app.get('/api/health', (_req, res) => {
@@ -58,9 +62,8 @@ app.use('/api', serviciosRoutes); // /api/servicios
 app.use('/api/clientes', clientesRoutes);
 app.use('/api/ordenes', ordenesRoutes);
 
-// Kill switch: bloquea TODO /api/admin/* (incluido el login) si el servicio está
-// suspendido — se monta antes de adminAuthMiddleware en cada ruta admin.
-app.use('/api/admin', subscriptionGate);
+// El kill switch (subscriptionGate) solo aplica a las escrituras de la app de terreno (ver
+// routes/ordenes.js): el panel sigue accesible para que NotStudio pueda reactivarlo.
 
 app.use('/api/admin/auth', adminAuthRoutes);
 app.use('/api/admin/ordenes', adminOrdenesRoutes);

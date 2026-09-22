@@ -1,13 +1,18 @@
-import { NavLink } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   ClipboardList,
   Users,
   UserCog,
   Wrench,
-  Bell,
   Settings,
   History,
+  SlidersHorizontal,
+  Plug,
+  Mail,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { hasRole } from '../utils/auth';
 import { APP_VERSION } from '../version';
@@ -20,33 +25,73 @@ const TERRENO_URL = import.meta.env.BASE_URL.replace(/admin\/$/, '');
  * `badge` es un número opcional mostrado como pill al lado del ítem
  * (ej. órdenes con "Facturacion pendiente", clientes con RUT duplicado).
  */
+// Ítems principales (planos, como en H&A) + grupo desplegable "Configuración". Cada ítem declara
+// `roles` opcional (mismo criterio que requireRole del backend: notstudio ⊇ admin). Si un rol no
+// ve ningún hijo del grupo, el grupo entero se oculta (oficina).
 function buildNav(counts) {
   return [
-    {
-      section: null,
-      items: [{ to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true }],
-    },
-    {
-      section: 'Operación',
-      items: [
-        { to: '/ordenes', label: 'Órdenes', icon: ClipboardList, badge: counts.porFacturar, badgeTone: 'orange' },
-        { to: '/clientes', label: 'Clientes', icon: Users, badge: counts.duplicados, badgeTone: 'red' },
-        { to: '/servicios', label: 'Servicios', icon: Wrench },
-      ],
-    },
-    {
-      section: 'Sistema',
-      items: [
-        { to: '/notificaciones', label: 'Notificaciones', icon: Bell },
-        { to: '/configuracion', label: 'Configuración', icon: Settings, roles: ['admin'] },
-        { to: '/usuarios', label: 'Usuarios', icon: UserCog, roles: ['admin'], hint: 'Técnicos y oficina' },
-        { to: '/auditoria', label: 'Auditoría', icon: History, roles: ['admin'], hint: 'Historial de cambios' },
-      ],
-    },
+    { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
+    { to: '/ordenes', label: 'Órdenes', icon: ClipboardList, badge: counts.porFacturar, badgeTone: 'orange' },
+    { to: '/clientes', label: 'Clientes', icon: Users, badge: counts.duplicados, badgeTone: 'red' },
+    { to: '/servicios', label: 'Servicios', icon: Wrench },
   ];
 }
 
+const CONFIG_GROUP = {
+  label: 'Configuración',
+  icon: Settings,
+  items: [
+    { to: '/configuracion', label: 'General', icon: SlidersHorizontal, roles: ['notstudio'] },
+    { to: '/usuarios', label: 'Usuarios', icon: UserCog, roles: ['admin'] },
+    { to: '/integraciones', label: 'Integraciones', icon: Plug, roles: ['notstudio'] },
+    { to: '/correos', label: 'Correos', icon: Mail, roles: ['admin'] },
+    { to: '/auditoria', label: 'Auditoría', icon: History, roles: ['admin'] },
+  ],
+};
+
+const STORAGE_KEY_CONFIG = 'condor-admin-nav-config';
+const rutaEnGrupo = (pathname, items) => items.some(({ to }) => pathname === to || pathname.startsWith(`${to}/`));
+
+const linkClass = ({ isActive }) =>
+  `flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+    isActive ? 'bg-white text-condor-900 shadow-sm' : 'text-white/70 hover:bg-white/5 hover:text-white'
+  }`;
+
+function NavItem({ item, onNavigate, small = false }) {
+  return (
+    <NavLink to={item.to} end={item.end} onClick={onNavigate} className={linkClass}>
+      <span className="flex items-center gap-2.5 min-w-0">
+        <item.icon size={small ? 15 : 17} className="shrink-0" />
+        <span className="truncate">{item.label}</span>
+      </span>
+      {!!item.badge && (
+        <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${item.badgeTone === 'red' ? 'bg-red-500 text-white' : 'bg-orange-400 text-black'}`}>
+          {item.badge}
+        </span>
+      )}
+    </NavLink>
+  );
+}
+
 function NavContent({ user, nav, onNavigate }) {
+  const { pathname } = useLocation();
+  const configItems = CONFIG_GROUP.items.filter((item) => hasRole(user, item.roles));
+  const configActivo = rutaEnGrupo(pathname, configItems);
+  const [configAbierto, setConfigAbierto] = useState(() => {
+    try {
+      const v = localStorage.getItem(STORAGE_KEY_CONFIG);
+      if (v === 'abierto') return true;
+      if (v === 'cerrado') return false;
+    } catch { /* localStorage no disponible */ }
+    return false;
+  });
+  // Al navegar hacia una ruta hija, el grupo se despliega solo.
+  useEffect(() => { if (configActivo) setConfigAbierto(true); }, [configActivo]);
+  const toggleConfig = () => setConfigAbierto((prev) => {
+    try { localStorage.setItem(STORAGE_KEY_CONFIG, prev ? 'cerrado' : 'abierto'); } catch { /* no crítico */ }
+    return !prev;
+  });
+
   return (
     <>
       <div className="flex items-center gap-2 px-5 h-16 border-b border-white/10 shrink-0">
@@ -57,52 +102,34 @@ function NavContent({ user, nav, onNavigate }) {
         </div>
       </div>
 
-      <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-4 space-y-5">
-        {nav.map((group, gi) => {
-          const items = group.items.filter((item) => hasRole(user, item.roles));
-          if (items.length === 0) return null;
-          return (
-            <div key={gi}>
-              {group.section && (
-                <p className="px-3 mb-1.5 text-[10px] font-bold uppercase tracking-wider text-white/35">
-                  {group.section}
-                </p>
-              )}
-              <div className="space-y-0.5">
-                {items.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.end}
-                    onClick={onNavigate}
-                    className={({ isActive }) =>
-                      `flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        isActive ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'
-                      }`
-                    }
-                  >
-                    <span className="flex items-center gap-2.5 min-w-0">
-                      <item.icon size={17} className="shrink-0" />
-                      <span className="min-w-0 flex flex-col leading-tight">
-                        <span className="truncate">{item.label}</span>
-                        {item.hint && <span className="truncate text-[10px] font-normal text-white/40">{item.hint}</span>}
-                      </span>
-                    </span>
-                    {!!item.badge && (
-                      <span
-                        className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                          item.badgeTone === 'red' ? 'bg-red-500 text-white' : 'bg-orange-400 text-black'
-                        }`}
-                      >
-                        {item.badge}
-                      </span>
-                    )}
-                  </NavLink>
+      <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-4 space-y-0.5">
+        {nav.filter((item) => hasRole(user, item.roles)).map((item) => (
+          <NavItem key={item.to} item={item} onNavigate={onNavigate} />
+        ))}
+
+        {configItems.length > 0 && (
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={toggleConfig}
+              aria-expanded={configAbierto}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                configActivo && !configAbierto ? 'bg-white text-condor-900 shadow-sm' : 'text-white/70 hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              <CONFIG_GROUP.icon size={17} />
+              <span className="flex-1 text-left">{CONFIG_GROUP.label}</span>
+              {configAbierto ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+            </button>
+            {configAbierto && (
+              <div className="mt-0.5 ml-4 pl-2 border-l border-white/10 space-y-0.5">
+                {configItems.map((item) => (
+                  <NavItem key={item.to} item={item} onNavigate={onNavigate} small />
                 ))}
               </div>
-            </div>
-          );
-        })}
+            )}
+          </div>
+        )}
       </nav>
 
       <div className="px-3 pt-3 pb-4 shrink-0">

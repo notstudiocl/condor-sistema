@@ -135,7 +135,8 @@ Reemplaza a "Personal" y "Usuarios" antiguas (`/personal` redirige a `/usuarios`
 
 ### Kill switch de suscripción
 
-- Fuente de verdad: **solo env vars de EasyPanel** — `SUBSCRIPTION_ACTIVE` (`'true'`/`'false'`, default activo si falta) y `SUBSCRIPTION_MESSAGE`. Ninguna app (ni admin ni client) puede leerlas ni editarlas — decisión deliberada para no exponer un control tan sensible dentro del producto.
+- (Actualizado 2026-09-22, igual que H&A) Fuente de verdad: **`app_settings.subscription_active` / `subscription_message`**, editables desde Configuración → General (solo rol notstudio); las env vars `SUBSCRIPTION_ACTIVE`/`SUBSCRIPTION_MESSAGE` quedan como respaldo mientras no exista fila. `subscriptionGate` bloquea **solo** las escrituras de la app de terreno (`POST/PUT /api/ordenes`, `reenviar`); el panel sigue accesible para que NotStudio pueda reactivarlo. Lo de abajo describe el diseño anterior.
+- (Anterior) Fuente de verdad: solo env vars de EasyPanel — `SUBSCRIPTION_ACTIVE` (`'true'`/`'false'`, default activo si falta) y `SUBSCRIPTION_MESSAGE`. Ninguna app (ni admin ni client) puede leerlas ni editarlas — decisión deliberada para no exponer un control tan sensible dentro del producto.
 - `server/src/middleware/subscriptionGate.js` bloquea con 403 (`code: 'SUBSCRIPTION_INACTIVE'`) **todo** `/api/admin/*` (incluido el login del admin) y, vía `checkSubscriptionOrReject`, los endpoints de escritura del técnico (`POST/PUT /api/ordenes`, `POST /api/ordenes/:id/reenviar`).
 - `GET /api/subscription-status` (público) expone el estado para que `client/` muestre `SubscriptionBanner.jsx` y deshabilite "Nueva Orden".
 
@@ -485,8 +486,10 @@ App Vite+React+Tailwind **separada** de `client/` (sin workspace compartido, `ad
 | `/ordenes/:id` | OrdenDetallePage | cualquier logueado |
 | `/clientes`, `/clientes/:id` | ClientesPage | cualquier logueado |
 | `/servicios` | ServiciosPage | cualquier logueado |
-| `/notificaciones` | NotificacionesPage | cualquier logueado (pero "Enviar prueba" es admin-only en backend) |
-| `/configuracion` | ConfiguracionPage | **admin** |
+| `/correos` | CorreosPage (logo + historial; plantillas solo notstudio) | **admin** |
+| `/integraciones` | IntegracionesPage (Resend/Telegram/webhook n8n) | **notstudio** (404 para el resto) |
+| `/notificaciones` | redirige a `/correos` | — |
+| `/configuracion` | ConfiguracionPage = General (kill switch, redirección de correos) | **notstudio** |
 | `/usuarios`, `/usuarios/:id` | UsuariosPage (todas las personas) | **admin** |
 | `/invitacion/:token` | InvitacionPage (pública) | — |
 | `/personal` | redirige a `/usuarios` | — |

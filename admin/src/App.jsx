@@ -6,7 +6,8 @@ import OrdenesListPage from './pages/OrdenesListPage';
 import OrdenDetallePage from './pages/OrdenDetallePage';
 import ClientesPage from './pages/ClientesPage';
 import ServiciosPage from './pages/ServiciosPage';
-import NotificacionesPage from './pages/NotificacionesPage';
+import CorreosPage from './pages/CorreosPage';
+import IntegracionesPage from './pages/IntegracionesPage';
 import ConfiguracionPage from './pages/ConfiguracionPage';
 import UsuariosPage from './pages/UsuariosPage';
 import InvitacionPage from './pages/InvitacionPage';
@@ -84,18 +85,27 @@ function AppRoutes({ user, onLogin, onLogout }) {
           </ProtectedRoute>
         }
       />
+      <Route path="/notificaciones" element={<Navigate to="/correos" replace />} />
       <Route
-        path="/notificaciones"
+        path="/correos"
         element={
-          <ProtectedRoute user={user} onLogout={onLogout} title="Notificaciones">
-            <NotificacionesPage />
+          <ProtectedRoute user={user} onLogout={onLogout} title="Correos" roles={['admin']}>
+            <CorreosPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/integraciones"
+        element={
+          <ProtectedRoute user={user} onLogout={onLogout} title="Integraciones" roles={['notstudio']}>
+            <IntegracionesPage />
           </ProtectedRoute>
         }
       />
       <Route
         path="/configuracion"
         element={
-          <ProtectedRoute user={user} onLogout={onLogout} title="Configuración" roles={['admin']}>
+          <ProtectedRoute user={user} onLogout={onLogout} title="Configuración general" roles={['notstudio']}>
             <ConfiguracionPage />
           </ProtectedRoute>
         }

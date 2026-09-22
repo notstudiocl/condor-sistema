@@ -18,8 +18,10 @@ const WEBHOOK_TIMEOUT_MS = 20000;
 export async function getWebhookUrl() {
   try {
     const value = await notificacionesRepo.getSetting(WEBHOOK_SETTING_KEY);
-    const url = typeof value === 'string' ? value : value?.url || null;
-    return url || process.env.WEBHOOK_NOTIFICACIONES_URL || null;
+    // Con fila en app_settings manda la fila (aunque esté vacía = desactivado); la env var es
+    // solo el respaldo cuando nunca se configuró desde el panel.
+    if (value === null || value === undefined) return process.env.WEBHOOK_NOTIFICACIONES_URL || null;
+    return (typeof value === 'string' ? value : value?.url || value?.value) || null;
   } catch (err) {
     console.error(`[webhookN8n] no se pudo leer ${WEBHOOK_SETTING_KEY}:`, err.message);
     return process.env.WEBHOOK_NOTIFICACIONES_URL || null;

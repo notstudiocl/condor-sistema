@@ -83,7 +83,7 @@ router.post('/logo', async (req, res, next) => {
 router.get('/webhook-notificaciones', requireNotstudio, async (_req, res, next) => {
   try {
     const value = await notificacionesRepo.getSetting(WEBHOOK_SETTING_KEY);
-    const url = typeof value === 'string' ? value : value?.url || null;
+    const url = typeof value === 'string' ? value : value?.url || value?.value || null;
     res.json({ success: true, data: { url, envFallback: Boolean(process.env.WEBHOOK_NOTIFICACIONES_URL) } });
   } catch (err) {
     next(err);
@@ -111,6 +111,63 @@ router.put('/webhook-notificaciones', requireNotstudio, async (req, res, next) =
       .catch((err) => console.error('[admin/settings] no se pudo registrar auditoría del webhook:', err.message));
 
     res.json({ success: true, data: { url: url || null } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Configuración General — SOLO notstudio (404 para el resto). Kill switch operativo, webhook de
+// n8n y redirección de correos en modo desarrollo. Todo vive en app_settings; las env vars de
+// EasyPanel quedan solo como fallback cuando no hay fila.
+const GENERAL_KEYS = {
+  subscription_active: { tipo: 'boolean', env: 'SUBSCRIPTION_ACTIVE' },
+  subscription_message: { tipo: 'texto', env: 'SUBSCRIPTION_MESSAGE' },
+  webhook_notificaciones_url: { tipo: 'url', env: 'WEBHOOK_NOTIFICACIONES_URL' },
+  email_dev_redirect: { tipo: 'email', env: 'EMAIL_DEV_REDIRECT' },
+};
+
+function desenvolver(v) {
+  if (v && typeof v === 'object' && !Array.isArray(v)) return v.value ?? v.url ?? v.email ?? null;
+  return v ?? null;
+}
+
+router.get('/general', requireNotstudio, async (_req, res, next) => {
+  try {
+    const data = {};
+    for (const [key, meta] of Object.entries(GENERAL_KEYS)) {
+      const enDb = desenvolver(await notificacionesRepo.getSetting(key));
+      const env = process.env[meta.env];
+      let valor = enDb;
+      if (valor === null && env !== undefined) valor = meta.tipo === 'boolean' ? env !== 'false' : env;
+      if (meta.tipo === 'boolean') valor = valor === null ? true : valor !== false && valor !== 'false';
+      data[key] = { value: valor, desdeEnv: enDb === null && env !== undefined };
+    }
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/general', requireNotstudio, async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const cambios = {};
+    for (const [key, meta] of Object.entries(GENERAL_KEYS)) {
+      if (!(key in body)) continue;
+      let v = body[key];
+      if (meta.tipo === 'boolean') v = v === true || v === 'true';
+      else {
+        v = String(v ?? '').trim() || null;
+        if (v && meta.tipo === 'url' && !/^https:\/\/\S+$/i.test(v)) return res.status(400).json({ success: false, error: 'La URL del webhook debe comenzar con https://' });
+        if (v && meta.tipo === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return res.status(400).json({ success: false, error: 'Correo de redirección inválido' });
+      }
+      await notificacionesRepo.setSetting(key, { value: v }, req.admin?.id || null);
+      cambios[key] = v;
+    }
+    auditRepo
+      .registrar({ adminUserId: req.admin?.id, accion: 'configuracion_general', entidad: 'app_settings', entidadId: 'general', detalle: cambios })
+      .catch((err) => console.error('[admin/settings] auditoría general:', err.message));
+    res.json({ success: true, data: cambios });
   } catch (err) {
     next(err);
   }

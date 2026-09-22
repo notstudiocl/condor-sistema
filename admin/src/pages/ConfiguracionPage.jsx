@@ -1,353 +1,90 @@
-import { useEffect, useRef, useState } from 'react';
-import { Mail, MessageCircle, Loader2, Image as ImageIcon, Upload, Webhook } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Power, AlertTriangle } from 'lucide-react';
 import { SkeletonText } from '../components/Skeleton';
 import { useToast } from '../components/Toast';
-import { getSession, hasRole, ROLES } from '../utils/auth';
-import {
-  getCanalNotificacion,
-  actualizarCanalNotificacion,
-  probarCanalNotificacion,
-  getLogoEmail,
-  subirLogoEmail,
-  getWebhookNotificaciones,
-  guardarWebhookNotificaciones,
-} from '../utils/api';
+import { getConfiguracionGeneral, guardarConfiguracionGeneral } from '../utils/api';
 
-const LOGO_MAX_BYTES = 2 * 1024 * 1024;
-
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-function LogoEmailCard() {
-  const { addToast } = useToast();
-  const fileInputRef = useRef(null);
-  const [loading, setLoading] = useState(true);
-  const [logoUrl, setLogoUrl] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState(null);
-  const [archivo, setArchivo] = useState(null);
-  const [subiendo, setSubiendo] = useState(false);
-
-  const cargar = async () => {
-    setLoading(true);
-    try {
-      const res = await getLogoEmail();
-      setLogoUrl(res.data.url);
-    } catch (err) {
-      addToast(`No se pudo cargar el logo actual: ${err.message}`, { type: 'error' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    cargar();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const elegirArchivo = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      addToast('Selecciona un archivo de imagen (PNG, JPG o WebP).', { type: 'error' });
-      return;
-    }
-    if (file.size > LOGO_MAX_BYTES) {
-      addToast('La imagen supera el máximo de 2MB.', { type: 'error' });
-      return;
-    }
-    setArchivo(file);
-    setPreviewUrl(URL.createObjectURL(file));
-  };
-
-  const subir = async () => {
-    if (!archivo) return;
-    setSubiendo(true);
-    try {
-      const imageBase64 = await fileToBase64(archivo);
-      const res = await subirLogoEmail(imageBase64);
-      setLogoUrl(res.data.url);
-      setArchivo(null);
-      setPreviewUrl(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      addToast('Logo actualizado. Se usará en los próximos correos enviados.', { type: 'success' });
-    } catch (err) {
-      addToast(`No se pudo subir el logo: ${err.message}`, { type: 'error' });
-    } finally {
-      setSubiendo(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="card p-5">
-        <SkeletonText lines={3} />
-      </div>
-    );
-  }
-
-  return (
-    <div className="card p-4 sm:p-5 space-y-4">
-      <h3 className="font-heading font-semibold text-gray-900 flex items-center gap-2">
-        <ImageIcon size={16} className="text-gray-400" /> Logo para correos
-      </h3>
-      <p className="text-sm text-gray-500">
-        Se usa en el encabezado de los emails al cliente y el email interno de notificación de OT. Si no se sube
-        ninguno, se usa el logo por defecto del sistema.
-      </p>
-
-      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-        <div className="w-40 h-20 rounded-lg border border-dashed border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden shrink-0">
-          {previewUrl || logoUrl ? (
-            <img src={previewUrl || logoUrl} alt="Logo actual" className="max-w-full max-h-full object-contain" />
-          ) : (
-            <span className="text-[11px] text-gray-400 text-center px-2">Sin logo personalizado</span>
-          )}
-        </div>
-        <div className="flex-1 min-w-0 space-y-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            onChange={elegirArchivo}
-            className="block w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-condor-50 file:text-condor-700 hover:file:bg-condor-100"
-          />
-          <button className="btn-primary py-2 px-3 text-xs" onClick={subir} disabled={!archivo || subiendo}>
-            {subiendo ? 'Subiendo...' : <><Upload size={13} /> Subir</>}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CanalCard({ canal, icon: Icon, label, extraFields }) {
+// Configuración General — SOLO notstudio (soporte de NotStudio). Kill switch operativo de la
+// suscripción y redirección de correos en modo desarrollo. Los valores viven en app_settings;
+// las variables de entorno de EasyPanel quedan solo como respaldo cuando no hay valor guardado.
+export default function ConfiguracionPage() {
   const { addToast } = useToast();
   const [loading, setLoading] = useState(true);
-  const [data, setData] = useState(null);
-  const [activo, setActivo] = useState(false);
-  const [config, setConfig] = useState({});
-  const [secret, setSecret] = useState('');
+  const [error, setError] = useState('');
+  const [form, setForm] = useState({ subscription_active: true, subscription_message: '', email_dev_redirect: '' });
+  const [meta, setMeta] = useState({});
   const [guardando, setGuardando] = useState(false);
-  const [probando, setProbando] = useState(false);
-  const [testTo, setTestTo] = useState('');
 
-  const cargar = async () => {
+  const cargar = () => {
     setLoading(true);
-    try {
-      const res = await getCanalNotificacion(canal);
-      setData(res.data);
-      setActivo(res.data.activo);
-      setConfig(res.data.config || {});
-    } catch (err) {
-      addToast(`No se pudo cargar ${label}: ${err.message}`, { type: 'error' });
-    } finally {
-      setLoading(false);
-    }
+    getConfiguracionGeneral()
+      .then((res) => {
+        const d = res.data || {};
+        setForm({
+          subscription_active: d.subscription_active?.value !== false,
+          subscription_message: d.subscription_message?.value || '',
+          email_dev_redirect: d.email_dev_redirect?.value || '',
+        });
+        setMeta(d);
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
   };
-
-  useEffect(() => {
-    cargar();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useEffect(cargar, []);
 
   const guardar = async () => {
     setGuardando(true);
     try {
-      await actualizarCanalNotificacion(canal, { activo, config, secret: secret.trim() || undefined });
-      setSecret('');
-      addToast(`${label} actualizado.`, { type: 'success' });
+      await guardarConfiguracionGeneral(form);
+      addToast('Configuración guardada', { type: 'success' });
       cargar();
     } catch (err) {
-      addToast(`No se pudo guardar: ${err.message}`, { type: 'error' });
+      addToast(err.message, { type: 'error' });
     } finally {
       setGuardando(false);
     }
   };
 
-  const probar = async () => {
-    setProbando(true);
-    try {
-      await probarCanalNotificacion(canal, canal === 'resend' ? { to: testTo } : undefined);
-      addToast(`Prueba de ${label} enviada correctamente.`, { type: 'success' });
-    } catch (err) {
-      addToast(`Falló la prueba de ${label}: ${err.message}`, { type: 'error' });
-    } finally {
-      setProbando(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="card p-5">
-        <SkeletonText lines={4} />
-      </div>
-    );
-  }
+  if (loading) return <div className="card p-5"><SkeletonText lines={5} /></div>;
+  if (error) return <div className="card p-6 text-center text-sm text-red-600">{error}</div>;
 
   return (
-    <div className="card p-4 sm:p-5 space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 max-w-2xl">
+      <div className={`card p-5 space-y-4 ${form.subscription_active ? '' : 'border-red-200 bg-red-50/40'}`}>
         <h3 className="font-heading font-semibold text-gray-900 flex items-center gap-2">
-          <Icon size={16} className="text-gray-400" /> {label}
+          <Power size={16} className={form.subscription_active ? 'text-emerald-600' : 'text-red-600'} /> Kill switch de suscripción
         </h3>
-        <label className="inline-flex items-center gap-2 text-xs text-gray-500">
-          <input type="checkbox" checked={activo} onChange={(e) => setActivo(e.target.checked)} className="rounded border-gray-300" />
-          Activo
+        <p className="text-xs text-gray-500">
+          Desactivado, la app de terreno deja de aceptar órdenes nuevas, ediciones y reenvíos, y muestra el mensaje de
+          abajo a los técnicos. El panel sigue operativo. No es facturación: es un freno operativo.
+        </p>
+        <label className="inline-flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" className="rounded border-gray-300 w-4 h-4" checked={form.subscription_active} onChange={(e) => setForm((f) => ({ ...f, subscription_active: e.target.checked }))} />
+          <span className="text-sm text-gray-800">Suscripción activa</span>
         </label>
-      </div>
-
-      {extraFields.map((f) => (
-        <div key={f.key}>
-          <label className="label-field">{f.label}</label>
-          <input
-            className="input-field"
-            value={config[f.key] || ''}
-            onChange={(e) => setConfig((c) => ({ ...c, [f.key]: e.target.value }))}
-            placeholder={f.placeholder}
-          />
+        {!form.subscription_active && (
+          <p className="text-xs text-red-700 flex items-center gap-1.5"><AlertTriangle size={13} /> Los técnicos no podrán enviar órdenes mientras esté desactivada.</p>
+        )}
+        <div>
+          <label className="label-field">Mensaje mostrado cuando está inactiva</label>
+          <input className="input-field" value={form.subscription_message} onChange={(e) => setForm((f) => ({ ...f, subscription_message: e.target.value }))} placeholder="Ej: Servicio suspendido temporalmente. Contacte a NotStudio." />
         </div>
-      ))}
+        {meta.subscription_active?.desdeEnv && <p className="text-xs text-gray-400">Valor actual heredado de la variable de entorno del servidor; al guardar queda fijado acá.</p>}
+      </div>
+
+      <div className="card p-5 space-y-3">
+        <h3 className="font-heading font-semibold text-gray-900">Modo desarrollo: redirección de correos</h3>
+        <p className="text-xs text-gray-500">
+          Con un correo acá, <b>todos</b> los correos del sistema (cliente e interno) se envían a esa casilla con el
+          destinatario real anotado en el asunto. Telegram no se redirige. <b>Dejar vacío en producción.</b>
+        </p>
+        <input className="input-field" type="email" value={form.email_dev_redirect} onChange={(e) => setForm((f) => ({ ...f, email_dev_redirect: e.target.value }))} placeholder="vacío = enviar a los destinatarios reales" />
+        {form.email_dev_redirect && <p className="text-xs text-amber-700 flex items-center gap-1.5"><AlertTriangle size={13} /> Redirección activa: ningún cliente recibe correos.</p>}
+      </div>
 
       <div>
-        <label className="label-field">{canal === 'resend' ? 'API Key' : 'Bot Token'}</label>
-        <input
-          type="password"
-          className="input-field"
-          value={secret}
-          onChange={(e) => setSecret(e.target.value)}
-          placeholder={data?.secretMask ? `Actual: ${data.secretMask} — deja vacío para no cambiarla` : 'No configurada'}
-        />
+        <button className="btn-primary" onClick={guardar} disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar'}</button>
       </div>
-
-      <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100">
-        <button className="btn-primary py-2 px-3 text-xs" onClick={guardar} disabled={guardando}>
-          {guardando ? 'Guardando...' : 'Guardar'}
-        </button>
-        {canal === 'resend' && (
-          <input
-            type="email"
-            value={testTo}
-            onChange={(e) => setTestTo(e.target.value)}
-            placeholder="correo para la prueba"
-            className="input-field w-full sm:w-52 py-2 text-xs"
-          />
-        )}
-        <button
-          className="btn-secondary py-2 px-3 text-xs"
-          onClick={probar}
-          disabled={probando || (canal === 'resend' && !testTo)}
-        >
-          {probando ? <Loader2 size={13} className="animate-spin" /> : null} Probar conexión
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// Modo híbrido: con una URL acá, el backend arma los correos/Telegram y n8n los entrega.
-// Vacío = el backend envía directo con las credenciales de Resend/Telegram de abajo.
-function WebhookN8nCard() {
-  const { addToast } = useToast();
-  const [loading, setLoading] = useState(true);
-  const [url, setUrl] = useState('');
-  const [envFallback, setEnvFallback] = useState(false);
-  const [guardando, setGuardando] = useState(false);
-
-  useEffect(() => {
-    getWebhookNotificaciones()
-      .then((res) => {
-        setUrl(res.data?.url || '');
-        setEnvFallback(Boolean(res.data?.envFallback));
-      })
-      .catch((err) => addToast(err.message || 'No se pudo cargar el webhook', { type: 'error' }))
-      .finally(() => setLoading(false));
-  }, []);
-
-  async function guardar() {
-    setGuardando(true);
-    try {
-      await guardarWebhookNotificaciones(url.trim());
-      addToast(url.trim() ? 'Webhook guardado. Las notificaciones saldrán vía n8n.' : 'Webhook eliminado. El sistema enviará directo.', { type: 'success' });
-    } catch (err) {
-      addToast(err.message || 'No se pudo guardar el webhook', { type: 'error' });
-    } finally {
-      setGuardando(false);
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="card p-5">
-        <SkeletonText lines={3} />
-      </div>
-    );
-  }
-
-  return (
-    <div className="card p-4 sm:p-5 space-y-4">
-      <h3 className="font-heading font-semibold text-gray-900 flex items-center gap-2">
-        <Webhook size={16} className="text-gray-400" /> Envío vía n8n (webhook)
-      </h3>
-      <p className="text-xs text-gray-500">
-        Con una URL configurada, el sistema arma los correos y el mensaje de Telegram y n8n los entrega. Si se deja
-        vacío, el sistema los envía directamente usando las credenciales de Resend y Telegram de más abajo.
-      </p>
-      <div>
-        <label className="label-field">URL del webhook</label>
-        <input
-          className="input-field"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://infra-n8n.f8ihph.easypanel.host/webhook/condor-notificaciones"
-        />
-        {envFallback && !url.trim() && (
-          <p className="text-xs text-amber-600 mt-1">
-            Hay un webhook definido por variable de entorno en el servidor: seguirá activo aunque este campo quede vacío.
-          </p>
-        )}
-      </div>
-      <div className="pt-2 border-t border-gray-100">
-        <button className="btn-primary py-2 px-3 text-xs" onClick={guardar} disabled={guardando}>
-          {guardando ? 'Guardando...' : 'Guardar'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-export default function ConfiguracionPage() {
-  // Credenciales de integraciones y webhook: exclusivas de NotStudio (el backend responde 404
-  // a cualquier otro rol, así que ni se intenta cargarlas).
-  const esNotstudio = hasRole(getSession()?.user, [ROLES.NOTSTUDIO]);
-  return (
-    <div className="space-y-4">
-      <LogoEmailCard />
-      {esNotstudio && <WebhookN8nCard />}
-      {esNotstudio && (
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <CanalCard
-          canal="resend"
-          icon={Mail}
-          label="Resend (Email)"
-          extraFields={[
-            { key: 'fromEmail', label: 'Remitente (From)', placeholder: 'Condor Alcantarillados <notificaciones@noreply.notstudio.cl>' },
-            { key: 'replyTo', label: 'Responder a (Reply-To)', placeholder: 'alcantarilladoscondor@gmail.com' },
-          ]}
-        />
-        <CanalCard
-          canal="telegram"
-          icon={MessageCircle}
-          label="Telegram"
-          extraFields={[{ key: 'chatId', label: 'Chat ID del grupo', placeholder: '-1001234567890' }]}
-        />
-      </div>
-      )}
     </div>
   );
 }
