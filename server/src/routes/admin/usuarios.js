@@ -66,6 +66,9 @@ function escapeHtml(s) {
 // en la respuesta, por si el correo falla (mismo criterio que el PIN de técnicos).
 async function invitar(persona) {
   const token = await personasRepo.crearInvitacion(persona.id);
+  // El admin usa HashRouter, por eso el `#/`. Si algún día pasa a BrowserRouter hay que quitar
+  // el `#` de acá (y grepear `#/` en todo el repo): el enlace no da error, solo carga /admin/ y
+  // quien ya tiene sesión ve el dashboard sin enterarse de que la invitación no se abrió.
   const enlace = `${PANEL_URL}#/invitacion/${token}`;
   let enviada = false;
   try {
