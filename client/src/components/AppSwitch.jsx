@@ -6,7 +6,8 @@ import { Wrench, Building2 } from 'lucide-react';
 const RAIZ = import.meta.env.BASE_URL.replace(/admin\/$/, '');
 const APPS = [
   { key: 'terreno', label: 'Terreno', icon: Wrench, href: RAIZ },
-  { key: 'oficina', label: 'Oficina', icon: Building2, href: RAIZ + 'admin/' },
+  // En GitHub Pages (origen distinto) el panel no existe bajo la raíz: se apunta al dominio real.
+  { key: 'oficina', label: 'Oficina', icon: Building2, href: import.meta.env.VITE_ADMIN_APP_URL || RAIZ + 'admin/' },
 ];
 const ACTIVA = 'terreno';
 
