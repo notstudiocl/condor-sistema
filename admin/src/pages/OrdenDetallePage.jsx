@@ -303,8 +303,8 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
     return (orden.fotos || [])
       .filter((f) => f.tipo === 'antes' || f.tipo === 'despues')
       .map((f) => ({ ...f, label: f.tipo === 'antes' ? 'Antes' : 'Después' }));
-  const firma = (orden?.fotos || []).find((f) => f.tipo === 'firma' && f.url) || null;
   }, [orden]);
+  const firma = (orden?.fotos || []).find((f) => f.tipo === 'firma' && f.url) || null;
 
   const pdfFoto = useMemo(() => (orden?.fotos || []).find((f) => f.tipo === 'pdf'), [orden]);
 

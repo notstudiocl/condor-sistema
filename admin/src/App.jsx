@@ -7,6 +7,7 @@ import OrdenDetallePage from './pages/OrdenDetallePage';
 import ClientesPage from './pages/ClientesPage';
 import ServiciosPage from './pages/ServiciosPage';
 import CorreosPage from './pages/CorreosPage';
+import ErrorBoundary from './components/ErrorBoundary';
 import IntegracionesPage from './pages/IntegracionesPage';
 import ConfiguracionPage from './pages/ConfiguracionPage';
 import UsuariosPage from './pages/UsuariosPage';
@@ -159,10 +160,12 @@ export default function App() {
   };
 
   return (
-    <ToastProvider>
-      <HashRouter>
-        <AppRoutes user={user} onLogin={handleLogin} onLogout={handleLogout} />
-      </HashRouter>
-    </ToastProvider>
+    <ErrorBoundary>
+      <ToastProvider>
+        <HashRouter>
+          <AppRoutes user={user} onLogin={handleLogin} onLogout={handleLogout} />
+        </HashRouter>
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }
