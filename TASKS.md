@@ -6,7 +6,7 @@ Condor 360 en producción desde el 2026-09-22 (rama `main`, EasyPanel proyecto "
 
 - [ ] **OT-00661 (Colegio Tomás Moro, 26/03, "limpieza ducto con hidrojet")** - entró hoy desde la cola offline del teléfono de Marcelo Moncada junto a dos duplicadas (662 y 663, ya eliminadas). No tiene par exacto en el historial: preguntar a Marcelo si es un trabajo real distinto o un intento de la misma orden 00014; si es duplicado, eliminarla. Los clientes (Tomás Moro y Rentokil) recibieron hoy los correos de esas órdenes viejas.
 - [ ] **Vigilar órdenes con fecha antigua estos días** - cualquier técnico con órdenes atrapadas en el teléfono las soltará al actualizar la app; revisar en el dashboard si son reales o duplicadas
-- [ ] **Primera orden nueva real en producción** - revisar cuando llegue (será la OT-00664): PDF en R2, correo al cliente con Responder-a de Condor, copia interna, Telegram al grupo, fila en el historial de Correos
+- [ ] **Primera orden nueva real en producción** - revisar cuando llegue (será la OT-00662): PDF en R2, correo al cliente con Responder-a de Condor, copia interna, Telegram al grupo, fila en el historial de Correos
 - [ ] **Crear las cuentas de oficina de Condor** - desde Usuarios, cuando Francisco pase los correos (les llega invitación de 72 h). Hasta entonces el cliente no tiene acceso al panel.
 - [ ] **Órdenes 652 a 657 sin fotos ni PDF** (incidente Airtable) - las completan los técnicos desde la app (editar y reenviar) o la oficina desde el panel (agregar fotos + Regenerar PDF + Reenviar). Aparecen en "Órdenes con problemas" del dashboard hasta entonces.
 
