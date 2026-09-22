@@ -197,8 +197,12 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
       .catch(() => {});
     // En editMode el personal real lo restaura el loader de edición de abajo — acá
     // pisarlo con solo el usuario logueado era justamente el bug (ver ese efecto).
+    // Solo si el equipo está vacío: tras un F5, loadSessionState() ya restauró el personal
+    // elegido y pisarlo dejaba solo al técnico logueado (bug real de QA).
     if (!editMode) {
-      setForm((prev) => ({ ...prev, personal: [{ nombre: user.nombre, esEmpleado: true, recordId: user.recordId || null }] }));
+      setForm((prev) => (prev.personal && prev.personal.length > 0
+        ? prev
+        : { ...prev, personal: [{ nombre: user.nombre, esEmpleado: true, recordId: user.recordId || null }] }));
     }
   }, [user.nombre, editMode]);
 
@@ -581,7 +585,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
       clienteRecordId: form.clienteRecordId,
       empleadosRecordIds: form.personal.filter(p => p.esEmpleado && p.recordId).map(p => p.recordId),
       serviciosIds: form.trabajos
-        .filter(t => t.cantidad > 0 && t.id && !t.id.startsWith('fallback_') && !t.id.startsWith('custom_'))
+        .filter(t => t.cantidad > 0 && t.id && /^\d+$/.test(String(t.id))) // solo ids reales de catálogo
         .map(t => t.id),
     };
 
@@ -653,7 +657,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
     }
     setSending(false);
     setSendingText('');
-    onOrdenEnviada(payload);
+    onOrdenEnviada({ ...payload, _editRecordId: editMode ? editRecordId : null });
   };
 
   if (editLoading) {
@@ -1275,7 +1279,7 @@ export default function OrdenWizardPage({ user, onOrdenEnviada, editMode, subscr
               {editMode ? 'Editar y Reenviar' : 'Resumen y Firma'}
             </h2>
 
-            <Summary data={{ ...form, personal: form.personal.map((p) => p.nombre), fotosAntes: fotosAntesPreview.map(p => p.url), fotosDespues: fotosDespuesPreview.map(p => p.url) }} onEdit={(s) => { setConfirmado(false); goToStep(s); }} />
+            <Summary data={{ ...form, personal: form.personal.map((p) => p.nombre), fotosAntes: fotosAntesPreview.map(p => p.url), fotosDespues: fotosDespuesPreview.map(p => p.url), fotosAntesExistentes, fotosDespuesExistentes }} onEdit={(s) => { setConfirmado(false); goToStep(s); }} />
 
             <div className={`bg-white rounded-2xl p-4 border shadow-sm ${errors.firmaBase64 ? 'border-red-400' : 'border-gray-200'}`} data-error={!!errors.firmaBase64}>
               <p className="text-sm text-gray-500 mb-1">Firma del Supervisor <span className="text-red-400">*</span></p>

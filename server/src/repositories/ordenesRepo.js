@@ -32,9 +32,11 @@ export async function resolverServicioIds(client, idsOrRecordIds) {
     if (typeof idOrRecordId === 'string' && idOrRecordId.startsWith('rec')) {
       const { rows } = await client.query('SELECT id FROM servicios WHERE airtable_record_id = $1', [idOrRecordId]);
       if (rows[0]) resolved.push(rows[0].id);
-    } else if (idOrRecordId) {
-      resolved.push(idOrRecordId);
+    } else if (/^\d+$/.test(String(idOrRecordId))) {
+      resolved.push(Number(idOrRecordId));
     }
+    // Cualquier otro string (ids sintéticos del wizard como 'guardado_0_x' para trabajos sin
+    // servicio de catálogo) se ignora: el trabajo se guarda como nombre_personalizado.
   }
   return resolved;
 }
@@ -77,7 +79,7 @@ async function insertTrabajos(client, ordenId, trabajos) {
     await client.query(
       `INSERT INTO orden_trabajos (orden_id, servicio_id, nombre_personalizado, cantidad, orden_index)
        VALUES ($1,$2,$3,$4,$5)`,
-      [ordenId, servicioId, servicioId ? null : (t.trabajo || 'Sin nombre'), t.cantidad || 1, idx++]
+      [ordenId, servicioId, servicioId ? null : (t.trabajo || 'Sin nombre'), Number(t.cantidad) > 0 ? Number(t.cantidad) : 1, idx++]
     );
   }
 }

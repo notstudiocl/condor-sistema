@@ -48,7 +48,7 @@ function PhotoViewer({ fotos, initialIndex, onClose }) {
           <X size={24} />
         </button>
       </div>
-      <div className="flex-1 flex items-center justify-center px-4" onClick={(e) => e.stopPropagation()}>
+      <div className="flex-1 min-h-0 flex items-center justify-center px-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <img src={foto.url} alt="" className="max-w-full max-h-full object-contain" />
       </div>
       {fotos.length > 1 && (
@@ -220,6 +220,7 @@ export default function DetalleOrdenPage({ subscriptionActive = true, subscripti
           <Field label="Total" value={formatCLP(orden.total)} />
           <Field label="Método de Pago" value={orden.metodoPago} />
           <Field label="Requiere Factura" value={orden.requiereFactura} />
+          <Field label="Garantía" value={orden.garantia} />
         </div>
 
         {/* Fotos Antes */}

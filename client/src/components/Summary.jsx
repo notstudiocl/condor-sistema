@@ -37,6 +37,9 @@ function Field({ label, value, required }) {
 export default function Summary({ data, onEdit }) {
   const trabajosActivos = (data.trabajos || []).filter((t) => t.cantidad > 0);
   const fotosAntes = data.fotosAntes || [];
+  // En edición, la orden puede tener fotos ya guardadas que no están en los previews nuevos.
+  const antesExistentes = Number(data.fotosAntesExistentes || 0);
+  const despuesExistentes = Number(data.fotosDespuesExistentes || 0);
   const fotosDespues = data.fotosDespues || [];
 
   return (
@@ -100,9 +103,9 @@ export default function Summary({ data, onEdit }) {
       {/* Fotos */}
       <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm">
         <SectionHeader title="Fotos" stepIndex={3} onEdit={onEdit} />
-        {fotosAntes.length > 0 ? (
+        {fotosAntes.length > 0 || antesExistentes > 0 ? (
           <div className="mb-2">
-            <p className="text-xs text-gray-400 mb-1">Antes ({fotosAntes.length})</p>
+            <p className="text-xs text-gray-400 mb-1">Antes ({fotosAntes.length + antesExistentes}){antesExistentes > 0 && fotosAntes.length > 0 ? ` · ${antesExistentes} ya guardada${antesExistentes > 1 ? 's' : ''}` : antesExistentes > 0 ? ' · ya guardadas' : ''}</p>
             <div className="flex gap-1">
               {fotosAntes.map((f, i) => (
                 <div key={i} className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100">
@@ -114,9 +117,9 @@ export default function Summary({ data, onEdit }) {
         ) : (
           <p className="text-xs text-amber-500 italic mb-1">Sin fotos antes</p>
         )}
-        {fotosDespues.length > 0 ? (
+        {fotosDespues.length > 0 || despuesExistentes > 0 ? (
           <div>
-            <p className="text-xs text-gray-400 mb-1">Después ({fotosDespues.length})</p>
+            <p className="text-xs text-gray-400 mb-1">Después ({fotosDespues.length + despuesExistentes}){despuesExistentes > 0 && fotosDespues.length > 0 ? ` · ${despuesExistentes} ya guardada${despuesExistentes > 1 ? 's' : ''}` : despuesExistentes > 0 ? ' · ya guardadas' : ''}</p>
             <div className="flex gap-1">
               {fotosDespues.map((f, i) => (
                 <div key={i} className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100">

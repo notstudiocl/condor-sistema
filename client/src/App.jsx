@@ -109,9 +109,12 @@ function AppRoutes({ user, onLogout }) {
   };
 
   const handleReintentar = () => {
+    // Si falló una EDICIÓN, reintentar vuelve a editar esa misma orden — no a un wizard vacío
+    // que crearía una orden nueva (bug real de QA).
+    const editId = ordenEnviada?._editRecordId;
     setOrdenEnviada(null);
     limpiarConfirmacion();
-    navigate('/orden/nueva');
+    navigate(editId ? `/orden/${editId}/editar` : '/orden/nueva');
   };
 
   return (

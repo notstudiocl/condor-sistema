@@ -83,8 +83,37 @@ function checkSubscriptionOrReject(res) {
 // Resuelve un :id de ruta que puede venir como bigint de Postgres O como 'rec*' de
 // Airtable (links cacheados en un PWA viejo antes del corte) a la orden hidratada.
 async function resolverOrdenPorParam(id) {
-  return id.startsWith('rec') ? ordenesRepo.getOrdenByAirtableId(id) : ordenesRepo.getOrdenById(Number(id));
+  if (id.startsWith('rec')) return ordenesRepo.getOrdenByAirtableId(id);
+  if (!/^\d+$/.test(id)) return null; // 'abc' -> 404, no un 500 de Postgres por bigint 'NaN'
+  return ordenesRepo.getOrdenById(Number(id));
 }
+
+// Mínimos que exige el wizard, ahora también en el servidor: con AUTH_ENFORCE=warn cualquiera
+// puede hacer POST sin token, y sin esto una orden vacía se creaba, generaba PDF y notificaba
+// al grupo de Telegram (bug real de QA). En edición no se exigen fotos/firma nuevas (pueden
+// venir de la orden existente).
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function validarPayloadOrden(data, { edicion = false } = {}) {
+  const errores = [];
+  if (!String(data.clienteEmpresa || '').trim()) errores.push('cliente/empresa');
+  if (!String(data.supervisor || '').trim()) errores.push('supervisor');
+  if (!EMAIL_RE.test(String(data.clienteEmail || '').trim())) errores.push('email del cliente');
+  if (!String(data.direccion || '').trim()) errores.push('dirección');
+  let trabajos = data.trabajos;
+  if (typeof trabajos === 'string') {
+    try { trabajos = JSON.parse(trabajos); } catch { trabajos = []; }
+  }
+  if (!Array.isArray(trabajos) || trabajos.length === 0) errores.push('al menos un trabajo');
+  else if (trabajos.some((t) => !String(t?.trabajo || '').trim() || !(Number(t?.cantidad) > 0))) errores.push('cantidad válida en cada trabajo');
+  if (!edicion) {
+    if (!Array.isArray(data.fotosAntes) || data.fotosAntes.length === 0) errores.push('al menos una foto del antes');
+    if (!Array.isArray(data.fotosDespues) || data.fotosDespues.length === 0) errores.push('al menos una foto del después');
+    if (!String(data.firmaBase64 || '').startsWith('data:image')) errores.push('firma');
+  }
+  return errores;
+}
+
+const MSG_ERROR_GENERICO = 'No se pudo guardar la orden. Intente nuevamente o contacte a la oficina.';
 
 // ---------- rutas ----------
 
@@ -118,6 +147,10 @@ router.post('/', authMiddleware, async (req, res) => {
 
   try {
     const data = { ...(req.body || {}), responsableId: req.user?.recordId || null };
+    const faltan = validarPayloadOrden(data);
+    if (faltan.length > 0) {
+      return res.status(400).json({ success: false, error: `Faltan datos obligatorios: ${faltan.join(', ')}` });
+    }
     const result = await ordenService.createOrdenCompleta(data);
     // Guard obligatorio (plan, resiliencia terreno #6): si el timeout global de 30s ya
     // respondió 504 mientras esta promesa seguía corriendo, escribir la respuesta acá
@@ -130,7 +163,7 @@ router.post('/', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Error creando orden:', error);
     if (res.headersSent) return;
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: MSG_ERROR_GENERICO });
   }
 });
 
@@ -145,9 +178,15 @@ router.put('/:id', authMiddleware, async (req, res) => {
       const existente = await ordenesRepo.getOrdenByAirtableId(id);
       if (!existente) return res.status(404).json({ success: false, error: 'Orden no encontrada' });
       ordenId = existente.id;
+    } else if (!/^\d+$/.test(id)) {
+      return res.status(404).json({ success: false, error: 'Orden no encontrada' });
     }
 
     const data = { ...(req.body || {}), responsableId: req.user?.recordId || null };
+    const faltan = validarPayloadOrden(data, { edicion: true });
+    if (faltan.length > 0) {
+      return res.status(400).json({ success: false, error: `Faltan datos obligatorios: ${faltan.join(', ')}` });
+    }
     const result = await ordenService.actualizarOrdenCompleta(ordenId, data);
     if (res.headersSent) return; // ver comentario en POST / — mismo guard obligatorio
     if (result.notFound) return res.status(404).json({ success: false, error: 'Orden no encontrada' });
@@ -155,7 +194,7 @@ router.put('/:id', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Error actualizando orden:', error);
     if (res.headersSent) return;
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: MSG_ERROR_GENERICO });
   }
 });
 

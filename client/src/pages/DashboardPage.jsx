@@ -4,6 +4,7 @@ import { Plus, RefreshCw, Loader2, ClipboardList, ChevronRight, Search, X, WifiO
 import { clearWizardSession } from './OrdenWizardPage';
 import { formatFechaAmigable } from '../utils/helpers';
 import { getOrdenes } from '../utils/api';
+import { syncEvents } from '../utils/syncManager';
 import AppFooter from '../components/AppFooter';
 import SubscriptionBanner from '../components/SubscriptionBanner';
 
@@ -52,6 +53,13 @@ export default function DashboardPage({ pendingCount = 0, subscriptionActive = t
   };
 
   useEffect(() => {
+    // Al terminar una sincronización offline (o volver online) la lista se refresca sola.
+    const onSync = (e) => { if (['synced', 'online'].includes(e.detail?.status)) cargarOrdenes(); };
+    syncEvents.addEventListener('status', onSync);
+    return () => syncEvents.removeEventListener('status', onSync);
+  }, []);
+
+  useEffect(() => {
     cargarOrdenes();
   }, []);
 
@@ -66,7 +74,10 @@ export default function DashboardPage({ pendingCount = 0, subscriptionActive = t
   const ordenesFiltradas = useMemo(() => {
     if (!busquedaDebounced.trim()) return ordenes;
     const q = busquedaDebounced.toLowerCase().trim();
+    // RUT: comparar sin puntos ni guión (los clientes migrados tienen formatos mezclados).
+    const qRut = q.replace(/[.\-\s]/g, '');
     return ordenes.filter((o) => {
+      if (qRut.length >= 5 && o.clienteRut && String(o.clienteRut).toLowerCase().replace(/[.\-\s]/g, '').includes(qRut)) return true;
       const campos = [
         o.numeroOrden,
         o.clienteEmpresa,
