@@ -5,11 +5,11 @@ import DashboardPage from './pages/DashboardPage';
 import OrdenesListPage from './pages/OrdenesListPage';
 import OrdenDetallePage from './pages/OrdenDetallePage';
 import ClientesPage from './pages/ClientesPage';
-import PersonalPage from './pages/PersonalPage';
 import ServiciosPage from './pages/ServiciosPage';
 import NotificacionesPage from './pages/NotificacionesPage';
 import ConfiguracionPage from './pages/ConfiguracionPage';
-import UsuariosAdminPage from './pages/UsuariosAdminPage';
+import UsuariosPage from './pages/UsuariosPage';
+import InvitacionPage from './pages/InvitacionPage';
 import AuditoriaPage from './pages/AuditoriaPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { ToastProvider } from './components/Toast';
@@ -23,6 +23,8 @@ function AppRoutes({ user, onLogin, onLogout }) {
         path="/login"
         element={user ? <Navigate to="/" replace /> : <LoginPage onLogin={onLogin} />}
       />
+      {/* Pública: quien acepta una invitación todavía no tiene sesión */}
+      <Route path="/invitacion/:token" element={<InvitacionPage onLogin={onLogin} />} />
       <Route
         path="/"
         element={
@@ -72,14 +74,8 @@ function AppRoutes({ user, onLogin, onLogout }) {
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/personal"
-        element={
-          <ProtectedRoute user={user} onLogout={onLogout} title="Personal">
-            <PersonalPage />
-          </ProtectedRoute>
-        }
-      />
+      {/* La gestión de técnicos se unificó con la de oficina en /usuarios */}
+      <Route path="/personal" element={<Navigate to="/usuarios" replace />} />
       <Route
         path="/servicios"
         element={
@@ -108,7 +104,15 @@ function AppRoutes({ user, onLogin, onLogout }) {
         path="/usuarios"
         element={
           <ProtectedRoute user={user} onLogout={onLogout} title="Usuarios" roles={['admin']}>
-            <UsuariosAdminPage />
+            <UsuariosPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/usuarios/:id"
+        element={
+          <ProtectedRoute user={user} onLogout={onLogout} title="Usuarios" roles={['admin']}>
+            <UsuariosPage />
           </ProtectedRoute>
         }
       />

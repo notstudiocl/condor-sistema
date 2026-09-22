@@ -7,7 +7,6 @@ import {
   Wrench,
   Bell,
   Settings,
-  ShieldCheck,
   History,
 } from 'lucide-react';
 import { hasRole } from '../utils/auth';
@@ -29,7 +28,6 @@ function buildNav(counts) {
       items: [
         { to: '/ordenes', label: 'Órdenes', icon: ClipboardList, badge: counts.porFacturar, badgeTone: 'orange' },
         { to: '/clientes', label: 'Clientes', icon: Users, badge: counts.duplicados, badgeTone: 'red' },
-        { to: '/personal', label: 'Personal', icon: UserCog, hint: 'Técnicos de terreno' },
         { to: '/servicios', label: 'Servicios', icon: Wrench },
       ],
     },
@@ -38,7 +36,7 @@ function buildNav(counts) {
       items: [
         { to: '/notificaciones', label: 'Notificaciones', icon: Bell },
         { to: '/configuracion', label: 'Configuración', icon: Settings, roles: ['admin'] },
-        { to: '/usuarios', label: 'Usuarios', icon: ShieldCheck, roles: ['admin'], hint: 'Personal de oficina' },
+        { to: '/usuarios', label: 'Usuarios', icon: UserCog, roles: ['admin'], hint: 'Técnicos y oficina' },
         { to: '/auditoria', label: 'Auditoría', icon: History, roles: ['admin'], hint: 'Historial de cambios' },
       ],
     },

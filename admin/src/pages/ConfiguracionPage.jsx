@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Mail, MessageCircle, Loader2, Image as ImageIcon, Upload, Webhook } from 'lucide-react';
 import { SkeletonText } from '../components/Skeleton';
 import { useToast } from '../components/Toast';
+import { getSession, hasRole, ROLES } from '../utils/auth';
 import {
   getCanalNotificacion,
   actualizarCanalNotificacion,
@@ -321,10 +322,14 @@ function WebhookN8nCard() {
 }
 
 export default function ConfiguracionPage() {
+  // Credenciales de integraciones y webhook: exclusivas de NotStudio (el backend responde 404
+  // a cualquier otro rol, así que ni se intenta cargarlas).
+  const esNotstudio = hasRole(getSession()?.user, [ROLES.NOTSTUDIO]);
   return (
     <div className="space-y-4">
       <LogoEmailCard />
-      <WebhookN8nCard />
+      {esNotstudio && <WebhookN8nCard />}
+      {esNotstudio && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <CanalCard
           canal="resend"
@@ -342,6 +347,7 @@ export default function ConfiguracionPage() {
           extraFields={[{ key: 'chatId', label: 'Chat ID del grupo', placeholder: '-1001234567890' }]}
         />
       </div>
+      )}
     </div>
   );
 }

@@ -109,12 +109,10 @@ export const getClientesMismoRut = (id) => request(`/admin/clientes/${id}/mismo-
 export const buscarClientesAdmin = (q) => request(`/admin/clientes/buscar${qs({ q })}`);
 
 // ---- Empleados (técnicos) ----
+// Solo lectura: la gestión de personas (alta, PIN, contraseña, rol) va por /admin/usuarios.
 export const listEmpleados = () => request('/admin/empleados');
 export const getEmpleado = (id) => request(`/admin/empleados/${id}`);
-export const crearEmpleado = (data) => request('/admin/empleados', { method: 'POST', body: JSON.stringify(data) });
-export const actualizarEmpleado = (id, data) =>
-  request(`/admin/empleados/${id}`, { method: 'PUT', body: JSON.stringify(data) });
-export const resetPinEmpleado = (id) => request(`/admin/empleados/${id}/reset-pin`, { method: 'POST' });
+export const getEmpleadoStats = (id) => request(`/admin/empleados/${id}/stats`);
 
 // ---- Servicios ----
 export const listServicios = () => request('/admin/servicios');
@@ -156,12 +154,24 @@ export const enviarPruebaPlantilla = (templateKey, ordenId, destinatario) =>
   });
 
 // ---- Usuarios del admin ----
+// ---- Personas (tabla unificada: técnicos, oficina, administradores) ----
 export const listUsuarios = () => request('/admin/usuarios');
+export const getUsuario = (id) => request(`/admin/usuarios/${id}`);
 export const crearUsuario = (data) => request('/admin/usuarios', { method: 'POST', body: JSON.stringify(data) });
 export const actualizarUsuario = (id, data) =>
   request(`/admin/usuarios/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+export const asignarPinUsuario = (id) => request(`/admin/usuarios/${id}/pin`, { method: 'POST' });
+export const quitarPinUsuario = (id) => request(`/admin/usuarios/${id}/pin`, { method: 'DELETE' });
+export const invitarUsuario = (id) => request(`/admin/usuarios/${id}/invitar`, { method: 'POST' });
 export const resetPasswordUsuario = (id) => request(`/admin/usuarios/${id}/reset-password`, { method: 'POST' });
+export const quitarPanelUsuario = (id) => request(`/admin/usuarios/${id}/panel`, { method: 'DELETE' });
+export const desbloquearUsuario = (id) => request(`/admin/usuarios/${id}/desbloquear`, { method: 'POST' });
 export const eliminarUsuario = (id) => request(`/admin/usuarios/${id}`, { method: 'DELETE' });
+
+// Invitación al panel (pública, sin sesión): /admin/auth/invitacion/:token
+export const validarInvitacion = (token) => request(`/admin/auth/invitacion/${encodeURIComponent(token)}`);
+export const aceptarInvitacion = (token, password) =>
+  request(`/admin/auth/invitacion/${encodeURIComponent(token)}`, { method: 'POST', body: JSON.stringify({ password }) });
 
 // ---- Auditoría ----
 export const getAuditoriaGlobal = (params) => request(`/admin/auditoria${qs(params)}`);

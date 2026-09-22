@@ -66,12 +66,17 @@ export function clearSession() {
 }
 
 /** true si el usuario tiene alguno de los roles pedidos (sin roles = acceso libre) */
+// 'notstudio' (soporte de NotStudio) puede todo lo que puede 'admin' — misma jerarquía que
+// requireRole en el backend. Las secciones EXCLUSIVAS de notstudio se piden con ['notstudio'].
 export function hasRole(user, roles) {
   if (!roles || roles.length === 0) return true;
-  return !!user && roles.includes(user.rol);
+  if (!user) return false;
+  return roles.includes(user.rol) || (user.rol === 'notstudio' && roles.includes('admin'));
 }
 
 export const ROLES = {
-  ADMIN: 'admin',
+  TECNICO: 'tecnico',
   OFICINA: 'oficina',
+  ADMIN: 'admin',
+  NOTSTUDIO: 'notstudio',
 };
