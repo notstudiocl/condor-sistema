@@ -80,7 +80,7 @@ export async function getOrdenesPorDiaSemana() {
 
 export async function getPendientesFacturarAntiguas(limit = 8) {
   const { rows } = await pool.query(
-    `SELECT id, numero_orden_display, fecha, cliente_empresa, supervisor, total,
+    `SELECT id, numero_orden_display, fecha, cliente_empresa, supervisor, total, estado,
        (${HOY_SQL} - fecha)::int as dias
      FROM ordenes
      WHERE estado = 'Facturacion pendiente'

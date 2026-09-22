@@ -42,7 +42,7 @@ export async function listTodos() {
     SELECT e.*,
       (SELECT count(*) FROM orden_empleados oe WHERE oe.empleado_id = e.id) as total_ordenes,
       (SELECT COALESCE(sum(o.total),0) FROM orden_empleados oe JOIN ordenes o ON o.id = oe.orden_id WHERE oe.empleado_id = e.id) as monto_generado,
-      (SELECT max(o.created_at) FROM orden_empleados oe JOIN ordenes o ON o.id = oe.orden_id WHERE oe.empleado_id = e.id) as ultima_orden
+      (SELECT max(o.fecha) FROM orden_empleados oe JOIN ordenes o ON o.id = oe.orden_id WHERE oe.empleado_id = e.id) as ultima_orden
     FROM empleados e ORDER BY e.nombre
   `);
   return rows;

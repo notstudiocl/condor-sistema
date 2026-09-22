@@ -97,8 +97,14 @@ router.get('/:id', async (req, res, next) => {
 router.post('/', async (req, res, next) => {
   try {
     const body = req.body || {};
+    if (!String(body.clienteEmpresa || '').trim()) {
+      return res.status(400).json({ success: false, error: 'El cliente / empresa es obligatorio' });
+    }
+    if (!Array.isArray(body.trabajos) || body.trabajos.length === 0) {
+      return res.status(400).json({ success: false, error: 'Indica al menos un trabajo realizado' });
+    }
     const creada = await ordenesRepo.createOrdenCompleta({
-      fecha: body.fecha || null,
+      fecha: body.fecha || new Date().toLocaleDateString('en-CA', { timeZone: 'America/Santiago' }),
       clienteId: body.clienteId ?? null,
       clienteEmpresa: body.clienteEmpresa,
       clienteEmail: body.clienteEmail,
@@ -328,6 +334,10 @@ router.post('/:id/reenviar', async (req, res, next) => {
     if (resultado.data?.webhookError === 'Orden no encontrada') {
       return res.status(404).json(resultado);
     }
+    auditRepo.registrar({
+      adminUserId: req.admin?.id, accion: 'reenviar_orden', entidad: 'ordenes', entidadId: Number(req.params.id),
+      detalle: { pdfGenerado: resultado.data?.webhookData?.pdfGenerado ?? null, notificaciones: resultado.data?.webhookData?.notificaciones ?? null },
+    }).catch((err) => console.error('[admin/ordenes] auditoría reenviar:', err.message));
     res.json(resultado);
   } catch (err) {
     next(err);
@@ -341,8 +351,13 @@ router.patch('/:id/estado', async (req, res, next) => {
     const { estado } = req.body || {};
     if (!estado) return res.status(400).json({ success: false, error: 'estado es requerido' });
 
+    const antes = await ordenesRepo.getOrdenById(Number(req.params.id));
+    if (!antes) return res.status(404).json({ success: false, error: 'Orden no encontrada' });
     const orden = await ordenesRepo.setEstado(Number(req.params.id), estado);
-    if (!orden) return res.status(404).json({ success: false, error: 'Orden no encontrada' });
+    auditRepo.registrar({
+      adminUserId: req.admin?.id, accion: 'cambiar_estado', entidad: 'ordenes', entidadId: orden.id,
+      detalle: { de: antes.estado, a: estado },
+    }).catch((err) => console.error('[admin/ordenes] auditoría cambiar_estado:', err.message));
     res.json({ success: true, data: orden });
   } catch (err) {
     next(err);

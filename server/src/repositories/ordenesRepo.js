@@ -354,11 +354,13 @@ export async function listOrdenesAdmin({ page = 1, limit = 50, estado, q, tecnic
     // la oficina busca clientes reales por RUT todo el tiempo, y ese dato solo vive
     // en clientes.rut_normalizado (la orden no guarda el RUT, solo cliente_id).
     const qNormalizado = String(q).toLowerCase().replace(/[.\-\s]/g, '');
+    // "OT-00650" / "ot 650" también encuentran la orden (el placeholder promete "Buscar OT").
+    const qNumero = String(q).replace(/^\s*ot[\s-]*/i, '');
     conditions.push(
-      `(o.numero_orden_display ILIKE $${i} OR o.cliente_empresa ILIKE $${i} OR o.supervisor ILIKE $${i} OR o.direccion ILIKE $${i} OR o.comuna ILIKE $${i} OR o.descripcion_trabajo ILIKE $${i} OR c.rut_normalizado ILIKE $${i + 1})`
+      `(o.numero_orden_display ILIKE $${i + 2} OR o.numero_orden_display ILIKE $${i} OR o.cliente_empresa ILIKE $${i} OR o.supervisor ILIKE $${i} OR o.direccion ILIKE $${i} OR o.comuna ILIKE $${i} OR o.descripcion_trabajo ILIKE $${i} OR c.rut_normalizado ILIKE $${i + 1})`
     );
-    params.push(`%${q}%`, `%${qNormalizado}%`);
-    i += 2;
+    params.push(`%${q}%`, `%${qNormalizado}%`, `%${qNumero}%`);
+    i += 3;
   }
   if (tecnicoId) {
     conditions.push(`EXISTS (SELECT 1 FROM orden_empleados oe WHERE oe.orden_id = o.id AND oe.empleado_id = $${i++})`);

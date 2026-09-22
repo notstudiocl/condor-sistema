@@ -51,6 +51,7 @@ export async function eliminarServicioSiSinUso(id) {
   if (rows[0].n > 0) {
     return { eliminado: false, usos: rows[0].n };
   }
-  await pool.query('DELETE FROM servicios WHERE id = $1', [id]);
+  const { rowCount } = await pool.query('DELETE FROM servicios WHERE id = $1', [id]);
+  if (rowCount === 0) return { eliminado: false, noExiste: true };
   return { eliminado: true };
 }

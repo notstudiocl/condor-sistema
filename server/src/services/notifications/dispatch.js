@@ -1,8 +1,11 @@
 import * as notificacionesRepo from '../../repositories/notificacionesRepo.js';
 import { enviarEmail, DEFAULT_FROM, DEFAULT_REPLY_TO } from './resend.js';
 import { enviarTelegram } from './telegram.js';
-import { emailClienteDefault, emailInternoDefault, telegramDefault, getLogoUrlConFallback, ORDEN_EJEMPLO } from './defaultTemplates.js';
-import { buildPdfFilename, formatFecha } from '../pdf/template.js';
+import {
+  emailClienteDefault, emailInternoDefault, telegramDefault, getLogoUrlConFallback, ORDEN_EJEMPLO,
+  trabajosRowsEmailCliente, trabajosRowsEmailInterno, trabajosTextoTelegram, personalTexto,
+} from './defaultTemplates.js';
+import { buildPdfFilename, formatFecha, formatHora, formatFechaHora } from '../pdf/template.js';
 import { getWebhookUrl, enviarWebhookNotificacion, payloadOrden } from './webhookN8n.js';
 
 // Orquesta los 3 mensajes de una orden completada: email al cliente, email interno
@@ -15,12 +18,18 @@ const CORREO_INTERNO = 'alcantarilladoscondor@gmail.com';
 // Lista blanca de variables soportadas por los overrides editables desde el admin
 // (notification_templates.bloques / .asunto). Variable fuera de esta lista, o
 // escrita mal, se deja tal cual como texto "{{x}}" — nunca revienta el render.
+// Incluye TODO lo que los defaults de código renderizan desde la orden: si un dato de la orden
+// no tuviera variable, al "Guardar" el default desde el admin quedaría congelado el valor de
+// ORDEN_EJEMPLO (patente AB-CD-12, trabajos de ejemplo) en los mensajes reales (bug real de QA).
 export const VARIABLE_WHITELIST = [
   'numero_orden', 'cliente_empresa', 'cliente_nombre', 'fecha', 'total',
   'direccion', 'comuna', 'pdf_url', 'tecnicos', 'estado',
+  'patente', 'hora_inicio', 'hora_termino', 'descripcion', 'observaciones', 'metodo_pago',
+  'garantia', 'cliente_email', 'cliente_telefono', 'orden_compra', 'requiere_factura',
+  'trabajos_tabla_cliente', 'trabajos_tabla_interno', 'trabajos_texto', 'logo_url',
 ];
 
-export function buildVariables(orden, { pdfUrl } = {}) {
+export function buildVariables(orden, { pdfUrl, logoUrl } = {}) {
   const total = Number(orden.total || 0);
   return {
     numero_orden: orden.numero_orden_display || '',
@@ -31,8 +40,23 @@ export function buildVariables(orden, { pdfUrl } = {}) {
     direccion: orden.direccion || '',
     comuna: orden.comuna || '',
     pdf_url: pdfUrl || '',
-    tecnicos: (orden.empleados || []).map((e) => e.nombre).filter(Boolean).join(', '),
+    tecnicos: personalTexto(orden),
     estado: orden.estado || '',
+    patente: orden.patente_vehiculo || '',
+    hora_inicio: formatHora(orden.hora_inicio),
+    hora_termino: formatHora(orden.hora_termino),
+    descripcion: orden.descripcion_trabajo || '',
+    observaciones: orden.observaciones || '',
+    metodo_pago: orden.metodo_pago || '',
+    garantia: orden.garantia || '',
+    cliente_email: orden.cliente_email || '',
+    cliente_telefono: orden.cliente_telefono || '',
+    orden_compra: orden.orden_compra || '',
+    requiere_factura: orden.requiere_factura === true ? 'Sí' : orden.requiere_factura === false ? 'No' : '',
+    trabajos_tabla_cliente: trabajosRowsEmailCliente(orden.trabajos),
+    trabajos_tabla_interno: trabajosRowsEmailInterno(orden.trabajos),
+    trabajos_texto: trabajosTextoTelegram(orden.trabajos),
+    logo_url: logoUrl || '',
   };
 }
 
@@ -79,7 +103,7 @@ export async function renderPlantilla(templateKey, orden, ctx = {}, defaultFn = 
 
   if (!override || override.activo === false) return fallback;
 
-  const vars = buildVariables(orden, ctx);
+  const vars = buildVariables(orden, fullCtx);
   const asunto = override.asunto ? substituteVariables(override.asunto, vars) : fallback.subject;
   const html = override.bloques && override.bloques.length > 0 ? renderBloques(override.bloques, vars) : fallback.html;
   const text = override.bloques && override.bloques.length > 0 ? renderBloques(override.bloques, vars) : fallback.text;

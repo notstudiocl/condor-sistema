@@ -414,7 +414,7 @@ export default function ClientesPage() {
                 <input
                   className="input-field font-mono"
                   value={fichaEdit.rut || ''}
-                  onChange={(e) => setFichaEdit((f) => ({ ...f, rut: e.target.value }))}
+                  onChange={(e) => setFichaEdit((f) => ({ ...f, rut: formatRutInput(e.target.value) }))}
                 />
               </div>
               <div>

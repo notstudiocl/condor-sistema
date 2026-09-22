@@ -100,6 +100,7 @@ function PlantillasTab() {
   };
 
   const restaurar = async () => {
+    if (!window.confirm('¿Volver al mensaje original del sistema? Se perderá la plantilla personalizada.')) return;
     try {
       await restaurarPlantilla(activeKey);
       addToast('Plantilla restaurada al default del sistema.', { type: 'success' });

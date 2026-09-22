@@ -10,6 +10,7 @@ Rama `feat/postgres-migration` — versión NUEVA de Condor 360 (Postgres + R2 +
   - [ ] Aplicar 003 en Postgres real y verificar ambos logins en vivo; `ADMIN_PANEL_URL` en condor-app
 - [ ] **🔴 INCIDENTE PRODUCCIÓN (app antigua): desde 2026-09-20 las órdenes quedan sin fotos, sin PDF y sin correo** - reportado por el cliente por audio
   - Causa probable: Airtable rechaza los adjuntos (1,66 GB usados, límite Free 1 GB). Salidas: reactivar plan pago o hacer el corte al sistema nuevo. El cliente ya fue avisado de que la actualización lo resuelve.
+- [ ] **Limpiar residuos del QA**: órdenes OT-00655/00657/00658, clientes "PRUEBA QA" (ids 316 y el de RUT 55.555.555-5) — hacerlo desde el admin (Eliminar) o SQL acotado a esos ids
 - [ ] **Orden de prueba end-to-end en el entorno hosteado** - crear desde terreno → Postgres → fotos R2 → PDF Gotenberg → log de notificaciones
   - Hacerla después de que termine la migración (para no chocar con la secuencia) y borrarla al final.
 
@@ -29,6 +30,7 @@ Rama `feat/postgres-migration` — versión NUEVA de Condor 360 (Postgres + R2 +
 
 ## Done
 
+- [x] ~~QA completo de terreno (11 hallazgos) y admin (16 hallazgos) con corrección: validación server-side de órdenes, plantillas 100% dinámicas, enviar-prueba por el camino real, errores legibles, auditoría faltante, fecha en el admin, firma en la ficha, debounce, logo con cache-buster, etc.~~ (2026-09-22)
 - [x] ~~Migración completa Airtable → Postgres con `--finalize`: 653 órdenes, 7.592 adjuntos, 0 fallos; secuencia en 654~~ (2026-09-21)
 - [x] ~~Admin: pie del sidebar ("Ir a la app de terreno" + créditos + versión) y bloque de usuario del topbar al estilo H&A~~ (2026-09-21)
 - [x] ~~Bug: el admin mostraba TODAS las fechas de órdenes un día antes (fecha pura parseada como UTC)~~ (2026-09-21)

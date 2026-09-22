@@ -56,7 +56,9 @@ router.post('/logo', async (req, res, next) => {
     }
 
     await uploadBuffer(LOGO_KEY, parsed.buffer, parsed.contentType);
-    const url = buildPublicUrl(LOGO_KEY);
+    // La key es fija (se pisa el logo anterior): sin cache-buster, el panel y los clientes de correo
+    // seguían mostrando el logo viejo cacheado por URL (bug real de QA).
+    const url = `${buildPublicUrl(LOGO_KEY)}?v=${Date.now()}`;
     await notificacionesRepo.setSetting(LOGO_SETTING_KEY, { url }, req.admin?.id || null);
 
     auditRepo

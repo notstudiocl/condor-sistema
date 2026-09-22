@@ -72,10 +72,11 @@ export default function DashboardPage() {
   }, []);
 
   const handleMarcarFacturada = async (orden) => {
-    const estadoAnterior = orden.estado;
+    const estadoAnterior = orden.estado || 'Facturacion pendiente';
     setPendientes((prev) => prev.filter((o) => o.id !== orden.id));
     try {
       await cambiarEstadoOrden(orden.id, 'Facturada');
+      cargar(); // KPIs "por facturar" / "facturado este mes" se actualizan al tiro
       addToast(`OT-${orden.numero_orden_display} marcada como Facturada.`, {
         type: 'success',
         actionLabel: 'Deshacer',
@@ -143,7 +144,7 @@ export default function DashboardPage() {
         <KpiCard
           label="Por facturar"
           value={formatCLP(kpis.porFacturar.total)}
-          sublabel={`${kpis.porFacturar.cantidad} órdenes`}
+          sublabel={`${kpis.porFacturar.cantidad} ${kpis.porFacturar.cantidad === 1 ? 'orden' : 'órdenes'}`}
           icon={Wallet}
           highlight
           onClick={() => navigate('/ordenes?estado=Facturacion+pendiente')}

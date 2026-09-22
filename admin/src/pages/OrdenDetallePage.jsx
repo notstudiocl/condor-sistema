@@ -280,10 +280,17 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
   };
 
   useEffect(() => {
+    // Al pasar de /ordenes/nueva a /ordenes/:id el componente se reutiliza: hay que salir del
+    // modo edición y limpiar el estado de creación (bug real de QA: la ficha recién creada
+    // quedaba editable y sin acciones).
+    setEditMode(esNuevaOrden);
+    setForm(esNuevaOrden ? buildFormVacio() : null);
+    setFotosNuevas({ antes: [], despues: [] });
+    setFotosParaEliminar([]);
     cargar();
     cargarAuditoria();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, esNuevaOrden]);
 
   useEffect(() => {
     if (!editMode) return;
@@ -296,6 +303,7 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
     return (orden.fotos || [])
       .filter((f) => f.tipo === 'antes' || f.tipo === 'despues')
       .map((f) => ({ ...f, label: f.tipo === 'antes' ? 'Antes' : 'Después' }));
+  const firma = (orden?.fotos || []).find((f) => f.tipo === 'firma' && f.url) || null;
   }, [orden]);
 
   const pdfFoto = useMemo(() => (orden?.fotos || []).find((f) => f.tipo === 'pdf'), [orden]);
@@ -682,6 +690,15 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
+                    <label className="label-field">Fecha de la orden</label>
+                    <input
+                      type="date"
+                      value={form.fecha || ''}
+                      onChange={(e) => setCampo('fecha', e.target.value)}
+                      className="input-field"
+                    />
+                  </div>
+                  <div>
                     <label className="label-field">Hora inicio</label>
                     <input
                       type="datetime-local"
@@ -915,9 +932,18 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
                   );
                 })}
               </div>
-            ) : fotos.length === 0 ? (
+            ) : fotos.length === 0 && !firma ? (
               <p className="text-sm text-gray-400">Esta orden no tiene fotos registradas.</p>
             ) : (
+              <>
+              {firma && (
+                <div className="mb-4">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Firma del supervisor</p>
+                  <div className="inline-block rounded-lg border border-gray-200 bg-white p-2">
+                    <img src={firma.url} alt="Firma" className="h-24 object-contain" />
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                 {fotos.map((f, i) => (
                   <button
@@ -938,6 +964,7 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
                   </button>
                 ))}
               </div>
+              </>
             )}
           </div>
 

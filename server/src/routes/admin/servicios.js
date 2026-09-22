@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import * as auditRepo from '../../repositories/auditRepo.js';
 import * as serviciosRepo from '../../repositories/serviciosRepo.js';
 import { adminAuthMiddleware } from '../../middleware/adminAuth.js';
 
@@ -28,6 +29,8 @@ router.post('/', async (req, res, next) => {
       return res.status(409).json({ success: false, error: 'Ya existe un servicio con ese nombre' });
     }
     const servicio = await serviciosRepo.crearServicio(nombre);
+    auditRepo.registrar({ adminUserId: req.admin?.id, accion: 'crear_servicio', entidad: 'servicios', entidadId: servicio.id, detalle: { nombre } })
+      .catch((err) => console.error('[admin/servicios] auditoría:', err.message));
     res.status(201).json({ success: true, data: servicio });
   } catch (err) {
     next(err);
@@ -40,8 +43,11 @@ router.put('/:id', async (req, res, next) => {
     const { nombre, activo } = req.body || {};
     const servicio = await serviciosRepo.actualizarServicio(Number(req.params.id), { nombre, activo });
     if (!servicio) return res.status(404).json({ success: false, error: 'Servicio no encontrado' });
+    auditRepo.registrar({ adminUserId: req.admin?.id, accion: 'editar_servicio', entidad: 'servicios', entidadId: servicio.id, detalle: { nombre, activo } })
+      .catch((err) => console.error('[admin/servicios] auditoría:', err.message));
     res.json({ success: true, data: servicio });
   } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ success: false, error: 'Ya existe otro servicio con ese nombre' });
     next(err);
   }
 });
@@ -50,6 +56,9 @@ router.put('/:id', async (req, res, next) => {
 router.delete('/:id', async (req, res, next) => {
   try {
     const resultado = await serviciosRepo.eliminarServicioSiSinUso(Number(req.params.id));
+    if (resultado.noExiste) return res.status(404).json({ success: false, error: 'Servicio no encontrado' });
+    auditRepo.registrar({ adminUserId: req.admin?.id, accion: resultado.eliminado ? 'eliminar_servicio' : 'intento_eliminar_servicio', entidad: 'servicios', entidadId: Number(req.params.id), detalle: { usos: resultado.usos ?? 0 } })
+      .catch((err) => console.error('[admin/servicios] auditoría:', err.message));
     if (!resultado.eliminado) {
       return res.status(409).json({
         success: false,

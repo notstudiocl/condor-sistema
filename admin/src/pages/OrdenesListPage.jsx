@@ -99,6 +99,9 @@ export default function OrdenesListPage() {
   const estadoParam = searchParams.get('estado');
   const [estadosActivos, setEstadosActivos] = useState(estadoParam ? estadoParam.split(',') : []);
   const [query, setQuery] = useState(searchParams.get('q') || '');
+  // Texto del input (cada tecla) separado de `query` (lo que se busca, con debounce): antes cada
+  // tecla disparaba un request y los resultados podían llegar fuera de orden (bug real de QA).
+  const [queryInput, setQueryInput] = useState(searchParams.get('q') || '');
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState([]);
   const [confirmBulk, setConfirmBulk] = useState(false);
@@ -265,8 +268,8 @@ export default function OrdenesListPage() {
         <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
           <SearchInput
             placeholder="Buscar OT, RUT, cliente, dirección..."
-            value={query}
-            onChange={setQuery}
+            value={queryInput}
+            onChange={setQueryInput}
             onSearch={(v) => {
               setPage(1);
               setQuery(v);
@@ -322,7 +325,7 @@ export default function OrdenesListPage() {
       {!loading && ordenes.length > 0 && (
         <div className="flex items-center justify-between text-sm text-gray-500">
           <p>
-            {total} orden{total === 1 ? '' : 'es'} · página {page} de {totalPages}
+            {total} {total === 1 ? 'orden' : 'órdenes'} · página {page} de {totalPages}
           </p>
           <div className="flex items-center gap-2">
             <button

@@ -139,7 +139,7 @@ router.post('/:canal/test', adminAuthMiddleware, requireNotstudio, validarCanal,
     return res.status(400).json({ success: false, error: 'Canal inválido' });
   } catch (err) {
     // Error real de canal inactivo/credenciales/timeout — 502 (falla aguas abajo), no 500.
-    res.status(502).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: err.message }); // 502 lo pisa el proxy de EasyPanel (sin CORS)
   }
 });
 

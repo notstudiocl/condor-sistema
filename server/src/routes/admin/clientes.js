@@ -76,6 +76,11 @@ router.post('/fusionar', async (req, res, next) => {
     if (String(ganadorId) === String(perdedorId)) {
       return res.status(400).json({ success: false, error: 'ganadorId y perdedorId no pueden ser el mismo cliente' });
     }
+    const [ganador, perdedor] = await Promise.all([clientesRepo.getClienteById(Number(ganadorId)), clientesRepo.getClienteById(Number(perdedorId))]);
+    if (!ganador || !perdedor) return res.status(404).json({ success: false, error: 'Cliente no encontrado' });
+    if ((ganador.rut_normalizado || '') !== (perdedor.rut_normalizado || '')) {
+      return res.status(400).json({ success: false, error: 'Solo se pueden fusionar clientes que comparten el mismo RUT' });
+    }
 
     const resultado = await withTransaction((client) =>
       clientesRepo.fusionarClientes(client, { ganadorId, perdedorId, camposResultado })

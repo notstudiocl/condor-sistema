@@ -75,7 +75,7 @@ function nombreTrabajo(t) {
   return t.servicio_nombre || t.nombre_personalizado || '';
 }
 
-function trabajosRowsEmailCliente(trabajos) {
+export function trabajosRowsEmailCliente(trabajos) {
   return (trabajos || [])
     .filter((t) => t.cantidad > 0)
     .map((t, i) => {
@@ -85,7 +85,7 @@ function trabajosRowsEmailCliente(trabajos) {
     .join('');
 }
 
-function trabajosRowsEmailInterno(trabajos) {
+export function trabajosRowsEmailInterno(trabajos) {
   return (trabajos || [])
     .filter((t) => t.cantidad > 0)
     .map((t, i) => {
@@ -95,7 +95,16 @@ function trabajosRowsEmailInterno(trabajos) {
     .join('');
 }
 
-function personalTexto(orden) {
+export function trabajosTextoTelegram(trabajos) {
+  return (
+    (trabajos || [])
+      .filter((t) => t.cantidad > 0)
+      .map((t) => `  • ${nombreTrabajo(t)} × ${t.cantidad}`)
+      .join('\n') || '  Sin trabajos registrados'
+  );
+}
+
+export function personalTexto(orden) {
   return (orden.empleados || []).map((e) => e.nombre).filter(Boolean).join(', ') || '—';
 }
 
@@ -445,11 +454,7 @@ export function telegramDefault(orden, { pdfUrl } = {}) {
   const numeroOrden = orden.numero_orden_display || 'S/N';
   const fecha = formatFecha(orden.fecha);
 
-  const trabajosTexto =
-    (orden.trabajos || [])
-      .filter((t) => t.cantidad > 0)
-      .map((t) => `  • ${nombreTrabajo(t)} × ${t.cantidad}`)
-      .join('\n') || '  Sin trabajos registrados';
+  const trabajosTexto = trabajosTextoTelegram(orden.trabajos);
 
   const personal = personalTexto(orden);
 

@@ -1,8 +1,10 @@
 import { Router } from 'express';
+import * as auditRepo from '../../repositories/auditRepo.js';
 import * as notificacionesRepo from '../../repositories/notificacionesRepo.js';
 import * as ordenesRepo from '../../repositories/ordenesRepo.js';
 import { buildPublicUrl } from '../../services/storage/r2.js';
-import { enviarEmail } from '../../services/notifications/resend.js';
+import { enviarCorreoSistema } from '../../services/notifications/correoSistema.js';
+import { getWebhookUrl, enviarWebhookNotificacion } from '../../services/notifications/webhookN8n.js';
 import { enviarTelegram } from '../../services/notifications/telegram.js';
 import { renderPlantilla, VARIABLE_WHITELIST, buildVariables, buildDefaultEditable } from '../../services/notifications/dispatch.js';
 import { adminAuthMiddleware } from '../../middleware/adminAuth.js';
@@ -87,13 +89,19 @@ router.get('/:key', adminAuthMiddleware, validarTemplateKey, async (req, res, ne
 router.put('/:key', adminAuthMiddleware, validarTemplateKey, async (req, res, next) => {
   try {
     const { asunto, bloques, activo } = req.body || {};
+    const bloquesLimpios = (Array.isArray(bloques) ? bloques : []).filter((b) => String(typeof b === 'string' ? b : b?.content || '').trim());
+    if (bloquesLimpios.length === 0) {
+      return res.status(400).json({ success: false, error: 'La plantilla necesita al menos un bloque con contenido. Usa "Restaurar default" para volver al mensaje original.' });
+    }
     const saved = await notificacionesRepo.upsertTemplate({
       templateKey: req.params.key,
       asunto: asunto ?? null,
-      bloques: Array.isArray(bloques) ? bloques : [],
+      bloques: bloquesLimpios,
       activo: activo !== false,
       updatedBy: req.admin?.id || null,
     });
+    auditRepo.registrar({ adminUserId: req.admin?.id, accion: 'guardar_plantilla', entidad: 'notification_templates', entidadId: req.params.key, detalle: { asunto: asunto ?? null, bloques: bloquesLimpios.length } })
+      .catch((err) => console.error('[admin/plantillas] auditoría:', err.message));
     res.json({ success: true, data: saved });
   } catch (err) {
     next(err);
@@ -104,6 +112,8 @@ router.put('/:key', adminAuthMiddleware, validarTemplateKey, async (req, res, ne
 router.delete('/:key', adminAuthMiddleware, validarTemplateKey, async (req, res, next) => {
   try {
     await notificacionesRepo.eliminarTemplateOverride(req.params.key);
+    auditRepo.registrar({ adminUserId: req.admin?.id, accion: 'restaurar_plantilla', entidad: 'notification_templates', entidadId: req.params.key, detalle: null })
+      .catch((err) => console.error('[admin/plantillas] auditoría:', err.message));
     res.json({ success: true, data: { templateKey: req.params.key, tieneOverride: false } });
   } catch (err) {
     next(err);
@@ -149,17 +159,27 @@ router.post('/enviar-prueba', adminAuthMiddleware, requireRole('admin'), async (
     const ctx = { pdfUrl: pdfUrlDeOrden(orden) };
     const render = await renderPlantilla(templateKey, orden, ctx);
 
+    // Mismo camino que el envío real: webhook de n8n si está configurado, in-process si no.
+    // Antes usaba Resend/Telegram directo y fallaba siempre en producción, donde las
+    // credenciales viven en n8n y notification_channels está vacío (bug real de QA).
+    const webhookUrl = await getWebhookUrl();
     if (templateKey === 'telegram_ot') {
-      const result = await enviarTelegram({ text: render.text });
+      if (webhookUrl) {
+        await enviarWebhookNotificacion(webhookUrl, { evento: 'prueba', marca: { nombre: 'Condor 360' }, emails: [], telegram: { texto: `[PRUEBA] ${render.text}` }, pdfs: [] });
+        return res.json({ success: true, data: { via: 'n8n' } });
+      }
+      const result = await enviarTelegram({ text: `[PRUEBA] ${render.text}` });
       return res.json({ success: true, data: result });
     }
 
     const to = destinatario || orden.cliente_email;
     if (!to) return res.status(400).json({ success: false, error: 'Falta "destinatario" (la orden de prueba no tiene email de cliente)' });
-    const result = await enviarEmail({ to, subject: `[PRUEBA] ${render.subject}`, html: render.html });
-    res.json({ success: true, data: result });
+    await enviarCorreoSistema({ to, subject: `[PRUEBA] ${render.subject}`, html: render.html });
+    res.json({ success: true, data: { via: webhookUrl ? 'n8n' : 'resend' } });
   } catch (err) {
-    res.status(502).json({ success: false, error: err.message });
+    // 500 y no 502: el proxy de EasyPanel reemplaza los 502 por su propia página HTML sin CORS
+    // y la UI solo veía "No se pudo conectar con el servidor" (bug real de QA).
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
