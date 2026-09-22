@@ -15,9 +15,9 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   ImageOff,
   AlertCircle,
-  Pencil,
   Save,
   Loader2,
   Camera,
@@ -25,16 +25,23 @@ import {
   Plus,
   Trash2,
   Search,
+  Link2,
+  Unlink,
+  RefreshCw,
+  MoreHorizontal,
+  User,
+  Wrench,
+  Bell,
 } from 'lucide-react';
 import EstadoBadge from '../components/EstadoBadge';
-import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import { SkeletonText } from '../components/Skeleton';
 import { useToast } from '../components/Toast';
 import ClienteSearchAdmin from '../components/ClienteSearchAdmin';
+import { Section, Field, FieldGrid, EditarBtn, CancelarBtn, SeccionAcciones } from '../components/SectionCard';
 import { compressImage, fileToBase64 } from '../utils/images';
-import { formatCLP, formatFecha, formatHora, formatFechaHora, formatDuracion, formatRut } from '../utils/format';
+import { formatCLP, formatFecha, formatFechaHora, formatDuracion, formatRut } from '../utils/format';
 import { ESTADOS, METODOS_PAGO, GARANTIAS } from '../utils/constants';
 import {
   getOrden,
@@ -119,11 +126,6 @@ function PhotoViewer({ open, onClose, fotos, index, setIndex }) {
   );
 }
 
-function buildTimeline(estado) {
-  const idxActual = ESTADOS.indexOf(estado);
-  return ESTADOS.map((e, i) => ({ estado: e, hecho: i <= idxActual }));
-}
-
 // timestamptz de Postgres -> valor de <input type="datetime-local">, en hora LOCAL del
 // navegador (oficina de Condor opera en America/Santiago). Se envía tal cual de vuelta,
 // mismo criterio que ya usa el wizard del técnico (client/OrdenWizardPage) para estos campos.
@@ -187,6 +189,52 @@ function buildFormVacio() {
   return { ...buildFormFromOrden({}), fecha: todayISOChile() };
 }
 
+// Payload completo del PUT/POST admin a partir del formulario (el backend siempre recibe
+// la orden entera — al guardar UNA sección se manda todo, con solo esa sección cambiada).
+function buildPayload(form) {
+  return {
+    fecha: form.fecha || null,
+    horaInicio: form.horaInicio || null,
+    horaTermino: form.horaTermino || null,
+    patenteVehiculo: form.patenteVehiculo,
+    direccion: form.direccion,
+    comuna: form.comuna,
+    supervisor: form.supervisor,
+    ordenCompra: form.ordenCompra,
+    clienteEmpresa: form.clienteEmpresa,
+    clienteEmail: form.clienteEmail,
+    clienteTelefono: form.clienteTelefono,
+    descripcionTrabajo: form.descripcionTrabajo,
+    observaciones: form.observaciones,
+    garantia: form.garantia,
+    total: parseNumeroInput(form.total),
+    metodoPago: form.metodoPago || null,
+    requiereFactura: form.requiereFactura,
+    clienteId: form.unlinkCliente ? null : form.clienteId,
+    unlinkCliente: form.unlinkCliente,
+    empleadoIds: form.empleadoIds,
+    trabajos: form.trabajos
+      .filter((t) => (t.trabajo || '').trim())
+      .map((t) => ({ servicioId: t.servicioId || undefined, trabajo: t.trabajo.trim(), cantidad: Number(t.cantidad) || 1 })),
+  };
+}
+
+// Qué campos del formulario "pertenecen" a cada sección editable. Al guardar una sección
+// se toma la orden actual como base y se pisan SOLO estos campos, así dos secciones
+// abiertas a la vez no se contaminan entre sí.
+const CAMPOS_SECCION = {
+  cliente: ['clienteId', 'clienteLabel', 'clienteRut', 'unlinkCliente', 'clienteEmpresa', 'supervisor', 'clienteEmail', 'clienteTelefono', 'direccion', 'comuna'],
+  trabajo: ['fecha', 'horaInicio', 'horaTermino', 'patenteVehiculo', 'garantia', 'trabajos', 'descripcionTrabajo', 'observaciones'],
+  pago: ['total', 'metodoPago', 'requiereFactura', 'ordenCompra'],
+  equipo: ['empleadoIds'],
+};
+
+function pick(obj, keys) {
+  const out = {};
+  for (const k of keys) out[k] = obj[k];
+  return out;
+}
+
 const ACCION_LABELS = {
   crear_orden: 'Creó la orden',
   editar_orden: 'Editó la orden',
@@ -217,6 +265,25 @@ function ResumenDetalleAuditoria({ detalle }) {
   );
 }
 
+// Menú desplegable simple (estado / más acciones) que se cierra al hacer clic afuera o con Escape.
+function useClickOutside(ref, onOutside, active) {
+  useEffect(() => {
+    if (!active) return;
+    const onDown = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) onOutside();
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') onOutside();
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [ref, onOutside, active]);
+}
+
 export default function OrdenDetallePage({ esNuevaOrden = false }) {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -237,23 +304,39 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
   const [confirmEliminar, setConfirmEliminar] = useState(false);
   const [eliminando, setEliminando] = useState(false);
   const [reenviando, setReenviando] = useState(false);
+  const [regenerandoPdf, setRegenerandoPdf] = useState(false);
   const [confirmEstado, setConfirmEstado] = useState(null);
+  const [estadoMenuOpen, setEstadoMenuOpen] = useState(false);
+  const [masMenuOpen, setMasMenuOpen] = useState(false);
+  const estadoMenuRef = useRef(null);
+  const masMenuRef = useRef(null);
+  useClickOutside(estadoMenuRef, () => setEstadoMenuOpen(false), estadoMenuOpen);
+  useClickOutside(masMenuRef, () => setMasMenuOpen(false), masMenuOpen);
 
-  // ---- Edición ----
-  // En modo creación (/ordenes/nueva) arranca directo en editMode con un formulario
-  // vacío — no hay orden que cargar ni toggle "Editar orden" que apretar.
-  const [editMode, setEditMode] = useState(esNuevaOrden);
+  // ---- Edición por secciones ----
+  // Un solo formulario (`form`) y la lista de secciones abiertas. En modo creación
+  // (/ordenes/nueva) todas las secciones están en edición sobre un formulario vacío y hay
+  // un único botón "Crear orden" en la cabecera.
   const [form, setForm] = useState(esNuevaOrden ? buildFormVacio() : null);
-  const [guardando, setGuardando] = useState(false);
+  const [seccionesEditando, setSeccionesEditando] = useState([]);
+  const [guardandoSeccion, setGuardandoSeccion] = useState(null);
+  const [creando, setCreando] = useState(false);
   const [servicios, setServicios] = useState([]);
   const [tecnicos, setTecnicos] = useState([]);
   const [buscandoCliente, setBuscandoCliente] = useState(false);
+
+  // ---- Fotos (sección con su propio guardado: sube/elimina en R2 y regenera el PDF) ----
+  const [fotosEditando, setFotosEditando] = useState(false);
+  const [guardandoFotos, setGuardandoFotos] = useState(false);
   const [fotosNuevas, setFotosNuevas] = useState({ antes: [], despues: [] });
   const [fotosParaEliminar, setFotosParaEliminar] = useState([]);
 
-  const cargar = async () => {
+  const editando = (seccion) => esNuevaOrden || seccionesEditando.includes(seccion);
+  const algoEditando = esNuevaOrden || seccionesEditando.length > 0;
+
+  const cargar = async ({ silencioso = false } = {}) => {
     if (esNuevaOrden) return; // nada que cargar — el formulario arranca vacío
-    setLoading(true);
+    if (!silencioso) setLoading(true);
     setError('');
     try {
       const [ordenRes, notifRes] = await Promise.all([
@@ -265,7 +348,7 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
     } catch (err) {
       setError(err.message || 'No se pudo cargar la orden');
     } finally {
-      setLoading(false);
+      if (!silencioso) setLoading(false);
     }
   };
 
@@ -283,20 +366,29 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
     // Al pasar de /ordenes/nueva a /ordenes/:id el componente se reutiliza: hay que salir del
     // modo edición y limpiar el estado de creación (bug real de QA: la ficha recién creada
     // quedaba editable y sin acciones).
-    setEditMode(esNuevaOrden);
     setForm(esNuevaOrden ? buildFormVacio() : null);
+    if (esNuevaOrden) {
+      setOrden(null);
+      setNotificaciones([]);
+      setAuditoria([]);
+    }
+    setSeccionesEditando([]);
+    setFotosEditando(false);
     setFotosNuevas({ antes: [], despues: [] });
     setFotosParaEliminar([]);
+    setBuscandoCliente(false);
+    setEstadoMenuOpen(false);
+    setMasMenuOpen(false);
     cargar();
     cargarAuditoria();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, esNuevaOrden]);
 
   useEffect(() => {
-    if (!editMode) return;
+    if (!algoEditando) return;
     listServicios().then((res) => setServicios(res.data || [])).catch(() => {});
     listEmpleados().then((res) => setTecnicos((res.data || []).filter((e) => e.activo))).catch(() => {});
-  }, [editMode]);
+  }, [algoEditando]);
 
   const fotos = useMemo(() => {
     if (!orden) return [];
@@ -305,10 +397,11 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
       .map((f) => ({ ...f, label: f.tipo === 'antes' ? 'Antes' : 'Después' }));
   }, [orden]);
   const firma = (orden?.fotos || []).find((f) => f.tipo === 'firma' && f.url) || null;
-
   const pdfFoto = useMemo(() => (orden?.fotos || []).find((f) => f.tipo === 'pdf'), [orden]);
 
-  if (loading) {
+  // Al pasar de /ordenes/:id a /ordenes/nueva el componente se reutiliza y `form` sigue en
+  // null hasta que corre el useEffect de reset — un render intermedio sin formulario reventaba.
+  if (loading || (esNuevaOrden && !form)) {
     return (
       <div className="card p-6">
         <SkeletonText lines={8} />
@@ -332,6 +425,8 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
     setViewerIndex(i);
     setViewerOpen(true);
   };
+
+  // ---- Acciones de cabecera ----
 
   const handleEliminar = async () => {
     setEliminando(true);
@@ -370,12 +465,27 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
       } else {
         addToast(`Orden reenviada, pero el PDF quedó pendiente: ${res.data?.webhookError || 'error desconocido'}`, { type: 'error' });
       }
-      cargar();
+      cargar({ silencioso: true });
       cargarAuditoria();
     } catch (err) {
       addToast(`No se pudo reenviar: ${err.message}`, { type: 'error' });
     } finally {
       setReenviando(false);
+    }
+  };
+
+  // Solo el PDF, sin notificar (para no re-avisar al cliente tras una edición administrativa).
+  const handleRegenerarPdf = async () => {
+    setRegenerandoPdf(true);
+    try {
+      await regenerarPdfOrden(orden.id);
+      addToast('PDF regenerado correctamente.', { type: 'success' });
+      await cargar({ silencioso: true });
+      cargarAuditoria();
+    } catch (err) {
+      addToast(`No se pudo regenerar el PDF: ${err.message}`, { type: 'error' });
+    } finally {
+      setRegenerandoPdf(false);
     }
   };
 
@@ -405,33 +515,65 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
     }
   };
 
-  // ---- Edición ----
+  // ---- Edición por secciones ----
 
-  const entrarEdicion = () => {
-    setForm(buildFormFromOrden(orden));
-    setFotosNuevas({ antes: [], despues: [] });
-    setFotosParaEliminar([]);
-    setBuscandoCliente(false);
-    setEditMode(true);
+  const abrirSeccion = (seccion) => {
+    const base = buildFormFromOrden(orden);
+    // Si ya hay otra sección abierta se conserva lo que lleva escrito y solo se
+    // refrescan los campos de la sección que se abre ahora.
+    setForm((prev) => (prev ? { ...prev, ...pick(base, CAMPOS_SECCION[seccion]) } : base));
+    if (seccion === 'cliente') setBuscandoCliente(false);
+    setSeccionesEditando((prev) => (prev.includes(seccion) ? prev : [...prev, seccion]));
   };
 
-  const cancelarEdicion = () => {
-    fotosNuevas.antes.forEach((f) => URL.revokeObjectURL(f.url));
-    fotosNuevas.despues.forEach((f) => URL.revokeObjectURL(f.url));
-    setFotosNuevas({ antes: [], despues: [] });
-    setFotosParaEliminar([]);
-    setForm(null);
-    setEditMode(false);
+  const cerrarSeccion = (seccion) => {
+    if (seccion === 'cliente') setBuscandoCliente(false);
+    setSeccionesEditando((prev) => {
+      const next = prev.filter((s) => s !== seccion);
+      if (next.length === 0) setForm(null);
+      return next;
+    });
   };
 
-  // En modo creación no hay una orden previa a la que "cancelar" volviendo: el botón
-  // simplemente descarta el formulario y vuelve al listado.
-  const handleCancelar = () => {
-    if (esNuevaOrden) {
-      navigate('/ordenes');
-      return;
+  const regenerarPdfTrasGuardar = async () => {
+    addToast('Cambios guardados. Regenerando PDF...', { type: 'info', duration: 3000 });
+    try {
+      await regenerarPdfOrden(orden.id);
+      addToast('PDF regenerado correctamente.', { type: 'success' });
+    } catch (err) {
+      addToast(`El PDF quedó pendiente: ${err.message}`, { type: 'error' });
     }
-    cancelarEdicion();
+  };
+
+  const guardarSeccion = async (seccion) => {
+    setGuardandoSeccion(seccion);
+    try {
+      // Payload completo: la orden tal como está en el servidor + solo los campos de esta sección.
+      const merged = { ...buildFormFromOrden(orden), ...pick(form, CAMPOS_SECCION[seccion]) };
+      await actualizarOrdenAdmin(orden.id, buildPayload(merged));
+      cerrarSeccion(seccion);
+      await regenerarPdfTrasGuardar();
+      await cargar({ silencioso: true });
+      await cargarAuditoria();
+    } catch (err) {
+      addToast(`No se pudo guardar: ${err.message}`, { type: 'error' });
+    } finally {
+      setGuardandoSeccion(null);
+    }
+  };
+
+  const handleCrear = async () => {
+    setCreando(true);
+    try {
+      // Sin fotos/PDF/notificaciones acá — la orden nace en estado 'Enviada' y la
+      // oficina usa "Regenerar PDF"/"Agregar foto" desde la ficha recién creada.
+      const res = await crearOrdenAdmin(buildPayload(form));
+      addToast(`Orden OT-${res.data.numero_orden_display} creada correctamente.`, { type: 'success' });
+      navigate(`/ordenes/${res.data.id}`);
+    } catch (err) {
+      addToast(`No se pudo crear la orden: ${err.message}`, { type: 'error' });
+      setCreando(false);
+    }
   };
 
   const setCampo = (campo, valor) => setForm((prev) => ({ ...prev, [campo]: valor }));
@@ -480,6 +622,22 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
     setBuscandoCliente(false);
   };
 
+  // ---- Fotos ----
+
+  const abrirFotos = () => {
+    setFotosNuevas({ antes: [], despues: [] });
+    setFotosParaEliminar([]);
+    setFotosEditando(true);
+  };
+
+  const cancelarFotos = () => {
+    fotosNuevas.antes.forEach((f) => URL.revokeObjectURL(f.url));
+    fotosNuevas.despues.forEach((f) => URL.revokeObjectURL(f.url));
+    setFotosNuevas({ antes: [], despues: [] });
+    setFotosParaEliminar([]);
+    setFotosEditando(false);
+  };
+
   const handleAgregarFotos = (tipo, fileList) => {
     const files = Array.from(fileList || []);
     if (files.length === 0) return;
@@ -503,46 +661,14 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
     setFotosParaEliminar((prev) => (prev.includes(fotoId) ? prev.filter((v) => v !== fotoId) : [...prev, fotoId]));
   };
 
-  const handleGuardar = async () => {
-    setGuardando(true);
+  const guardarFotos = async () => {
+    const hayCambios = fotosParaEliminar.length > 0 || fotosNuevas.antes.length > 0 || fotosNuevas.despues.length > 0;
+    if (!hayCambios) {
+      cancelarFotos();
+      return;
+    }
+    setGuardandoFotos(true);
     try {
-      const payload = {
-        fecha: form.fecha || null,
-        horaInicio: form.horaInicio || null,
-        horaTermino: form.horaTermino || null,
-        patenteVehiculo: form.patenteVehiculo,
-        direccion: form.direccion,
-        comuna: form.comuna,
-        supervisor: form.supervisor,
-        ordenCompra: form.ordenCompra,
-        clienteEmpresa: form.clienteEmpresa,
-        clienteEmail: form.clienteEmail,
-        clienteTelefono: form.clienteTelefono,
-        descripcionTrabajo: form.descripcionTrabajo,
-        observaciones: form.observaciones,
-        garantia: form.garantia,
-        total: parseNumeroInput(form.total),
-        metodoPago: form.metodoPago || null,
-        requiereFactura: form.requiereFactura,
-        clienteId: form.unlinkCliente ? null : form.clienteId,
-        unlinkCliente: form.unlinkCliente,
-        empleadoIds: form.empleadoIds,
-        trabajos: form.trabajos
-          .filter((t) => (t.trabajo || '').trim())
-          .map((t) => ({ servicioId: t.servicioId || undefined, trabajo: t.trabajo.trim(), cantidad: Number(t.cantidad) || 1 })),
-      };
-
-      if (esNuevaOrden) {
-        // Sin fotos/PDF/notificaciones acá — la orden nace en estado 'Enviada' y la
-        // oficina usa "Regenerar PDF"/"Agregar foto" desde la ficha recién creada.
-        const res = await crearOrdenAdmin(payload);
-        addToast(`Orden OT-${res.data.numero_orden_display} creada correctamente.`, { type: 'success' });
-        navigate(`/ordenes/${res.data.id}`);
-        return;
-      }
-
-      await actualizarOrdenAdmin(orden.id, payload);
-
       for (const fotoId of fotosParaEliminar) {
         try {
           await eliminarFotoOrden(orden.id, fotoId);
@@ -554,326 +680,581 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
       for (const tipo of ['antes', 'despues']) {
         const nuevas = fotosNuevas[tipo];
         if (nuevas.length === 0) continue;
-        const base64s = await Promise.all(
-          nuevas.map(async (f) => fileToBase64(await compressImage(f.file)))
-        );
+        const base64s = await Promise.all(nuevas.map(async (f) => fileToBase64(await compressImage(f.file))));
         await agregarFotosOrden(orden.id, tipo, base64s);
       }
 
-      addToast('Cambios guardados. Regenerando PDF...', { type: 'info', duration: 3000 });
-
-      try {
-        await regenerarPdfOrden(orden.id);
-        addToast('PDF regenerado correctamente.', { type: 'success' });
-      } catch (err) {
-        addToast(`El PDF quedó pendiente: ${err.message}`, { type: 'error' });
-      }
-
-      cancelarEdicion();
-      await cargar();
+      cancelarFotos();
+      await regenerarPdfTrasGuardar();
+      await cargar({ silencioso: true });
       await cargarAuditoria();
     } catch (err) {
-      addToast(`No se pudo ${esNuevaOrden ? 'crear la orden' : 'guardar'}: ${err.message}`, { type: 'error' });
+      addToast(`No se pudieron guardar las fotos: ${err.message}`, { type: 'error' });
     } finally {
-      setGuardando(false);
+      setGuardandoFotos(false);
     }
   };
 
-  const timeline = orden ? buildTimeline(orden.estado) : [];
   const trabajos = orden?.trabajos || [];
   const empleados = orden?.empleados || [];
   const auditoriaVisible = auditoriaExpandida ? auditoria : auditoria.slice(0, 5);
+  const clienteLinkLabel = orden?.cliente
+    ? orden.cliente.empresa?.trim() ? orden.cliente.empresa : orden.cliente.nombre
+    : null;
+
+  // Botón "Editar"/"Cancelar" de la esquina de cada sección (oculto en modo creación).
+  const accionSeccion = (seccion) => {
+    if (esNuevaOrden) return null;
+    return editando(seccion)
+      ? <CancelarBtn onClick={() => cerrarSeccion(seccion)} disabled={guardandoSeccion === seccion} />
+      : <EditarBtn onClick={() => abrirSeccion(seccion)} />;
+  };
+
+  // Pie Guardar/Cancelar de una sección abierta (en modo creación hay un único "Crear orden").
+  const pieSeccion = (seccion) => {
+    if (esNuevaOrden || !editando(seccion)) return null;
+    return (
+      <SeccionAcciones
+        onGuardar={() => guardarSeccion(seccion)}
+        onCancelar={() => cerrarSeccion(seccion)}
+        guardando={guardandoSeccion === seccion}
+      />
+    );
+  };
 
   return (
-    <div className="space-y-5 pb-10">
-      {/* Header con acciones — sticky solo en escritorio (lg+): en celular ocupa 2-3 filas y
-          pegado al Topbar dejaría casi sin espacio en horizontal (844x390). */}
-      <div className="lg:sticky lg:top-16 z-20 -mx-4 md:-mx-6 px-4 md:px-6 py-3 bg-gray-50/95 backdrop-blur border-b border-gray-200 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <button
-          onClick={() => navigate(-1)}
-          className="h-10 w-10 -ml-2 shrink-0 inline-flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
-          aria-label="Volver"
-        >
-          <ArrowLeft size={18} />
-        </button>
-        <div className="min-w-0">
-          <p className="font-heading font-bold text-lg text-gray-900">
-            {esNuevaOrden ? 'Nueva orden' : `OT-${orden.numero_orden_display}`}
-          </p>
-          {!esNuevaOrden && <p className="text-xs text-gray-400">{formatFecha(orden.fecha)}</p>}
+    <div className="space-y-5 pb-10 max-w-5xl">
+      {/* ---- Cabecera: volver + título + acciones ---- */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            onClick={() => navigate(esNuevaOrden ? '/ordenes' : -1)}
+            className="btn-secondary !px-2.5 shrink-0"
+            aria-label="Volver"
+          >
+            <ArrowLeft size={16} />
+          </button>
+          <div className="min-w-0">
+            {/* h2: el h1 de la página lo pone el Topbar ("Detalle de orden") */}
+            <h2 className="font-heading font-bold text-xl sm:text-2xl text-gray-900 leading-tight truncate">
+              {esNuevaOrden ? 'Nueva orden' : `Orden ${orden.numero_orden_display}`}
+            </h2>
+            <p className="text-xs text-gray-400 truncate">
+              {esNuevaOrden
+                ? 'Se creará en estado "Enviada", sin fotos ni PDF — se completan después desde la ficha.'
+                : `Trabajo del ${formatFecha(orden.fecha)} · creada ${formatFechaHora(orden.created_at)}`}
+            </p>
+          </div>
         </div>
-        {!esNuevaOrden && <EstadoBadge estado={orden.estado} solido />}
 
-        <div className="w-full lg:w-auto lg:ml-auto flex items-center gap-2 flex-wrap">
-          {editMode ? (
+        <div className="w-full sm:w-auto flex items-center gap-2 flex-wrap">
+          {esNuevaOrden ? (
             <>
-              <button className="btn-secondary flex-1 sm:flex-none" onClick={handleCancelar} disabled={guardando}>
+              <button className="btn-secondary flex-1 sm:flex-none" onClick={() => navigate('/ordenes')} disabled={creando}>
                 Cancelar
               </button>
-              <button className="btn-accent flex-1 sm:flex-none" onClick={handleGuardar} disabled={guardando}>
-                {guardando ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-                {guardando
-                  ? esNuevaOrden ? 'Creando...' : 'Guardando...'
-                  : esNuevaOrden ? 'Crear orden' : 'Guardar cambios'}
+              <button className="btn-accent flex-1 sm:flex-none" onClick={handleCrear} disabled={creando}>
+                {creando ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                {creando ? 'Creando...' : 'Crear orden'}
               </button>
             </>
           ) : (
             <>
-              <select
-                value=""
-                onChange={(e) => e.target.value && setConfirmEstado(e.target.value)}
-                className="flex-1 sm:flex-none min-w-0 min-h-10 lg:min-h-0 text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-condor-400"
-              >
-                <option value="">Cambiar estado...</option>
-                {ESTADOS.filter((e) => e !== orden.estado).map((e) => (
-                  <option key={e} value={e}>
-                    {e}
-                  </option>
-                ))}
-              </select>
-              {pdfFoto && (
+              {/* Selector de estado: badge + flecha, menú con los demás estados, confirmación al elegir */}
+              <div className="relative" ref={estadoMenuRef}>
+                <button
+                  type="button"
+                  className="btn-secondary !pl-2 !pr-2.5"
+                  onClick={() => setEstadoMenuOpen((v) => !v)}
+                  aria-haspopup="menu"
+                  aria-expanded={estadoMenuOpen}
+                  title="Cambiar estado"
+                >
+                  <EstadoBadge estado={orden.estado} solido />
+                  <ChevronDown size={14} className="text-gray-400" />
+                </button>
+                {estadoMenuOpen && (
+                  <div role="menu" className="absolute left-0 sm:left-auto sm:right-0 z-30 mt-1 w-56 card p-1 shadow-lg">
+                    <p className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Cambiar a</p>
+                    {ESTADOS.filter((e) => e !== orden.estado).map((e) => (
+                      <button
+                        key={e}
+                        role="menuitem"
+                        type="button"
+                        onClick={() => {
+                          setEstadoMenuOpen(false);
+                          setConfirmEstado(e);
+                        }}
+                        className="w-full text-left px-2.5 py-2 rounded-md text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                      >
+                        → {e}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {pdfFoto ? (
                 <a href={pdfFoto.url} target="_blank" rel="noopener noreferrer" className="btn-secondary">
                   <FileText size={15} /> Ver PDF
                 </a>
-              )}
-              <button onClick={() => setConfirmReenviar(true)} className="btn-secondary">
-                <Send size={15} /> Reenviar
-              </button>
-              <button onClick={entrarEdicion} className="btn-primary">
-                <Pencil size={15} /> Editar orden
-              </button>
-              {puedeEliminar && (
-                <button onClick={() => setConfirmEliminar(true)} className="btn-secondary text-red-600" title="Eliminar orden">
-                  <Trash2 size={15} /> Eliminar
+              ) : (
+                <button type="button" className="btn-secondary" disabled title="Todavía no se generó el PDF de esta orden">
+                  <FileText size={15} /> Ver PDF
                 </button>
               )}
+
+              <button type="button" className="btn-primary" onClick={handleRegenerarPdf} disabled={regenerandoPdf}>
+                <RefreshCw size={15} className={regenerandoPdf ? 'animate-spin' : ''} />
+                {regenerandoPdf ? 'Regenerando...' : 'Regenerar PDF'}
+              </button>
+
+              {/* Más acciones: reenviar (PDF + notificaciones) y eliminar (solo admin) */}
+              <div className="relative" ref={masMenuRef}>
+                <button
+                  type="button"
+                  className="btn-secondary !px-2.5"
+                  onClick={() => setMasMenuOpen((v) => !v)}
+                  aria-haspopup="menu"
+                  aria-expanded={masMenuOpen}
+                  aria-label="Más acciones"
+                  title="Más acciones"
+                >
+                  <MoreHorizontal size={16} />
+                </button>
+                {masMenuOpen && (
+                  <div role="menu" className="absolute right-0 z-30 mt-1 w-64 card p-1 shadow-lg">
+                    <button
+                      role="menuitem"
+                      type="button"
+                      onClick={() => {
+                        setMasMenuOpen(false);
+                        setConfirmReenviar(true);
+                      }}
+                      className="w-full flex items-center gap-2 text-left px-2.5 py-2 rounded-md text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                    >
+                      <Send size={14} className="text-gray-400" /> Reenviar PDF y notificaciones
+                    </button>
+                    {puedeEliminar && (
+                      <button
+                        role="menuitem"
+                        type="button"
+                        onClick={() => {
+                          setMasMenuOpen(false);
+                          setConfirmEliminar(true);
+                        }}
+                        className="w-full flex items-center gap-2 text-left px-2.5 py-2 rounded-md text-sm text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 size={14} /> Eliminar orden
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             </>
           )}
         </div>
       </div>
 
-      {/* Timeline de estados — no aplica todavía en modo creación (la orden no existe) */}
-      {!esNuevaOrden && (
-        <div className="card p-4 sm:p-5">
-          <div className="flex items-center overflow-x-auto">
-            {timeline.map((step, i) => (
-              <div key={step.estado} className="flex items-center flex-1 min-w-[96px] sm:min-w-[110px] last:flex-initial">
-                <div className="flex flex-col items-center gap-1.5">
-                  <div
-                    className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                      step.hecho ? 'bg-condor-900 text-white' : 'bg-gray-100 text-gray-400'
-                    }`}
-                  >
-                    {step.hecho ? <Check size={14} /> : i + 1}
-                  </div>
-                  <span className={`text-[11px] text-center leading-tight ${step.hecho ? 'text-gray-800 font-medium' : 'text-gray-400'}`}>
-                    {step.estado}
+      {/* ---- Cliente ---- */}
+      <Section title="Cliente" icon={User} action={accionSeccion('cliente')}>
+        {!editando('cliente') ? (
+          <>
+            <div className="mb-4">
+              {orden.cliente_id ? (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/clientes/${orden.cliente_id}`)}
+                  className="inline-flex items-center gap-1.5 max-w-full text-xs font-medium text-condor-800 bg-condor-50 border border-condor-100 rounded-full px-2.5 py-1 hover:bg-condor-100 transition-colors"
+                  title="Abrir ficha del cliente"
+                >
+                  <Link2 size={12} className="shrink-0" />
+                  <span className="truncate">
+                    Vinculado a {clienteLinkLabel || `cliente #${orden.cliente_id}`}
+                    {orden.cliente?.rut ? ` · RUT ${formatRut(orden.cliente.rut)}` : ''}
                   </span>
-                </div>
-                {i < timeline.length - 1 && (
-                  <div className={`h-0.5 flex-1 mx-1 ${timeline[i + 1].hecho ? 'bg-condor-900' : 'bg-gray-200'}`} />
-                )}
+                </button>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-full px-2.5 py-1">
+                  <Unlink size={12} /> Sin cliente vinculado
+                </span>
+              )}
+            </div>
+            <FieldGrid>
+              <Field label="Cliente / Empresa" value={orden.cliente_empresa} />
+              <Field label="Supervisor / Encargado" value={orden.supervisor} />
+              <Field label="RUT" value={orden.cliente?.rut ? formatRut(orden.cliente.rut) : null} mono />
+              <Field label="Email" value={orden.cliente_email} />
+              <Field label="Teléfono" value={orden.cliente_telefono} />
+              <Field label="Dirección" value={[orden.direccion, orden.comuna].filter(Boolean).join(', ')} />
+            </FieldGrid>
+          </>
+        ) : (
+          <div className="space-y-4">
+            {/* Vincular / cambiar / desenlazar cliente del catálogo */}
+            {buscandoCliente ? (
+              <div className="max-w-lg">
+                <ClienteSearchAdmin onSelect={seleccionarCliente} />
+                <button
+                  type="button"
+                  onClick={() => setBuscandoCliente(false)}
+                  className="mt-2 text-xs font-semibold text-gray-500 hover:text-gray-700"
+                >
+                  Cancelar búsqueda
+                </button>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Columna principal */}
-        <div className="lg:col-span-2 space-y-5">
-          {/* Trabajo */}
-          <div className="card p-4 sm:p-5">
-            <h2 className="font-heading font-semibold text-gray-900 mb-4">Trabajo realizado</h2>
-
-            {editMode ? (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="label-field">Fecha de la orden</label>
-                    <input
-                      type="date"
-                      value={form.fecha || ''}
-                      onChange={(e) => setCampo('fecha', e.target.value)}
-                      className="input-field"
-                    />
-                  </div>
-                  <div>
-                    <label className="label-field">Hora inicio</label>
-                    <input
-                      type="datetime-local"
-                      value={form.horaInicio}
-                      onChange={(e) => setCampo('horaInicio', e.target.value)}
-                      className="input-field"
-                    />
-                  </div>
-                  <div>
-                    <label className="label-field">Hora término</label>
-                    <input
-                      type="datetime-local"
-                      value={form.horaTermino}
-                      onChange={(e) => setCampo('horaTermino', e.target.value)}
-                      className="input-field"
-                    />
-                  </div>
-                  <div>
-                    <label className="label-field">Patente vehículo</label>
-                    <input
-                      value={form.patenteVehiculo}
-                      onChange={(e) => setCampo('patenteVehiculo', e.target.value)}
-                      className="input-field font-mono"
-                      placeholder="AB-CD-12"
-                    />
+            ) : form.clienteId ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 bg-condor-50 border border-condor-100 rounded-lg px-3 py-2.5 max-w-lg">
+                <div className="min-w-0 flex items-center gap-2">
+                  <Link2 size={14} className="text-condor-700 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-condor-900 truncate">{form.clienteLabel}</p>
+                    {form.clienteRut && <p className="text-xs text-condor-700 font-mono">{formatRut(form.clienteRut)}</p>}
                   </div>
                 </div>
-
-                <div>
-                  <label className="label-field">Trabajos realizados</label>
-                  <div className="space-y-2">
-                    {form.trabajos.map((t) => (
-                      <div key={t.key} className="flex flex-wrap items-center gap-2">
-                        <select
-                          value={t.servicioId ? String(t.servicioId) : ''}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (!val) {
-                              actualizarTrabajo(t.key, { servicioId: null, trabajo: '' });
-                            } else {
-                              const servicio = servicios.find((s) => String(s.id) === val);
-                              actualizarTrabajo(t.key, { servicioId: Number(val), trabajo: servicio?.nombre || '' });
-                            }
-                          }}
-                          className="input-field flex-1 min-w-[140px]"
-                        >
-                          <option value="">Personalizado...</option>
-                          {servicios.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.nombre}
-                            </option>
-                          ))}
-                        </select>
-                        {!t.servicioId && (
-                          <input
-                            value={t.trabajo}
-                            onChange={(e) => actualizarTrabajo(t.key, { trabajo: e.target.value })}
-                            placeholder="Nombre del trabajo"
-                            className="input-field order-last sm:order-none w-full sm:w-auto sm:flex-1 sm:min-w-[160px]"
-                          />
-                        )}
-                        <input
-                          type="number"
-                          min="1"
-                          value={t.cantidad}
-                          onChange={(e) => actualizarTrabajo(t.key, { cantidad: e.target.value })}
-                          className="input-field w-16 sm:w-20 shrink-0"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => quitarTrabajo(t.key)}
-                          className="shrink-0 h-10 w-10 inline-flex items-center justify-center text-gray-400 hover:text-red-600 transition-colors"
-                          title="Quitar trabajo"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+                <div className="flex items-center gap-1 shrink-0">
                   <button
                     type="button"
-                    onClick={agregarTrabajo}
-                    className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-condor-700 hover:text-condor-900"
+                    onClick={() => setBuscandoCliente(true)}
+                    className="text-xs font-semibold text-condor-700 hover:text-condor-900 px-2 py-1"
                   >
-                    <Plus size={14} /> Agregar trabajo
+                    Cambiar
                   </button>
-                </div>
-
-                <div>
-                  <label className="label-field">Descripción del trabajo</label>
-                  <textarea
-                    value={form.descripcionTrabajo}
-                    onChange={(e) => setCampo('descripcionTrabajo', e.target.value)}
-                    rows={3}
-                    className="input-field"
-                  />
-                </div>
-                <div>
-                  <label className="label-field">Observaciones</label>
-                  <textarea
-                    value={form.observaciones}
-                    onChange={(e) => setCampo('observaciones', e.target.value)}
-                    rows={2}
-                    className="input-field"
-                  />
+                  <button
+                    type="button"
+                    onClick={desenlazarCliente}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-800 px-2 py-1"
+                  >
+                    <Unlink size={12} /> Desvincular
+                  </button>
                 </div>
               </div>
             ) : (
-              <>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4 text-sm">
-                  <div>
-                    <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">Inicio</p>
-                    <p className="font-medium text-gray-800">{formatHora(orden.hora_inicio)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">Término</p>
-                    <p className="font-medium text-gray-800">{formatHora(orden.hora_termino)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">Duración</p>
-                    <p className="font-medium text-gray-800">{formatDuracion(orden.hora_inicio, orden.hora_termino)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">Patente</p>
-                    <p className="font-medium text-gray-800 font-mono">{orden.patente_vehiculo || '—'}</p>
-                  </div>
-                </div>
-                {trabajos.length > 0 && (
-                  <div className="space-y-1.5 mb-4">
-                    {trabajos.map((t) => (
-                      <div key={t.id} className="flex items-center justify-between text-sm bg-gray-50 rounded-lg px-3 py-2">
-                        <span className="text-gray-700">{t.servicio_nombre || t.nombre_personalizado}</span>
-                        <span className="text-xs font-semibold text-gray-500">x{t.cantidad}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <p className="text-sm text-gray-600 leading-relaxed">{orden.descripcion_trabajo || 'Sin descripción.'}</p>
-                {orden.observaciones && (
-                  <div className="mt-3 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-                    <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-0.5">Observaciones</p>
-                    <p className="text-sm text-amber-800">{orden.observaciones}</p>
-                  </div>
-                )}
-              </>
+              <div className="flex flex-wrap items-center justify-between gap-2 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2.5 max-w-lg">
+                <p className="text-sm text-gray-500 inline-flex items-center gap-1.5">
+                  <Unlink size={13} /> Sin cliente vinculado
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setBuscandoCliente(true)}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-condor-700 hover:text-condor-900"
+                >
+                  <Search size={12} /> Buscar cliente
+                </button>
+              </div>
             )}
+
+            <FieldGrid className="gap-y-3">
+              <div>
+                <label className="label-field">Cliente / Empresa</label>
+                <input value={form.clienteEmpresa} onChange={(e) => setCampo('clienteEmpresa', e.target.value)} className="input-field" />
+              </div>
+              <div>
+                <label className="label-field">Supervisor / Encargado</label>
+                <input value={form.supervisor} onChange={(e) => setCampo('supervisor', e.target.value)} className="input-field" />
+              </div>
+              <div>
+                <label className="label-field">Email</label>
+                <input type="email" value={form.clienteEmail} onChange={(e) => setCampo('clienteEmail', e.target.value)} className="input-field" />
+              </div>
+              <div>
+                <label className="label-field">Teléfono</label>
+                <input value={form.clienteTelefono} onChange={(e) => setCampo('clienteTelefono', e.target.value)} className="input-field" />
+              </div>
+              <div>
+                <label className="label-field">Dirección</label>
+                <input value={form.direccion} onChange={(e) => setCampo('direccion', e.target.value)} className="input-field" />
+              </div>
+              <div>
+                <label className="label-field">Comuna</label>
+                <input value={form.comuna} onChange={(e) => setCampo('comuna', e.target.value)} className="input-field" />
+              </div>
+            </FieldGrid>
+            {pieSeccion('cliente')}
           </div>
+        )}
+      </Section>
 
-          {/* Fotos / Notificaciones / Historial — no aplican en modo creación: la orden
-              todavía no existe, no puede tener fotos, notificaciones ni cambios auditados. */}
-          {!esNuevaOrden && (
-          <>
-          <div className="card p-4 sm:p-5">
-            <h2 className="font-heading font-semibold text-gray-900 mb-4">Evidencia fotográfica</h2>
+      {/* ---- Trabajo ---- */}
+      <Section title="Trabajo" icon={Wrench} action={accionSeccion('trabajo')}>
+        {!editando('trabajo') ? (
+          <FieldGrid>
+            <Field label="Fecha de la orden" value={formatFecha(orden.fecha)} />
+            <Field label="Hora inicio" value={formatFechaHora(orden.hora_inicio)} />
+            <Field label="Hora término" value={formatFechaHora(orden.hora_termino)} />
+            <Field label="Duración" value={formatDuracion(orden.hora_inicio, orden.hora_termino)} />
+            <Field label="Patente vehículo" value={orden.patente_vehiculo} mono />
+            <Field label="Garantía" value={orden.garantia} />
+            <Field label={`Trabajos realizados (${trabajos.length})`} span>
+              {trabajos.length === 0 ? (
+                <p className="text-sm text-gray-400">—</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {trabajos.map((t) => (
+                    <span
+                      key={t.id}
+                      className="inline-flex items-center gap-1.5 text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1"
+                    >
+                      {t.servicio_nombre || t.nombre_personalizado}
+                      <span className="text-xs font-semibold text-gray-500">x{t.cantidad}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </Field>
+            <Field label="Descripción del trabajo" span>
+              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{orden.descripcion_trabajo || <span className="text-gray-400">Sin descripción.</span>}</p>
+            </Field>
+            {orden.observaciones && (
+              <Field label="Observaciones" span>
+                <div className="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                  <p className="text-sm text-amber-800 whitespace-pre-wrap">{orden.observaciones}</p>
+                </div>
+              </Field>
+            )}
+          </FieldGrid>
+        ) : (
+          <div className="space-y-4">
+            <FieldGrid className="gap-y-3">
+              <div>
+                <label className="label-field">Fecha de la orden</label>
+                <input type="date" value={form.fecha || ''} onChange={(e) => setCampo('fecha', e.target.value)} className="input-field" />
+              </div>
+              <div>
+                <label className="label-field">Hora inicio</label>
+                <input type="datetime-local" value={form.horaInicio} onChange={(e) => setCampo('horaInicio', e.target.value)} className="input-field" />
+              </div>
+              <div>
+                <label className="label-field">Hora término</label>
+                <input type="datetime-local" value={form.horaTermino} onChange={(e) => setCampo('horaTermino', e.target.value)} className="input-field" />
+              </div>
+              <div>
+                <label className="label-field">Patente vehículo</label>
+                <input
+                  value={form.patenteVehiculo}
+                  onChange={(e) => setCampo('patenteVehiculo', e.target.value)}
+                  className="input-field font-mono"
+                  placeholder="AB-CD-12"
+                />
+              </div>
+              <div>
+                <label className="label-field">Garantía</label>
+                <select value={form.garantia} onChange={(e) => setCampo('garantia', e.target.value)} className="input-field">
+                  {GARANTIAS.map((g) => (
+                    <option key={g} value={g}>
+                      {g}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </FieldGrid>
 
-            {editMode ? (
+            <div>
+              <label className="label-field">Trabajos realizados</label>
+              <div className="space-y-2">
+                {form.trabajos.length === 0 && (
+                  <p className="text-sm text-gray-400">Sin trabajos — agrega al menos uno.</p>
+                )}
+                {form.trabajos.map((t) => (
+                  <div key={t.key} className="flex flex-wrap items-center gap-2">
+                    <select
+                      value={t.servicioId ? String(t.servicioId) : ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (!val) {
+                          actualizarTrabajo(t.key, { servicioId: null, trabajo: '' });
+                        } else {
+                          const servicio = servicios.find((s) => String(s.id) === val);
+                          actualizarTrabajo(t.key, { servicioId: Number(val), trabajo: servicio?.nombre || '' });
+                        }
+                      }}
+                      className="input-field flex-1 min-w-[140px]"
+                    >
+                      <option value="">Personalizado...</option>
+                      {servicios.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.nombre}
+                        </option>
+                      ))}
+                    </select>
+                    {!t.servicioId && (
+                      <input
+                        value={t.trabajo}
+                        onChange={(e) => actualizarTrabajo(t.key, { trabajo: e.target.value })}
+                        placeholder="Nombre del trabajo"
+                        className="input-field order-last sm:order-none w-full sm:w-auto sm:flex-1 sm:min-w-[160px]"
+                      />
+                    )}
+                    <input
+                      type="number"
+                      min="1"
+                      value={t.cantidad}
+                      onChange={(e) => actualizarTrabajo(t.key, { cantidad: e.target.value })}
+                      className="input-field w-16 sm:w-20 shrink-0"
+                      aria-label="Cantidad"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => quitarTrabajo(t.key)}
+                      className="shrink-0 h-10 w-10 inline-flex items-center justify-center text-gray-400 hover:text-red-600 transition-colors"
+                      title="Quitar trabajo"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={agregarTrabajo}
+                className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-condor-700 hover:text-condor-900"
+              >
+                <Plus size={14} /> Agregar trabajo
+              </button>
+            </div>
+
+            <div>
+              <label className="label-field">Descripción del trabajo</label>
+              <textarea
+                value={form.descripcionTrabajo}
+                onChange={(e) => setCampo('descripcionTrabajo', e.target.value)}
+                rows={3}
+                className="input-field"
+              />
+            </div>
+            <div>
+              <label className="label-field">Observaciones</label>
+              <textarea
+                value={form.observaciones}
+                onChange={(e) => setCampo('observaciones', e.target.value)}
+                rows={2}
+                className="input-field"
+              />
+            </div>
+            {pieSeccion('trabajo')}
+          </div>
+        )}
+      </Section>
+
+      {/* ---- Pago ---- */}
+      <Section title="Pago" icon={Wallet} action={accionSeccion('pago')}>
+        {!editando('pago') ? (
+          <FieldGrid>
+            <Field label="Total" value={formatCLP(orden.total)} />
+            <Field label="Método de pago" value={orden.metodo_pago} />
+            <Field label="Requiere factura" value={orden.requiere_factura ? 'Sí' : 'No'} />
+            <Field label="Orden de compra" value={orden.orden_compra} />
+          </FieldGrid>
+        ) : (
+          <div className="space-y-4">
+            <FieldGrid className="gap-y-3">
+              <div>
+                <label className="label-field">Total (CLP)</label>
+                <input type="number" min="0" value={form.total} onChange={(e) => setCampo('total', e.target.value)} className="input-field" />
+              </div>
+              <div>
+                <label className="label-field">Método de pago</label>
+                <select value={form.metodoPago} onChange={(e) => setCampo('metodoPago', e.target.value)} className="input-field">
+                  <option value="">Sin especificar</option>
+                  {METODOS_PAGO.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label-field">Requiere factura</label>
+                <select
+                  value={form.requiereFactura ? 'si' : 'no'}
+                  onChange={(e) => setCampo('requiereFactura', e.target.value === 'si')}
+                  className="input-field"
+                >
+                  <option value="no">No</option>
+                  <option value="si">Sí</option>
+                </select>
+              </div>
+              <div>
+                <label className="label-field">Orden de compra</label>
+                <input value={form.ordenCompra} onChange={(e) => setCampo('ordenCompra', e.target.value)} className="input-field" />
+              </div>
+            </FieldGrid>
+            {pieSeccion('pago')}
+          </div>
+        )}
+      </Section>
+
+      {/* ---- Equipo ---- */}
+      <Section title="Equipo" icon={Truck} action={accionSeccion('equipo')}>
+        {!editando('equipo') ? (
+          <FieldGrid>
+            <Field label={empleados.length === 1 ? 'Técnico' : 'Técnicos'} span>
+              {empleados.length === 0 ? (
+                <p className="text-sm text-gray-400">Sin personal asignado.</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {empleados.map((t) => (
+                    <span key={t.id} className="text-xs font-medium bg-condor-50 text-condor-800 rounded-full px-2.5 py-1">
+                      {t.nombre}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </Field>
+          </FieldGrid>
+        ) : (
+          <div className="space-y-4">
+            {tecnicos.length === 0 ? (
+              <p className="text-sm text-gray-400">Cargando técnicos...</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5 max-w-3xl">
+                {tecnicos.map((t) => (
+                  <label key={t.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.empleadoIds.includes(t.id)}
+                      onChange={() => toggleTecnico(t.id)}
+                      className="rounded border-gray-300 text-condor-600 focus:ring-condor-400"
+                    />
+                    <span className="text-sm text-gray-700 truncate">{t.nombre}</span>
+                    {t.codigo && <span className="text-xs text-gray-400 font-mono ml-auto">{t.codigo}</span>}
+                  </label>
+                ))}
+              </div>
+            )}
+            {pieSeccion('equipo')}
+          </div>
+        )}
+      </Section>
+
+      {/* Fotos / Notificaciones / Historial — no aplican en modo creación: la orden
+          todavía no existe, no puede tener fotos, notificaciones ni cambios auditados. */}
+      {!esNuevaOrden && (
+        <>
+          {/* ---- Fotos ---- */}
+          <Section
+            title={`Evidencia fotográfica (${fotos.length})`}
+            icon={Camera}
+            action={
+              fotosEditando
+                ? <CancelarBtn onClick={cancelarFotos} disabled={guardandoFotos} />
+                : <EditarBtn onClick={abrirFotos} />
+            }
+          >
+            {fotosEditando ? (
               <div className="space-y-5">
                 {['antes', 'despues'].map((tipo) => {
                   const existentes = (orden.fotos || []).filter((f) => f.tipo === tipo);
                   return (
                     <div key={tipo}>
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                        {tipo === 'antes' ? 'Antes' : 'Después'}
-                      </p>
+                      <p className="text-xs text-gray-400 uppercase tracking-wide mb-2">{tipo === 'antes' ? 'Antes' : 'Después'}</p>
                       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                         {existentes.map((f) => {
                           const marcada = fotosParaEliminar.includes(f.id);
                           return (
                             <div key={f.id} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100">
                               {f.url ? (
-                                <img
-                                  src={f.url}
-                                  alt=""
-                                  className={`w-full h-full object-cover transition-opacity ${marcada ? 'opacity-30' : ''}`}
-                                />
+                                <img src={f.url} alt="" className={`w-full h-full object-cover transition-opacity ${marcada ? 'opacity-30' : ''}`} />
                               ) : (
                                 <div className="absolute inset-0 flex items-center justify-center text-gray-400">
                                   <ImageOff size={18} />
@@ -931,46 +1312,60 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
                     </div>
                   );
                 })}
+                <SeccionAcciones onGuardar={guardarFotos} onCancelar={cancelarFotos} guardando={guardandoFotos} guardarLabel="Guardar fotos" />
               </div>
-            ) : fotos.length === 0 && !firma ? (
-              <p className="text-sm text-gray-400">Esta orden no tiene fotos registradas.</p>
             ) : (
               <>
-              {firma && (
-                <div className="mb-4">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Firma del supervisor</p>
-                  <div className="inline-block rounded-lg border border-gray-200 bg-white p-2">
-                    <img src={firma.url} alt="Firma" className="h-24 object-contain" />
+                {fotos.length === 0 ? (
+                  <p className="text-sm text-gray-400">Esta orden no tiene fotos registradas.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {['antes', 'despues'].map((tipo) => {
+                      const lista = fotos.filter((f) => f.tipo === tipo);
+                      if (lista.length === 0) return null;
+                      return (
+                        <div key={tipo}>
+                          <p className="text-xs text-gray-400 uppercase tracking-wide mb-2">
+                            {tipo === 'antes' ? 'Antes' : 'Después'} ({lista.length})
+                          </p>
+                          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                            {lista.map((f) => (
+                              <button
+                                key={f.id}
+                                onClick={() => openViewer(fotos.indexOf(f))}
+                                className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 hover:ring-2 hover:ring-condor-400 transition-all group"
+                              >
+                                {f.url ? (
+                                  <img src={f.url} alt={f.label} className="w-full h-full object-cover" loading="lazy" />
+                                ) : (
+                                  <div className="absolute inset-0 flex items-center justify-center text-gray-400">
+                                    <ImageOff size={20} />
+                                  </div>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
+                )}
+                <div className={`${fotos.length > 0 ? 'mt-5 pt-5 border-t border-gray-100' : 'mt-4'}`}>
+                  <p className="text-xs text-gray-400 uppercase tracking-wide mb-1.5">Firma del supervisor</p>
+                  {firma ? (
+                    <div className="inline-block rounded-lg border border-gray-200 bg-white p-2">
+                      <img src={firma.url} alt="Firma del supervisor" className="h-20 object-contain" />
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400">No registrada.</p>
+                  )}
                 </div>
-              )}
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-                {fotos.map((f, i) => (
-                  <button
-                    key={f.id}
-                    onClick={() => openViewer(i)}
-                    className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 hover:ring-2 hover:ring-condor-400 transition-all group"
-                  >
-                    {f.url ? (
-                      <img src={f.url} alt={f.label} className="w-full h-full object-cover" loading="lazy" />
-                    ) : (
-                      <div className="absolute inset-0 flex items-center justify-center text-gray-400">
-                        <ImageOff size={20} />
-                      </div>
-                    )}
-                    <span className="absolute bottom-1 left-1 text-[10px] font-semibold bg-black/40 text-white rounded px-1.5 py-0.5">
-                      {f.label}
-                    </span>
-                  </button>
-                ))}
-              </div>
               </>
             )}
-          </div>
+          </Section>
 
-          {/* Notificaciones */}
-          <div className="card p-4 sm:p-5">
-            <h2 className="font-heading font-semibold text-gray-900 mb-4">Notificaciones de esta orden</h2>
+          {/* ---- Notificaciones ---- */}
+          <Section title="Notificaciones" icon={Bell}>
             {notificaciones.length === 0 ? (
               <p className="text-sm text-gray-400">Todavía no se ha enviado ninguna notificación para esta orden.</p>
             ) : (
@@ -985,15 +1380,16 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
                         {n.canal === 'resend' ? 'Email' : 'Telegram'} · {n.destinatario || '—'}
                       </p>
                       <p className="text-xs text-gray-400">
-                        Plantilla: {n.plantilla || '—'} · {formatFecha(n.sent_at)}
+                        Plantilla: {n.plantilla || '—'} · {formatFechaHora(n.sent_at)}
                       </p>
+                      {!n.ok && n.error && <p className="text-xs text-red-500 mt-0.5 break-words">{n.error}</p>}
                     </div>
                     {n.ok ? (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 shrink-0">
                         <CheckCircle2 size={14} /> Entregado
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-red-500" title={n.error}>
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-red-500 shrink-0" title={n.error}>
                         <XCircle size={14} /> Falló
                       </span>
                     )}
@@ -1001,23 +1397,24 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
                 ))}
               </div>
             )}
-          </div>
+          </Section>
 
-          {/* Historial de cambios (auditoría) */}
-          <div className="card p-4 sm:p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-heading font-semibold text-gray-900 flex items-center gap-2">
-                <History size={16} className="text-gray-400" /> Historial de cambios
-              </h2>
-              {auditoria.length > 5 && (
+          {/* ---- Historial de cambios (auditoría) ---- */}
+          <Section
+            title="Historial de cambios"
+            icon={History}
+            action={
+              auditoria.length > 5 && (
                 <button
+                  type="button"
                   onClick={() => setAuditoriaExpandida((v) => !v)}
                   className="text-xs font-semibold text-condor-700 hover:text-condor-900"
                 >
                   {auditoriaExpandida ? 'Ver menos' : `Ver todo (${auditoria.length})`}
                 </button>
-              )}
-            </div>
+              )
+            }
+          >
             {auditoria.length === 0 ? (
               <p className="text-sm text-gray-400">Sin cambios registrados todavía.</p>
             ) : (
@@ -1037,230 +1434,9 @@ export default function OrdenDetallePage({ esNuevaOrden = false }) {
                 ))}
               </div>
             )}
-          </div>
-          </>
-          )}
-        </div>
-
-        {/* Lateral */}
-        <div className="space-y-5">
-          <div className="card p-4 sm:p-5">
-            <h2 className="font-heading font-semibold text-gray-900 mb-3">Cliente</h2>
-
-            {editMode ? (
-              <div className="space-y-3">
-                {buscandoCliente ? (
-                  <div>
-                    <ClienteSearchAdmin onSelect={seleccionarCliente} />
-                    <button
-                      type="button"
-                      onClick={() => setBuscandoCliente(false)}
-                      className="mt-2 text-xs font-semibold text-gray-500 hover:text-gray-700"
-                    >
-                      Cancelar búsqueda
-                    </button>
-                  </div>
-                ) : form.clienteId ? (
-                  <div className="flex items-center justify-between gap-2 bg-condor-50 border border-condor-100 rounded-lg px-3 py-2.5">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-condor-900 truncate">{form.clienteLabel}</p>
-                      {form.clienteRut && <p className="text-xs text-condor-700 font-mono">{formatRut(form.clienteRut)}</p>}
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => setBuscandoCliente(true)}
-                        className="text-xs font-semibold text-condor-700 hover:text-condor-900 px-2 py-1"
-                      >
-                        Cambiar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={desenlazarCliente}
-                        className="text-xs font-semibold text-red-600 hover:text-red-800 px-2 py-1"
-                      >
-                        Desenlazar
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between gap-2 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2.5">
-                    <p className="text-sm text-gray-500">Sin cliente vinculado</p>
-                    <button
-                      type="button"
-                      onClick={() => setBuscandoCliente(true)}
-                      className="inline-flex items-center gap-1 text-xs font-semibold text-condor-700 hover:text-condor-900"
-                    >
-                      <Search size={12} /> Buscar cliente
-                    </button>
-                  </div>
-                )}
-
-                <div>
-                  <label className="label-field">Cliente / Empresa</label>
-                  <input value={form.clienteEmpresa} onChange={(e) => setCampo('clienteEmpresa', e.target.value)} className="input-field" />
-                </div>
-                <div>
-                  <label className="label-field">Supervisor / Encargado</label>
-                  <input value={form.supervisor} onChange={(e) => setCampo('supervisor', e.target.value)} className="input-field" />
-                </div>
-                <div>
-                  <label className="label-field">Email</label>
-                  <input value={form.clienteEmail} onChange={(e) => setCampo('clienteEmail', e.target.value)} className="input-field" />
-                </div>
-                <div>
-                  <label className="label-field">Teléfono</label>
-                  <input value={form.clienteTelefono} onChange={(e) => setCampo('clienteTelefono', e.target.value)} className="input-field" />
-                </div>
-                <div>
-                  <label className="label-field">Dirección</label>
-                  <input value={form.direccion} onChange={(e) => setCampo('direccion', e.target.value)} className="input-field" />
-                </div>
-                <div>
-                  <label className="label-field">Comuna</label>
-                  <input value={form.comuna} onChange={(e) => setCampo('comuna', e.target.value)} className="input-field" />
-                </div>
-                <div>
-                  <label className="label-field">Orden de compra</label>
-                  <input value={form.ordenCompra} onChange={(e) => setCampo('ordenCompra', e.target.value)} className="input-field" />
-                </div>
-              </div>
-            ) : (
-              <>
-                <p className="text-sm font-medium text-gray-800">{orden.cliente_empresa || orden.supervisor || 'Sin cliente'}</p>
-                <p className="text-sm text-gray-500">{orden.supervisor}</p>
-                <div className="mt-3 space-y-1.5 text-sm text-gray-500">
-                  <p className="font-mono">{formatRut(orden.cliente?.rut)}</p>
-                  <p>{orden.cliente_email || 'Sin email'}</p>
-                  <p>{orden.cliente_telefono || 'Sin teléfono'}</p>
-                  <p>{orden.direccion}, {orden.comuna}</p>
-                  {orden.orden_compra && <p>OC: {orden.orden_compra}</p>}
-                  {orden.cliente_id && (
-                    <button
-                      onClick={() => navigate(`/clientes/${orden.cliente_id}`)}
-                      className="text-xs font-semibold text-condor-700 hover:text-condor-900"
-                    >
-                      Ver ficha del cliente →
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-
-          <div className="card p-4 sm:p-5">
-            <h2 className="font-heading font-semibold text-gray-900 mb-3 flex items-center gap-2">
-              <Wallet size={16} className="text-gray-400" /> Pago
-            </h2>
-
-            {editMode ? (
-              <div className="space-y-3">
-                <div>
-                  <label className="label-field">Total (CLP)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={form.total}
-                    onChange={(e) => setCampo('total', e.target.value)}
-                    className="input-field"
-                  />
-                </div>
-                <div>
-                  <label className="label-field">Método de pago</label>
-                  <select value={form.metodoPago} onChange={(e) => setCampo('metodoPago', e.target.value)} className="input-field">
-                    <option value="">Sin especificar</option>
-                    {METODOS_PAGO.map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="label-field">Garantía</label>
-                  <select value={form.garantia} onChange={(e) => setCampo('garantia', e.target.value)} className="input-field">
-                    {GARANTIAS.map((g) => (
-                      <option key={g} value={g}>
-                        {g}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="label-field">Requiere factura</label>
-                  <select
-                    value={form.requiereFactura ? 'si' : 'no'}
-                    onChange={(e) => setCampo('requiereFactura', e.target.value === 'si')}
-                    className="input-field"
-                  >
-                    <option value="no">No</option>
-                    <option value="si">Sí</option>
-                  </select>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Total</span>
-                  <span className="font-semibold text-gray-900">{formatCLP(orden.total)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Método</span>
-                  <span className="text-gray-800">{orden.metodo_pago || '—'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Garantía</span>
-                  <span className="text-gray-800">{orden.garantia || '—'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Factura</span>
-                  <span className="text-gray-800">{orden.requiere_factura ? 'Sí' : 'No'}</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="card p-4 sm:p-5">
-            <h2 className="font-heading font-semibold text-gray-900 mb-3 flex items-center gap-2">
-              <Truck size={16} className="text-gray-400" /> Equipo
-            </h2>
-
-            {editMode ? (
-              tecnicos.length === 0 ? (
-                <p className="text-sm text-gray-400">Cargando técnicos...</p>
-              ) : (
-                <div className="space-y-1.5 max-h-56 overflow-y-auto">
-                  {tecnicos.map((t) => (
-                    <label
-                      key={t.id}
-                      className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={form.empleadoIds.includes(t.id)}
-                        onChange={() => toggleTecnico(t.id)}
-                        className="rounded border-gray-300 text-condor-600 focus:ring-condor-400"
-                      />
-                      <span className="text-sm text-gray-700">{t.nombre}</span>
-                      {t.codigo && <span className="text-xs text-gray-400 font-mono ml-auto">{t.codigo}</span>}
-                    </label>
-                  ))}
-                </div>
-              )
-            ) : empleados.length === 0 ? (
-              <p className="text-sm text-gray-400">Sin personal asignado.</p>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {empleados.map((t) => (
-                  <span key={t.id} className="text-xs font-medium bg-condor-50 text-condor-800 rounded-full px-2.5 py-1">
-                    {t.nombre}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+          </Section>
+        </>
+      )}
 
       <PhotoViewer open={viewerOpen} onClose={() => setViewerOpen(false)} fotos={fotos} index={viewerIndex} setIndex={setViewerIndex} />
 
