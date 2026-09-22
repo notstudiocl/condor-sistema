@@ -4,24 +4,18 @@ Rama `feat/postgres-migration` — versión NUEVA de Condor 360 (Postgres + R2 +
 
 ## Active
 
+- [ ] **Unificación de usuarios (igual que H&A)** - una sola tabla de personas con `rol`; accesos por contexto (PIN = terreno, correo+contraseña = panel)
+  - [x] Backend (migración 003, personasRepo, claim `aud`, bloqueo, invitaciones, redacción de secretos, notstudio 404)
+  - [x] Admin UI: pantalla Usuarios unificada (lista + ficha), invitación pública, Configuración solo notstudio
+  - [ ] Aplicar 003 en Postgres real y verificar ambos logins en vivo; `ADMIN_PANEL_URL` en condor-app
 - [ ] **🔴 INCIDENTE PRODUCCIÓN (app antigua): desde 2026-09-20 las órdenes quedan sin fotos, sin PDF y sin correo** - reportado por el cliente por audio
-  - Causa: Airtable rechaza los adjuntos ("The operation cannot be processed") — la base usa 1,66 GB de adjuntos y el límite del plan Free es 1 GB; funcionó hasta el 17/09, así que el workspace habría bajado de plan (pago fallido / suscripción vencida). El registro se crea, el update de adjuntos revienta y nunca se llama a n8n.
-  - Afectadas: OT-00652, 00653, 00654 (sin fotos: se perdieron, `/uploads` se limpia cada 30 min).
-  - Salidas: (a) reactivar el plan pago de Airtable = arreglo inmediato; (b) adelantar el corte al sistema nuevo, que no depende de Airtable.
-- [ ] **Unificación de usuarios (igual que H&A)** - una sola tabla de personas (`empleados`) con `rol`, accesos por contexto (PIN = terreno, email+password = panel)
-  - [ ] Migración `003_unify_usuarios.sql`: columnas nuevas, `admin_users` → `empleados`, re-apuntar FKs, drop de la tabla vieja
-  - [ ] Backend: claim `aud:'admin'` en el JWT del panel, estado releído de la DB en cada request, bloqueo compartido 5 fallos/15 min, invitaciones 72 h, redacción de secretos en auditoría
-  - [ ] Roles `tecnico/oficina/admin/notstudio`; `notstudio` invisible y con 404 (credenciales e integraciones solo para NotStudio)
-  - [ ] Una sola vía de escritura: `/api/admin/usuarios` (las mutaciones de `/api/admin/empleados` desaparecen)
-  - [ ] Admin UI: dar/quitar acceso al panel a un técnico existente, PIN desde el mismo perfil, pantalla de aceptar invitación
-  - [ ] Aplicar la migración en Postgres DESPUÉS de que termine la migración de datos, y probar ambos logins
-- [ ] **Migración de datos Airtable → Postgres (corrida completa con `--finalize`)** - en curso desde 2026-09-21
-  - Partió en 410 órdenes; Airtable iba en la OT-00654. Verificar al terminar: conteos, adjuntos fallidos y `ordenes_numero_seq >= MAX(numero_orden)`.
+  - Causa probable: Airtable rechaza los adjuntos (1,66 GB usados, límite Free 1 GB). Salidas: reactivar plan pago o hacer el corte al sistema nuevo. El cliente ya fue avisado de que la actualización lo resuelve.
 - [ ] **Orden de prueba end-to-end en el entorno hosteado** - crear desde terreno → Postgres → fotos R2 → PDF Gotenberg → log de notificaciones
   - Hacerla después de que termine la migración (para no chocar con la secuencia) y borrarla al final.
 
 ## Waiting On
 
+- [ ] **Desactivar el técnico de pruebas `matias` (NotStudio Pruebas, TCN039) al hacer el corte** - aparece en "Personal asignado" de todos los técnicos mientras esté activo
 - [ ] **OK para mandar un mensaje de prueba al grupo de Telegram de Condor** - Matías, since 2026-09-21
   - Chat `-5133715111` con el bot "Hermes NotStudio"; falta confirmar que Hermes está en ese grupo.
 - [ ] **Cambiar la contraseña temporal de `admin@notstudio.cl`** - Matías, since 2026-09-21
@@ -35,6 +29,10 @@ Rama `feat/postgres-migration` — versión NUEVA de Condor 360 (Postgres + R2 +
 
 ## Done
 
+- [x] ~~Migración completa Airtable → Postgres con `--finalize`: 653 órdenes, 7.592 adjuntos, 0 fallos; secuencia en 654~~ (2026-09-21)
+- [x] ~~Admin: pie del sidebar ("Ir a la app de terreno" + créditos + versión) y bloque de usuario del topbar al estilo H&A~~ (2026-09-21)
+- [x] ~~Bug: el admin mostraba TODAS las fechas de órdenes un día antes (fecha pura parseada como UTC)~~ (2026-09-21)
+- [x] ~~Switch Terreno | Oficina en el login de ambas apps (`components/AppSwitch.jsx`, copia gemela en cada app)~~ (2026-09-21)
 - [x] ~~Dominio `condor.notstudio.cl` operativo: DNS, certificado Let's Encrypt, rutas `/`, `/admin`, `/api` verificadas; frontends apuntando a `https://condor.notstudio.cl/api`~~ (2026-09-21)
 - [x] ~~Admin: botón "Eliminar orden" (solo rol admin, con confirmación)~~ (2026-09-21)
 - [x] ~~Admin: "Enviar prueba" de plantillas oculto para rol oficina~~ (2026-09-21)

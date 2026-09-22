@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { login } from '../utils/api';
 import { APP_VERSION } from '../version';
+import AppSwitch from '../components/AppSwitch';
 
 const logoUrl = import.meta.env.BASE_URL + 'condor-logo.png';
 
@@ -47,6 +48,8 @@ export default function LoginPage({ onLogin, sessionExpiredMessage }) {
 
       {/* Contenido principal */}
       <div className="relative z-10 w-full max-w-sm flex flex-col items-center">
+
+        <AppSwitch />
 
         <img
           src={logoUrl}

@@ -1,19 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { Search, LogOut, ChevronDown, Menu } from 'lucide-react';
-import { iniciales } from '../utils/format';
+import { Search, LogOut, Menu, UserRound } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 
-const ROL_LABEL = { admin: 'Administrador', oficina: 'Oficina' };
+const ROL_LABEL = { admin: 'Administrador', oficina: 'Oficina', notstudio: 'NotStudio' };
 
 /**
  * Buscador global (Ctrl+K). En F2c es solo el shell de UI —
  * la búsqueda real cruzando OT/RUT/nombre/teléfono llega en F5.
  */
 export default function Topbar({ title, user, onLogout, onOpenMobileNav }) {
-  const [menuOpen, setMenuOpen] = useState(false);
   const [query, setQuery] = useState('');
   const inputRef = useRef(null);
-  const menuRef = useRef(null);
 
   useEffect(() => {
     const handleKey = (e) => {
@@ -24,14 +21,6 @@ export default function Topbar({ title, user, onLogout, onOpenMobileNav }) {
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, []);
-
-  useEffect(() => {
-    const handleClick = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
   return (
@@ -63,41 +52,28 @@ export default function Topbar({ title, user, onLogout, onOpenMobileNav }) {
         </div>
       </div>
 
-      <div className="ml-auto flex items-center gap-1.5">
+      <div className="ml-auto flex items-center gap-1">
         <NotificationBell />
-        <div className="relative" ref={menuRef}>
-          <button
-            onClick={() => setMenuOpen((o) => !o)}
-            className="flex items-center gap-2.5 pl-1.5 pr-2 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            <span className="h-8 w-8 rounded-full bg-condor-900 text-white text-xs font-bold flex items-center justify-center shrink-0">
-              {iniciales(user?.nombre || user?.email)}
+        <span className="hidden sm:block h-8 w-px bg-gray-200 mx-2" aria-hidden="true" />
+        <div className="flex items-center gap-2.5 pl-1">
+          <span className="h-9 w-9 rounded-full bg-condor-50 text-condor-700 ring-1 ring-condor-100 flex items-center justify-center shrink-0">
+            <UserRound size={17} />
+          </span>
+          <span className="hidden md:block leading-tight">
+            <span className="block text-sm font-semibold text-gray-900 truncate max-w-[160px]">
+              {user?.nombre || user?.email}
             </span>
-            <span className="hidden md:block text-left leading-tight">
-              <span className="block text-sm font-medium text-gray-800 truncate max-w-[140px]">
-                {user?.nombre || user?.email}
-              </span>
-              <span className="block text-xs text-gray-400">{ROL_LABEL[user?.rol] || user?.rol}</span>
-            </span>
-            <ChevronDown size={15} className="text-gray-400 hidden md:block" />
-          </button>
-
-          {menuOpen && (
-            <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-xl shadow-lg py-1.5 z-40">
-              <div className="px-3 py-2 border-b border-gray-100 md:hidden">
-                <p className="text-sm font-medium text-gray-800 truncate">{user?.nombre || user?.email}</p>
-                <p className="text-xs text-gray-400">{ROL_LABEL[user?.rol] || user?.rol}</p>
-              </div>
-              <button
-                onClick={onLogout}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-              >
-                <LogOut size={15} />
-                Cerrar sesión
-              </button>
-            </div>
-          )}
+            <span className="block text-xs text-gray-400">{ROL_LABEL[user?.rol] || user?.rol}</span>
+          </span>
         </div>
+        <button
+          onClick={onLogout}
+          title="Cerrar sesión"
+          aria-label="Cerrar sesión"
+          className="ml-1 p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+        >
+          <LogOut size={18} />
+        </button>
       </div>
     </header>
   );
