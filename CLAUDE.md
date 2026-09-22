@@ -114,25 +114,24 @@ Se muestra en AppFooter (Dashboard, DetalleOrden), LoginPage (footer inline, gri
 
 El **admin** tiene su propio `admin/src/version.js` con la misma versión — subirlas juntas.
 
-## Autenticación — dos sistemas separados
+## Autenticación — una tabla de personas, dos accesos
 
-Hay **dos JWT completamente independientes**, cada uno con su propio secreto/expiración/middleware. Comparten `JWT_SECRET` como env var pero son payloads y middlewares distintos.
+Tras `003_unify_usuarios.sql` (mismo diseño que `hya-sistema`), **`empleados` es la única tabla de personas**: técnicos, oficina, administradores y soporte NotStudio. `admin_users` ya no existe. Una persona = un perfil, con accesos por contexto:
 
-### JWT del técnico (`client/`, tabla `empleados`)
+- **Acceso terreno** (`client/`): tiene `pin_hash` → entra con usuario/RUT + PIN de 4 dígitos.
+- **Acceso panel** (`admin/`): `email` + `password_hash` + `rol` con panel. Condición única reutilizada en todo el backend (`personasRepo.SQL_TIENE_PANEL`): `email IS NOT NULL AND password_hash IS NOT NULL AND rol IN ('notstudio','admin','oficina')`.
+- `rol` ∈ `tecnico | oficina | admin | notstudio` es la autoridad de permisos del panel. `notstudio` = soporte de NotStudio: puede todo lo de `admin`, es **invisible** para los demás roles (no sale en listados, su ficha da 404) y las secciones exclusivas (credenciales Resend/Telegram, webhook n8n — `requireNotstudio`) responden **404, no 403**, para no revelar que existen.
+- **Dos JWT con el mismo secreto, separados por el claim `aud`**: el token del panel se firma con `aud:'admin'` (12 h); el de terreno NO lleva `aud` (30 d, compatible con tokens ya emitidos). `middleware/auth.js` rechaza `aud==='admin'`; `adminAuth.js` exige `aud==='admin'`.
+- **Ambos middlewares releen el estado desde la DB en cada request** (`personasRepo.obtenerEstadoAcceso`): activo, PIN, rol, contraseña. Desactivar, degradar o quitar un acceso corta la sesión en la siguiente request, no cuando venza el token.
+- **Bloqueo por intentos fallidos, compartido** entre ambos logins: 5 fallos seguidos → 15 min (`failed_attempts`/`locked_until`), 429. Se levanta desde la ficha ("Desbloquear ahora").
+- **Invitaciones**: `POST /api/admin/usuarios/:id/invitar` genera `invite_token` (72 h) y manda un correo (vía el mismo camino híbrido de n8n, `services/notifications/correoSistema.js`, sin `email_dev_redirect`) con el enlace `{APP_ENCRYPTION_KEY           # obligatoria — cifra/descifra credenciales Resend/Telegram (pgcrypto)
+ADMIN_PANEL_URL              # opcional, default https://condor.notstudio.cl/admin/ — base de los enlaces de invitación}#/invitacion/:token`; la página pública `InvitacionPage.jsx` valida el token y define la contraseña (`/api/admin/auth/invitacion/:token`). El enlace también se devuelve en la respuesta por si el correo falla.
+- **Auditoría con redacción de secretos** (`auditRepo.redactarSecretos`): cualquier clave tipo password/pin/token/secret/apiKey en `detalle` se guarda como `[oculto]`, recursivo.
+- **Única vía de escritura sobre personas**: `routes/admin/usuarios.js` (rol admin/notstudio). `routes/admin/empleados.js` quedó de **solo lectura** (listado/ficha/stats). Las listas del wizard (`/api/tecnicos*`) solo muestran personas activas **con PIN**.
+- `AUTH_ENFORCE` (`warn`/`enforce`) y el kill switch siguen igual.
 
-- Emitido por `POST /api/auth/login` (`server/src/routes/auth.js`), acepta **Usuario o RUT** (con o sin puntos/guión, normalizado) + PIN de 4 dígitos. Verifica `empleado.activo === true` antes de generar el token.
-- Payload: `{ id, recordId, nombre, email }` — donde `id === recordId === empleado.id` (bigint de Postgres; el nombre `recordId` se conservó por compatibilidad de nomenclatura con la era Airtable, ya no es un `rec*` string) y `email` = valor del campo `usuario`.
-- **Expira en 30 días** (`JWT_TECNICO_EXPIRES_IN`, default `'30d'`) — deliberadamente largo porque el técnico está en terreno con señal mala y no se le puede pedir re-login seguido. La revocación real es inmediata vía `empleado.activo`, releído desde Postgres en **cada** request autenticada (`authMiddleware` → `empleadosRepo.isEmpleadoActivo`), no depende de que el token expire.
-- **Ventana dual `AUTH_ENFORCE`**: en modo `warn` (default), una request sin header `Authorization` se acepta igual (solo se loguea IP/UA) — protege PWAs viejas cacheadas en celulares de técnicos durante la transición. En modo `enforce`, se rechaza con 401. Un token presente pero inválido/expirado, o de un empleado inactivo, **siempre** se rechaza (401/403) en ambos modos.
-- Se guarda en `localStorage` como `condor_token`; el usuario como `condor_user`.
-
-### JWT del admin panel (`admin/`, tabla `admin_users`)
-
-- Emitido por `POST /api/admin/auth/login` (email + password, **no PIN**), rate-limited.
-- Payload: `{ id, email, rol }` (`rol` es `'admin'` o `'oficina'`).
-- **Expira en 12 horas** (`JWT_ADMIN_EXPIRES_IN`, default `'12h'`) — sesión corta, puesto fijo de oficina, sin el problema de señal del terreno.
-- `adminAuthMiddleware` **relee `rol`/`activo` desde `admin_users` en cada request**, nunca confía en el payload del JWT viejo — así, desactivar o degradar a alguien desde "Usuarios" corta el acceso al instante, no espera a que expire el token (bug real de QA, corregido).
-- `requireRole(['admin'])` gatea rutas/endpoints solo-admin en el backend, independiente de lo que oculte el frontend (el frontend es solo UX — ver sección Admin Panel).
+### Pantalla Usuarios (`admin/src/pages/UsuariosPage.jsx`)
+Reemplaza a "Personal" y "Usuarios" antiguas (`/personal` redirige a `/usuarios`). Lista con filtros Todos / Terreno / Oficina-Admin / Inactivos, y ficha `/usuarios/:id` con tres tarjetas: Datos, Acceso a terreno (dar acceso = generar PIN, resetear, quitar) y Acceso al panel (invitar, contraseña temporal, quitar), más actividad en terreno. Las credenciales generadas (PIN, contraseña temporal, enlace de invitación) se muestran **una sola vez**.
 
 ### Kill switch de suscripción
 
@@ -270,8 +269,11 @@ orden_trabajos         id, orden_id, servicio_id FK NULL, nombre_personalizado N
 orden_fotos            id, orden_id, tipo CHECK(antes/despues/firma/pdf), r2_key (solo key),
                        filename, content_type, size_bytes, orden_index, created_at
 
-admin_users            id, email UNIQUE, password_hash, nombre, rol DEFAULT 'oficina' CHECK(admin/oficina),
-                       activo, last_login_at, created_at, updated_at
+(admin_users)          ELIMINADA en 003 — fusionada en empleados (columnas email, password_hash NULL,
+                       rol CHECK(tecnico/oficina/admin/notstudio) DEFAULT 'tecnico', last_login_at,
+                       last_login_terreno_at, failed_attempts, locked_until, invite_token UNIQUE NULL,
+                       invite_expires_at; pin_hash y usuario pasan a NULL-able). Las FKs updated_by /
+                       admin_user_id / revisado_por apuntan ahora a empleados(id) ON DELETE SET NULL.
 
 notification_channels  canal UNIQUE CHECK(resend/telegram), activo, config jsonb,
                        secret_encrypted bytea (pgcrypto), secret_last4, updated_by, updated_at
@@ -482,11 +484,12 @@ App Vite+React+Tailwind **separada** de `client/` (sin workspace compartido, `ad
 | `/ordenes/nueva` | OrdenDetallePage (modo `esNuevaOrden`) | cualquier logueado |
 | `/ordenes/:id` | OrdenDetallePage | cualquier logueado |
 | `/clientes`, `/clientes/:id` | ClientesPage | cualquier logueado |
-| `/personal` | PersonalPage | cualquier logueado |
 | `/servicios` | ServiciosPage | cualquier logueado |
 | `/notificaciones` | NotificacionesPage | cualquier logueado (pero "Enviar prueba" es admin-only en backend) |
 | `/configuracion` | ConfiguracionPage | **admin** |
-| `/usuarios` | UsuariosAdminPage | **admin** |
+| `/usuarios`, `/usuarios/:id` | UsuariosPage (todas las personas) | **admin** |
+| `/invitacion/:token` | InvitacionPage (pública) | — |
+| `/personal` | redirige a `/usuarios` | — |
 | `/auditoria` | AuditoriaPage | **admin** |
 
 ### Pantallas — qué permiten
@@ -495,7 +498,7 @@ App Vite+React+Tailwind **separada** de `client/` (sin workspace compartido, `ad
 - **Órdenes** (lista): paginación real server-side, filtros por estado (chips con contadores reales), búsqueda, selección múltiple + "Marcar como Facturada" en lote, cambio de estado inline por fila, export a Excel (solo la página cargada, no el dataset completo), botón "Nueva orden".
 - **Órdenes** (detalle/edición, la pantalla más grande — también sirve `/ordenes/nueva`): edición completa (horas, patente, trabajos+cantidad, descripción/observaciones, cliente vía buscador con link/unlink, pago, equipo, fotos con agregar/marcar-eliminar), botón "Reenviar" (regenera PDF + reintenta notificaciones, lee el resultado real por canal en vez de asumir éxito), botón "Cambiar estado", botón "Ver PDF", historial de auditoría expandible por orden. Al crear manualmente, la orden nace `'Enviada'` **sin fotos/PDF/notificaciones** — se completan después desde la ficha. Botón "Eliminar" visible solo para rol admin (con confirmación; los objetos de R2 quedan huérfanos a propósito).
 - **Clientes**: alta/edición completa, detección de duplicados por `rut_normalizado` con acciones "Fusionar" (soft merge, `merged_into`, elige un registro "ganador") y "No son duplicados" (marca `rut_grupos_revisados`, para casos como una misma empresa con varios locales que comparten RUT), "Otros locales con este RUT" en la ficha.
-- **Personal**: layout de tabla (`DataTable`), técnicos con stats reales (total órdenes, monto generado), alta con **PIN aleatorio mostrado una sola vez**, ficha editable completa (nombre/RUT/teléfono/usuario/fecha ingreso/especialidades/activo), "Resetear PIN" (idem, una sola vez), activar/desactivar (soft toggle, sin eliminación real). Distinta de "Usuarios" — aclarado textualmente en la propia página.
+- **Personal**: (fusionada en Usuarios, ver Autenticación) — antes: layout de tabla (`DataTable`), técnicos con stats reales (total órdenes, monto generado), alta con **PIN aleatorio mostrado una sola vez**, ficha editable completa (nombre/RUT/teléfono/usuario/fecha ingreso/especialidades/activo), "Resetear PIN" (idem, una sola vez), activar/desactivar (soft toggle, sin eliminación real). Distinta de "Usuarios" — aclarado textualmente en la propia página.
 - **Servicios**: CRUD con rename inline, activar/desactivar (Deshacer), eliminar **solo si `usos === 0`** (si tiene usos, el botón se convierte en "desactivar" automáticamente — protección explícita contra huérfanos).
 - **Notificaciones**: tab Plantillas (editor de bloques reordenables, preview contra una orden real, "Enviar prueba" real) + tab Historial (log filtrable por canal/fallidas, "Reenviar" por fila).
 - **Configuración** (admin): logo para emails (sube a R2, referenciado en `app_settings`), tarjetas Resend/Telegram con secreto enmascarado y "Probar conexión". El kill switch de suscripción **no está aquí ni en ningún lado del admin** — vive solo en EasyPanel.
