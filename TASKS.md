@@ -4,12 +4,11 @@ Rama `feat/postgres-migration` — versión NUEVA de Condor 360 (Postgres + R2 +
 
 ## Active
 
-- [ ] **Orden de prueba end-to-end en el entorno hosteado** - crear desde terreno → Postgres → fotos R2 → PDF Gotenberg → log de notificaciones
+- [ ] **Orden de prueba end-to-end en producción** - crear desde terreno con un técnico real (ya sin redirección de correos: le llega al cliente) o esperar la primera orden real y revisar PDF + correos + Telegram - crear desde terreno → Postgres → fotos R2 → PDF Gotenberg → log de notificaciones
   - Hacerla después de que termine la migración (para no chocar con la secuencia) y borrarla al final.
 
 ## Waiting On
 
-- [ ] **Desactivar el técnico de pruebas `matias` (NotStudio Pruebas, TCN039) al hacer el corte** - aparece en "Personal asignado" de todos los técnicos mientras esté activo
 - [ ] **OK para mandar un mensaje de prueba al grupo de Telegram de Condor** - Matías, since 2026-09-21
   - Chat `-5133715111` con el bot "Hermes NotStudio"; falta confirmar que Hermes está en ese grupo.
 - [ ] **Cambiar la contraseña temporal de `admin@notstudio.cl`** - Matías, since 2026-09-21
@@ -17,12 +16,14 @@ Rama `feat/postgres-migration` — versión NUEVA de Condor 360 (Postgres + R2 +
 
 ## Someday
 
-- [ ] **Corte a producción** - última corrida de `migrate.mjs --finalize` con Airtable congelado, quitar `EMAIL_DEV_REDIRECT`, `AUTH_ENFORCE=enforce`, avisar a técnicos, reemplazar la app de GitHub Pages por un redirect a `condor.notstudio.cl` (cuidando el service worker viejo), apagar el n8n viejo
+- [ ] **Apagar el backend viejo (`clientes/condor-api`) y el n8n viejo** cuando se confirme que nadie usa la app antigua (2–3 semanas)
+- [ ] **Cancelar Airtable** tras el período de respaldo
 - [ ] **Cerrar el puerto externo de Postgres (54320)** - solo se necesita abierto para correr `migration/` desde fuera
 - [ ] **Indicador de progreso al subir fotos en el wizard**
 
 ## Done
 
+- [x] ~~CORTE A PRODUCCIÓN: main = código nuevo, EasyPanel despliega desde main, la URL vieja de Pages sirve la app nueva, migración final (656 órdenes), redirección de correos apagada, AUTH_ENFORCE=enforce, técnico de pruebas desactivado~~ (2026-09-22)
 - [x] ~~Correo de respuesta (Reply-To) e interno de Condor configurables desde Correos, aplicados a todo correo del sistema; botón Ver PDF en la lista de órdenes (modal, como H&A)~~ (2026-09-22)
 - [x] ~~Dashboard rediseñado con KPIs de operación (sin plata): semana/mes con comparación, hidrojet, duración, por técnico, por cliente (RUT), día de la semana 6 meses, órdenes con problemas~~ (2026-09-22)
 - [x] ~~Ficha de orden por secciones (Cliente/Trabajo/Pago/Equipo/Fotos) con edición por tarjeta y acciones en la cabecera; ficha de cliente como página propia — distribución de H&A con estilo Condor~~ (2026-09-22)

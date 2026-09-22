@@ -8,21 +8,15 @@ Reemplaza formularios en papel que los técnicos llenan en terreno. El flujo es:
 
 Desarrollado por **NotStudio.cl** (https://notstudio.cl).
 
-## Estado de la migración (leer esto primero)
+## Estado (leer esto primero)
 
-Este repo está en plena migración de **Airtable + n8n** a **Postgres self-hosted + Cloudflare R2**, con un **admin panel nuevo** que reemplaza el uso directo de las tablas de Airtable. Todo el trabajo vive en la rama **`feat/postgres-migration`** — `main` todavía tiene el código viejo (Airtable + n8n) y sigue siendo lo que corre en producción hoy. **Este archivo describe la arquitectura de `feat/postgres-migration`**, no la de `main`.
+**Corte a producción ejecutado el 2026-09-22.** `main` es el código real (Postgres + R2 + admin) y los tres servicios de EasyPanel (proyecto "condor": `condor-app`, `condor-terreno`, `condor-admin`) despliegan automáticamente desde `main`. `feat/postgres-migration` quedó como rama histórica; no volver a usarla.
 
-- **Hecho y probado en staging** (Postgres/R2/Gotenberg propios, backend corriendo contra staging): schema completo, backend consolidado (repos/services/routes técnico + admin), PDF vía Gotenberg, notificaciones Resend/Telegram con plantillas editables, admin panel completo (10 pantallas), migración histórica de los 410 órdenes / 58 clientes / 9 empleados / 12 servicios / 4.732 adjuntos reales de Airtable, dos rondas de QA real (browser + curl) con bugs críticos corregidos.
-- **Entorno nuevo hosteado en EasyPanel (2026-09-21)** — proyecto EasyPanel **"condor"**, todo construido desde `feat/postgres-migration` con `autoDeploy:true`. Es una aplicación **aparte**: la app antigua (GitHub Pages + `clientes/condor-api` en modo Airtable, desde `main`) **no se toca** hasta que el usuario decida redirigirla al link nuevo.
-  - `condor-app` — backend Postgres/R2 (`Dockerfile`), `https://condor-condor-app.f8ihph.easypanel.host`
-  - `condor-terreno` — `client/` estático vía nginx (`Dockerfile.client`, `VITE_BASE=/`)
-  - `condor-admin` — `admin/` estático vía nginx (`Dockerfile.admin`, `VITE_BASE=/admin/`)
-  - `condor-postgres` — Postgres (puerto externo 54320 expuesto para correr `migration/` desde fuera)
-  - Dominio final **`condor.notstudio.cl`**: `/` → terreno, `/admin` → admin, `/api` → backend (rutas ya creadas en EasyPanel; el DNS vive en Cloudflare). DNS (`A condor → 31.97.241.33`, DNS only) y certificado Let's Encrypt operativos desde 2026-09-21; ambos bundles llaman a `https://condor.notstudio.cl/api` (`ARG VITE_API_URL` de los Dockerfiles). Gotcha de la API de EasyPanel: `updateSourceGithub` NO activa el auto-deploy aunque se le pase `autoDeploy:true` — hay que llamar aparte a `services.app.enableGithubDeploy` (los dos frontends estuvieron horas pegados en un commit viejo por esto; verificar siempre `commit.sha` con `inspectService`). Gotcha: si un dominio se crea en EasyPanel ANTES de que exista el DNS, Traefik no reintenta el certificado solo — hay que borrar y recrear una ruta del dominio.
-- **Pendiente**: el corte final (última corrida de `migration/migrate.mjs --finalize` el día que se congele Airtable, `AUTH_ENFORCE=enforce`, redirigir la app antigua al link nuevo, credenciales Resend/Telegram desde el admin). `main` y el servicio `clientes/condor-api` **no se tocan sin instrucción explícita del usuario.** El archivo de plan `~/.claude/plans/dynamic-splashing-heron.md` ya no existe.
-- **Gaps conocidos, no bloqueantes, pendientes de resolver** (ver detalle en cada sección):
-  - `.github/workflows/deploy.yml` (GitHub Pages) es solo de la app ANTIGUA en `main` — la versión nueva no usa Pages, se despliega en EasyPanel (ver arriba).
-  - El `server/.env` local (raíz, no trackeado) sigue en modo Airtable; el entorno real Postgres/R2/Gotenberg vive en `server/.env.staging`.
+- **URLs**: `https://condor.notstudio.cl` (terreno), `https://condor.notstudio.cl/admin/` (panel), `https://condor.notstudio.cl/api`. La URL antigua de GitHub Pages (`notstudiocl.github.io/condor-sistema/`) sigue publicándose vía `.github/workflows/deploy.yml` pero sirve la MISMA app nueva contra el backend nuevo (`client/.env.production`, commiteado a la fuerza pese al `.gitignore`), igual que en H&A: los técnicos no reinstalan la PWA y funcionan las dos URLs. `VITE_ADMIN_APP_URL` hace que el switch Terreno/Oficina apunte al panel real desde Pages.
+- **Datos**: 656 órdenes migradas desde Airtable (hasta la OT-00657 del 22/09; 652–657 sin fotos/PDF por el incidente de Airtable). Secuencia en 660 → la primera orden nueva es OT-00661. Airtable queda congelado como respaldo; el backend viejo (`clientes/condor-api`) y el n8n viejo (`n8n.virtualkeys.store`) siguen encendidos sin tráfico, apagar más adelante.
+- **Config de producción**: `AUTH_ENFORCE=enforce`, sin `EMAIL_DEV_REDIRECT` (la redirección se controla desde Configuración → General), `WEBHOOK_NOTIFICACIONES_URL` apuntando al n8n de infra. Técnico de pruebas `matias` (id 56) desactivado. Usuarios de prueba del panel: `matias@notstudio.cl` (admin) y `oficina@notstudio.cl` (oficina) — borrar desde Usuarios cuando no hagan falta.
+- **Postgres**: puerto externo 54320 sigue expuesto (solo para `migration/`); cerrar cuando se cancele Airtable.
+- Gotchas de EasyPanel: `updateSourceGithub` NO activa el auto-deploy (llamar `services.app.enableGithubDeploy`); si un dominio se crea antes de que exista el DNS, Traefik no reintenta el certificado solo (borrar y recrear una ruta).
 
 ## Datos de la empresa
 
@@ -775,11 +769,10 @@ El admin tiene su propio `admin/src/utils/format.js` equivalente (RUT/CLP/fechas
 
 ## Deploy
 
-- **Frontend técnico (`client/`)**: GitHub Pages con `base: '/condor-sistema/'`, HashRouter. Deploy automático vía `.github/workflows/deploy.yml` al hacer push a `main` (build+deploy solo de `client/dist`).
-- **Admin (`admin/`)**: **sin pipeline de CI/CD todavía** — `admin/vite.config.js` ya está configurado con `base: '/condor-sistema/admin/'` anticipando convivir bajo el mismo Pages que `client/`, pero `deploy.yml` no tiene ningún paso que lo construya ni fusione `admin/dist` dentro del artifact. Falta antes de considerar el corte a producción.
-- **Backend (`server/`)**: EasyPanel + Docker. El `Dockerfile` (raíz) construye **solo `server/`** (copia también el logo PNG de `client/public/` para los PDFs). Servicio de producción con `autoDeploy:false` — un push a `main` no dispara deploy solo; hay que gatillarlo manualmente en EasyPanel.
+- **Frontend técnico (`client/`)**: en EasyPanel (`Dockerfile.client`, nginx, `VITE_BASE=/`) bajo `condor.notstudio.cl`; además GitHub Pages (`base: '/condor-sistema/'`, `client/.env.production`) sirve la misma app en la URL antigua.
+- **Admin (`admin/`)**: en EasyPanel (`Dockerfile.admin`, nginx, `VITE_BASE=/admin/`) bajo `condor.notstudio.cl/admin/`. No se publica en Pages.
+- **Backend (`server/`)**: EasyPanel + Docker. El `Dockerfile` (raíz) construye **solo `server/`** (copia también el logo PNG de `client/public/` para los PDFs). Los tres servicios del proyecto "condor" tienen auto-deploy desde `main`.
 - **Adjuntos**: Cloudflare R2 (bucket único), ya no `/uploads/` local ni limpieza cada 30 min — eso desapareció con la migración.
 - **Infraestructura EasyPanel relevante** (según el plan de migración): proyecto **"clientes"** corre el backend de producción (`clientes-condor-api.f8ihph.easypanel.host`, hoy todavía en modo Airtable porque no se ha hecho el corte); proyecto **"condor"** aloja el Postgres/backend de **staging** usados durante todo este trabajo; Gotenberg self-hosted confirmado alcanzable en `infra-gotenberg.f8ihph.easypanel.host`.
 - **Repo**: https://github.com/notstudiocl/condor-sistema
-- **Rama de trabajo**: `feat/postgres-migration` — no mergear a `main` sin instrucción explícita (implica el corte de producción, plan F6/F7).
-- **Plan completo de migración** (decisiones, fases, checklist de corte): `/Users/matias/.claude/plans/dynamic-splashing-heron.md`.
+- **Rama de trabajo**: `main`.
