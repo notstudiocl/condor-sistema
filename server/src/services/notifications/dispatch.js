@@ -1,5 +1,5 @@
 import * as notificacionesRepo from '../../repositories/notificacionesRepo.js';
-import { enviarEmail, DEFAULT_FROM, DEFAULT_REPLY_TO } from './resend.js';
+import { enviarEmail, DEFAULT_FROM, getReplyTo, getCorreoInterno } from './resend.js';
 import { enviarTelegram } from './telegram.js';
 import {
   emailClienteDefault, emailInternoDefault, telegramDefault, getLogoUrlConFallback, ORDEN_EJEMPLO,
@@ -13,7 +13,8 @@ import { getWebhookUrl, enviarWebhookNotificacion, payloadOrden } from './webhoo
 // tumbar a otro (Promise.allSettled) y cada intento queda logueado en notificacion_log,
 // éxito o fracaso, incluyendo el caso "canal inactivo o sin credenciales".
 
-const CORREO_INTERNO = 'alcantarilladoscondor@gmail.com';
+// Destino de la copia interna de cada orden: configurable desde Correos (app_settings.email_interno).
+const CORREO_INTERNO_DEFAULT = 'alcantarilladoscondor@gmail.com';
 
 // Lista blanca de variables soportadas por los overrides editables desde el admin
 // (notification_templates.bloques / .asunto). Variable fuera de esta lista, o
@@ -195,6 +196,7 @@ export async function dispatchNotificaciones(orden, { pdfUrl, pdfBuffer } = {}) 
   // MODO DESARROLLO: con app_settings 'email_dev_redirect' (o env EMAIL_DEV_REDIRECT), TODOS
   // los correos —cliente e interno— van a esa casilla, con el destinatario real anotado en
   // el asunto. Telegram no se redirige. Borrar el setting/env al pasar a producción real.
+  const CORREO_INTERNO = await getCorreoInterno();
   const devRedirect = await getDevRedirect();
   const clienteEmail = devRedirect && orden.cliente_email ? devRedirect : orden.cliente_email;
   const correoInterno = devRedirect || CORREO_INTERNO;
@@ -216,7 +218,7 @@ export async function dispatchNotificaciones(orden, { pdfUrl, pdfBuffer } = {}) 
       console.error('[notificaciones] no se pudo leer config de Resend, uso remitente default:', err.message);
     }
     const from = remitente.fromEmail || DEFAULT_FROM;
-    const replyTo = remitente.replyTo || DEFAULT_REPLY_TO;
+    const replyTo = await getReplyTo();
 
     const emails = [];
     if (clienteEmail) {

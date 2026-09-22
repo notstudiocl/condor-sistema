@@ -1,4 +1,4 @@
-import { enviarEmail, DEFAULT_FROM, DEFAULT_REPLY_TO } from './resend.js';
+import { enviarEmail, DEFAULT_FROM, getReplyTo } from './resend.js';
 import { getWebhookUrl, enviarWebhookNotificacion } from './webhookN8n.js';
 import * as notificacionesRepo from '../../repositories/notificacionesRepo.js';
 
@@ -21,7 +21,7 @@ export async function enviarCorreoSistema({ to, subject, html }) {
   await enviarWebhookNotificacion(webhookUrl, {
     evento: 'correo_sistema',
     marca: { nombre: 'Condor 360' },
-    emails: [{ plantilla: 'sistema', to, cc: null, from: remitente.fromEmail || DEFAULT_FROM, replyTo: remitente.replyTo || DEFAULT_REPLY_TO, subject, html }],
+    emails: [{ plantilla: 'sistema', to, cc: null, from: remitente.fromEmail || DEFAULT_FROM, replyTo: await getReplyTo(), subject, html }],
     telegram: { texto: '' },
     pdfs: [],
   });

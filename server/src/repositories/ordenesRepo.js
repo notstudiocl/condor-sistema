@@ -383,12 +383,16 @@ export async function listOrdenesAdmin({ page = 1, limit = 50, estado, q, tecnic
   const fromClause = `ordenes o LEFT JOIN clientes c ON c.id = o.cliente_id`;
 
   const { rows } = await pool.query(
-    `SELECT o.* FROM ${fromClause} ${where} ORDER BY o.created_at DESC LIMIT $${i} OFFSET $${i + 1}`,
+    `SELECT o.*,
+       (SELECT f.r2_key FROM orden_fotos f WHERE f.orden_id = o.id AND f.tipo = 'pdf' ORDER BY f.id DESC LIMIT 1) AS pdf_key
+     FROM ${fromClause} ${where} ORDER BY o.created_at DESC LIMIT $${i} OFFSET $${i + 1}`,
     [...params, limit, offset]
   );
   const { rows: countRows } = await pool.query(`SELECT count(*)::int as total FROM ${fromClause} ${where}`, params);
 
-  return { ordenes: rows, total: countRows[0].total, page, limit };
+  // pdf_url para el botón "Ver PDF" de la lista (mismo criterio que la ficha: URL pública de R2).
+  const ordenes = rows.map(({ pdf_key, ...o }) => ({ ...o, pdf_url: pdf_key ? buildFotoUrl(pdf_key) : null }));
+  return { ordenes, total: countRows[0].total, page, limit };
 }
 
 // Elimina la orden y todo lo relacionado (orden_trabajos/orden_empleados/orden_fotos

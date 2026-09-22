@@ -138,7 +138,7 @@ export default function DataTable({
               return (
                 <tr
                   key={id}
-                  onClick={() => onRowClick?.(row)}
+                  onClick={(e) => { if (e.target.closest('[data-stop-row-click]')) return; onRowClick?.(row); }}
                   className={`border-b border-gray-100 last:border-0 transition-colors ${
                     onRowClick ? 'cursor-pointer hover:bg-gray-50' : ''
                   } ${checked ? 'bg-condor-50/60' : ''}`}

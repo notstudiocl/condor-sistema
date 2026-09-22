@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import ExcelJS from 'exceljs';
 import { Download, Plus, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 import DataTable from '../components/DataTable';
+import { PdfCelda, PdfModal } from '../components/PdfPreview';
 import FilterChips from '../components/FilterChips';
 import SearchInput from '../components/SearchInput';
 import EstadoBadge from '../components/EstadoBadge';
@@ -99,6 +100,7 @@ export default function OrdenesListPage() {
   const estadoParam = searchParams.get('estado');
   const [estadosActivos, setEstadosActivos] = useState(estadoParam ? estadoParam.split(',') : []);
   const [query, setQuery] = useState(searchParams.get('q') || '');
+  const [pdfAbierto, setPdfAbierto] = useState(null);
   // Texto del input (cada tecla) separado de `query` (lo que se busca, con debounce): antes cada
   // tecla disparaba un request y los resultados podían llegar fuera de orden (bug real de QA).
   const [queryInput, setQueryInput] = useState(searchParams.get('q') || '');
@@ -213,6 +215,13 @@ export default function OrdenesListPage() {
   };
 
   const columns = [
+    {
+      key: '_pdf',
+      label: '',
+      render: (o) => (
+        <PdfCelda url={o.pdf_url} etiqueta={`la orden ${o.numero_orden_display}`} onAbrir={() => setPdfAbierto({ url: o.pdf_url, titulo: `Orden ${o.numero_orden_display}` })} />
+      ),
+    },
     {
       key: 'numero_orden_display',
       label: 'OT',
@@ -355,6 +364,7 @@ export default function OrdenesListPage() {
         message={`Vas a marcar ${selected.length} orden${selected.length === 1 ? '' : 'es'} como Facturada, por un total de ${formatCLP(sumaSeleccion)}.`}
         confirmLabel="Marcar como Facturada"
       />
+      <PdfModal item={pdfAbierto} onClose={() => setPdfAbierto(null)} />
     </div>
   );
 }

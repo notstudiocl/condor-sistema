@@ -21,6 +21,7 @@ import { useToast } from '../components/Toast';
 import { formatFechaHora } from '../utils/format';
 import { getSession, hasRole, ROLES } from '../utils/auth';
 import LogoEmailCard from '../components/LogoEmailCard';
+import CorreosEmpresaCard from '../components/CorreosEmpresaCard';
 import {
   listPlantillas,
   guardarPlantilla,
@@ -466,6 +467,7 @@ export default function CorreosPage() {
 
   return (
     <div className="space-y-4">
+      <CorreosEmpresaCard />
       <LogoEmailCard />
       <div className="flex gap-1 border-b border-gray-200">
         {[

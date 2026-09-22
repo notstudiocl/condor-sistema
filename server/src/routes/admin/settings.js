@@ -118,6 +118,35 @@ router.put('/webhook-notificaciones', requireNotstudio, async (req, res, next) =
   }
 });
 
+// Correos de la empresa — rol admin (no requiere notstudio): "Responder a" de todos los correos
+// que salen del sistema y correo interno que recibe copia de cada orden.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+router.get('/correos', async (_req, res, next) => {
+  try {
+    const leer = async (k) => { const v = await notificacionesRepo.getSetting(k); return (typeof v === 'string' ? v : v?.value) || null; };
+    res.json({ success: true, data: { email_reply_to: await leer('email_reply_to'), email_interno: await leer('email_interno'), defaults: { email_reply_to: 'alcantarilladoscondor@gmail.com', email_interno: 'alcantarilladoscondor@gmail.com' } } });
+  } catch (err) {
+    next(err);
+  }
+});
+router.put('/correos', async (req, res, next) => {
+  try {
+    const cambios = {};
+    for (const key of ['email_reply_to', 'email_interno']) {
+      if (!(key in (req.body || {}))) continue;
+      const v = String(req.body[key] ?? '').trim().toLowerCase() || null;
+      if (v && !EMAIL_RE.test(v)) return res.status(400).json({ success: false, error: `Correo inválido: ${v}` });
+      await notificacionesRepo.setSetting(key, { value: v }, req.admin?.id || null);
+      cambios[key] = v;
+    }
+    auditRepo.registrar({ adminUserId: req.admin?.id, accion: 'configuracion_correos', entidad: 'app_settings', entidadId: 'correos', detalle: cambios })
+      .catch((err) => console.error('[admin/settings] auditoría correos:', err.message));
+    res.json({ success: true, data: cambios });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Configuración General — SOLO notstudio (404 para el resto). Kill switch operativo, webhook de
 // n8n y redirección de correos en modo desarrollo. Todo vive en app_settings; las env vars de
 // EasyPanel quedan solo como fallback cuando no hay fila.
