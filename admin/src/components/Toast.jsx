@@ -47,7 +47,7 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={{ addToast, dismiss }}>
       {children}
-      <div className="fixed bottom-5 right-5 z-[200] flex flex-col gap-2 w-full max-w-sm pointer-events-none">
+      <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:bottom-5 sm:right-5 z-[200] flex flex-col gap-2 sm:w-full sm:max-w-sm pointer-events-none">
         {toasts.map((t) => {
           const Icon = ICONS[t.type] || Info;
           return (

@@ -87,12 +87,15 @@ export default function DataTable({
 
   return (
     <div className="card overflow-hidden">
-      <div className="overflow-auto" style={{ maxHeight }}>
+      {/* En móvil/tablet (< lg) la tabla no limita su alto: scrollea con la página y solo
+          tiene scroll horizontal interno (celdas nowrap). El maxHeight con header sticky
+          se conserva de lg hacia arriba vía variable CSS. */}
+      <div className="overflow-auto lg:max-h-[var(--dt-max-h)]" style={{ '--dt-max-h': maxHeight }}>
         <table className="w-full text-sm border-collapse">
           <thead className="sticky top-0 z-10 bg-gray-50 shadow-[0_1px_0_0_rgba(0,0,0,0.06)]">
             <tr>
               {selectable && (
-                <th className="px-4 py-3 w-10">
+                <th className="px-3 sm:px-4 py-3 w-10">
                   <input
                     type="checkbox"
                     checked={allSelected}
@@ -107,7 +110,7 @@ export default function DataTable({
                   key={col.key}
                   onClick={() => handleSort(col)}
                   style={col.width ? { width: col.width } : undefined}
-                  className={`px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap ${
+                  className={`px-3 sm:px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap ${
                     col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'
                   } ${col.sortable ? 'cursor-pointer select-none hover:text-gray-700' : ''}`}
                 >
@@ -141,19 +144,19 @@ export default function DataTable({
                   } ${checked ? 'bg-condor-50/60' : ''}`}
                 >
                   {selectable && (
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-3 sm:px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={checked}
                         onChange={() => toggleOne(id)}
-                        className="rounded border-gray-300 text-condor-600 focus:ring-condor-400"
+                        className="h-4 w-4 rounded border-gray-300 text-condor-600 focus:ring-condor-400"
                       />
                     </td>
                   )}
                   {columns.map((col) => (
                     <td
                       key={col.key}
-                      className={`px-4 py-3 text-gray-700 ${
+                      className={`px-3 sm:px-4 py-3 text-gray-700 whitespace-nowrap ${
                         col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'
                       }`}
                     >

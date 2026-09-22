@@ -38,11 +38,11 @@ export default function ConfirmDialog({
       size="sm"
       footer={
         <>
-          <button className="btn-secondary" onClick={handleClose} disabled={loading}>
+          <button className="btn-secondary flex-1 sm:flex-none" onClick={handleClose} disabled={loading}>
             {cancelLabel}
           </button>
           <button
-            className={danger ? 'btn-accent' : 'btn-primary'}
+            className={`${danger ? 'btn-accent' : 'btn-primary'} flex-1 sm:flex-none`}
             onClick={handleConfirm}
             disabled={loading || locked}
           >

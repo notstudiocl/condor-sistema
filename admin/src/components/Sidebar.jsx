@@ -59,7 +59,7 @@ function NavContent({ user, nav, onNavigate }) {
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
+      <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-4 space-y-5">
         {nav.map((group, gi) => {
           const items = group.items.filter((item) => hasRole(user, item.roles));
           if (items.length === 0) return null;
@@ -115,7 +115,8 @@ function NavContent({ user, nav, onNavigate }) {
           <Wrench size={17} className="shrink-0 text-accent-500" />
           Ir a la app de terreno
         </a>
-        <div className="mt-2 pt-3 px-3 border-t border-white/10 text-[11px] leading-relaxed text-white/35">
+        {/* En celular horizontal (alto ≤ 480px) los créditos se ocultan para dejar espacio al menú */}
+        <div className="mt-2 pt-3 px-3 border-t border-white/10 text-[11px] leading-relaxed text-white/35 [@media(max-height:480px)]:hidden">
           <p>Condor Alcantarillados</p>
           <p>
             Sistema integral desarrollado por{' '}
@@ -135,16 +136,17 @@ export default function Sidebar({ user, counts = {}, mobileOpen = false, onClose
 
   return (
     <>
-      {/* Desktop: rail fija (panel es escritorio-first) */}
-      <aside className="hidden md:flex md:flex-col w-60 shrink-0 bg-condor-900 text-white h-screen sticky top-0">
+      {/* Desktop (lg+): rail fija. Bajo 1024px (celular vertical/horizontal, tablet vertical)
+          se usa el drawer para que el contenido tenga todo el ancho. */}
+      <aside className="hidden lg:flex lg:flex-col w-60 shrink-0 bg-condor-900 text-white h-screen sticky top-0">
         <NavContent user={user} nav={nav} />
       </aside>
 
-      {/* Mobile: drawer superpuesto */}
+      {/* Mobile: drawer superpuesto (el <nav> interno tiene scroll propio para pantallas bajas) */}
       {mobileOpen && (
-        <div className="md:hidden fixed inset-0 z-50 flex">
+        <div className="lg:hidden fixed inset-0 z-50 flex">
           <div className="absolute inset-0 bg-gray-900/50" onClick={onCloseMobile} />
-          <aside className="relative flex flex-col w-64 bg-condor-900 text-white h-full shadow-xl">
+          <aside className="relative flex flex-col w-64 max-w-[85vw] bg-condor-900 text-white h-full shadow-xl">
             <NavContent user={user} nav={nav} onNavigate={onCloseMobile} />
           </aside>
         </div>

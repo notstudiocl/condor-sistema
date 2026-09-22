@@ -28,11 +28,13 @@ export default function Layout({ user, onLogout, title, children }) {
   }, [title]);
 
   return (
-    <div className="min-h-screen flex bg-gray-50">
+    // overflow-x-clip (no hidden): recorta cualquier desborde horizontal accidental sin
+    // convertir el wrapper en scroll container, así el Topbar sticky sigue pegado al viewport.
+    <div className="min-h-screen flex bg-gray-50 overflow-x-clip">
       <Sidebar user={user} counts={counts} mobileOpen={mobileNavOpen} onCloseMobile={() => setMobileNavOpen(false)} />
       <div className="flex-1 min-w-0 flex flex-col">
         <Topbar title={title} user={user} onLogout={onLogout} onOpenMobileNav={() => setMobileNavOpen(true)} />
-        <main className="flex-1 px-4 md:px-6 py-6 max-w-[1600px] w-full mx-auto">{children}</main>
+        <main className="flex-1 min-w-0 px-4 py-4 sm:py-6 md:px-6 max-w-[1600px] w-full mx-auto">{children}</main>
       </div>
     </div>
   );
