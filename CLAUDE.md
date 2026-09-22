@@ -1,5 +1,7 @@
 # CLAUDE.md — Condor 360 · Sistema de Órdenes de Trabajo v2.0.0
 
+> En producción desde el 2026-09-22 sobre Postgres + R2 (rama `main`). Las tareas y pendientes viven en `TASKS.md`.
+
 ## Qué es este proyecto
 
 Sistema de digitalización de órdenes de trabajo para **Condor Alcantarillados** (marca comercial: **Condor 360**), empresa chilena de soluciones sanitarias, transporte de residuos e hidrojet.
@@ -64,25 +66,28 @@ condor-sistema/
 │   └── index.html                # Título: "Condor 360 - Ordenes de Trabajo"
 ├── admin/                        # React + Vite — Panel de oficina (Condor + NotStudio), app SEPARADA de client/
 │   ├── src/
-│   │   ├── components/           # DataTable, Modal, ConfirmDialog, Toast, KpiCard, Sidebar/Topbar/Layout, NotificationBell, etc.
-│   │   ├── pages/                 # Dashboard, OrdenesList, OrdenDetalle, Clientes, Personal, Servicios, Notificaciones, Configuracion, UsuariosAdmin, Auditoria, Login
+│   │   ├── components/           # DataTable, Modal, ConfirmDialog, Toast, KpiCard, Sidebar/Topbar/Layout, SectionCard, PdfPreview, AppSwitch, ErrorBoundary, LogoEmailCard, CorreosEmpresaCard, etc.
+│   │   ├── pages/                 # Dashboard, OrdenesList, OrdenDetalle, Clientes, Servicios, Usuarios, Correos, Integraciones, Configuracion (General), Auditoria, Login, Invitacion
 │   │   └── utils/                 # api.js, auth.js, constants.js, format.js, images.js
 │   └── public/                   # condor-logo.png, favicon-32.png
 ├── server/                       # Node.js + Express (API REST) — backend único para client/ y admin/
 │   ├── src/
 │   │   ├── db/                    # pool.js (pg.Pool), migrate.js (runner), migrations/*.sql, smoke-test.js
-│   │   ├── repositories/          # ordenesRepo, clientesRepo, empleadosRepo, serviciosRepo, adminUsersRepo, notificacionesRepo, auditRepo, dashboardRepo
-│   │   ├── services/               # ordenService.js (orquestador), pdf/ (gotenberg.js, template.js), storage/r2.js, notifications/ (resend, telegram, dispatch, defaultTemplates)
-│   │   ├── routes/                 # auth.js, tecnicos.js, clientes.js, servicios.js, ordenes.js (técnico) + admin/*.js (10 routers)
-│   │   ├── middleware/             # auth.js (JWT técnico), adminAuth.js (JWT admin), requireRole.js, subscriptionGate.js, rateLimiter.js, errorHandler.js
+│   │   ├── repositories/          # ordenesRepo, clientesRepo, empleadosRepo (lectura), personasRepo (escritura de personas), serviciosRepo, notificacionesRepo, auditRepo, dashboardRepo, jobsRepo
+│   │   ├── services/               # ordenService.js (orquestador), pdf/ (gotenberg.js, template.js), storage/r2.js, notifications/ (dispatch, webhookN8n, resend, telegram, correoSistema, alertas, defaultTemplates), jobs/worker.js
+│   │   ├── routes/                 # auth.js, tecnicos.js, clientes.js, servicios.js, ordenes.js (técnico) + admin/*.js (auth, ordenes, clientes, empleados [solo lectura], usuarios, servicios, notificaciones, plantillas, settings, dashboard)
+│   │   ├── middleware/             # auth.js (JWT técnico), adminAuth.js (JWT admin, claim aud), requireRole.js (+requireNotstudio), subscriptionGate.js, rateLimiter.js, errorHandler.js (traduce errores de Postgres)
 │   │   └── index.js                # Monta todo, ~340 líneas
 │   └── scripts/test-pdf-manual.mjs
 ├── migration/                    # Paquete standalone — migración histórica ÚNICA Airtable → Postgres+R2 (fuera del Dockerfile)
 │   ├── migrate.mjs               # Servicios→Empleados→Clientes→Órdenes+adjuntos, upsert idempotente por airtable_record_id
 │   └── r2-manifest.json          # Manifiesto de progreso de subida a R2 (commiteado, ~28k líneas)
 ├── .github/workflows/
-│   └── deploy.yml                 # Build+deploy SOLO de client/ a GitHub Pages — admin/ todavía no está integrado (ver gaps)
-├── Dockerfile                     # Construye SOLO server/ (para EasyPanel)
+│   └── deploy.yml                 # Publica client/ en GitHub Pages (URL antigua, misma app nueva vía client/.env.production)
+├── Dockerfile                     # server/ (EasyPanel condor-app)
+├── Dockerfile.client              # client/ estático con nginx (condor-terreno, VITE_BASE=/)
+├── Dockerfile.admin               # admin/ estático con nginx (condor-admin, VITE_BASE=/admin/)
+├── deploy/                        # nginx-client.conf, nginx-admin.conf
 ├── CLAUDE.md                      # Este archivo
 └── package.json                   # Scripts raíz del monorepo (client/server — admin/ no está en los scripts raíz)
 ```
@@ -94,8 +99,8 @@ condor-sistema/
 - DB: PostgreSQL self-hosted (EasyPanel), sin ORM — migraciones `.sql` numeradas + runner casero
 - Adjuntos: Cloudflare R2 (S3-compatible), un solo bucket
 - PDF: Gotenberg (headless Chromium, self-hosted) llamado directo desde el backend
-- Notificaciones: Resend (email) + Telegram Bot API, llamados directo desde el backend — **ya no hay n8n**
-- Deploy: GitHub Pages (frontend `client/`, auto-deploy vía GitHub Actions) + EasyPanel/Docker (backend `server/`, deploy manual — `autoDeploy:false`)
+- Notificaciones: modo híbrido — el backend arma correos/Telegram y los entrega vía webhook del n8n de infra (respaldo: Resend/Telegram directo). Ver "PDF y notificaciones"
+- Deploy: EasyPanel (proyecto "condor": `condor-app`, `condor-terreno`, `condor-admin`, auto-deploy desde `main`) bajo `condor.notstudio.cl`; GitHub Pages publica además `client/` en la URL antigua
 - Offline (solo `client/`): IndexedDB vía `idb` + auto-sync con backoff exponencial
 
 ## Versionado
@@ -282,12 +287,15 @@ notification_templates template_key UNIQUE CHECK(email_cliente/email_interno/tel
 
 notificacion_log       id, orden_id, canal, plantilla, destinatario, ok, error, sent_at
 
-app_settings            key PK, value jsonb, updated_by, updated_at — ej. logo_email_url
-                       (el kill switch NO vive aquí, vive solo en env vars de EasyPanel)
+app_settings            key PK, value jsonb, updated_by, updated_at — logo_email_url, subscription_active,
+                       subscription_message, webhook_notificaciones_url, email_dev_redirect, email_reply_to, email_interno
+
+jobs                    id, tipo, payload jsonb, estado CHECK(pendiente/procesando/ok/error), intentos, max_intentos,
+                       next_run_at, last_error, resultado, created_at, updated_at (004) — ver "Cola de trabajos"
 
 audit_log               id, admin_user_id NULL, accion, entidad, entidad_id, detalle jsonb, created_at
 
-rut_grupos_revisados    rut_normalizado PK, revisado_por FK admin_users NULL, revisado_at
+rut_grupos_revisados    rut_normalizado PK, revisado_por FK empleados NULL, revisado_at
                        — marca un grupo de RUT compartido como "revisado, no son duplicados"
                        (nunca fuerza fusión de clientes.rut)
 ```
@@ -471,7 +479,13 @@ App Vite+React+Tailwind **separada** de `client/` (sin workspace compartido, `ad
 
 ### Roles
 
-`admin` y `oficina` (tabla `admin_users`). El frontend oculta menú/rutas por rol (`hasRole()`, `Sidebar.jsx`, `ProtectedRoute.jsx` con fallback a tarjeta "Acceso restringido", nunca un loop de redirect) **solo por UX** — el enforcement real vive en el backend (`requireRole`), verificado independientemente. Rutas/endpoints solo-admin: Configuración, Usuarios, Auditoría (routers completos), más puntualmente `DELETE /api/admin/ordenes/:id`, `POST /api/admin/plantillas/enviar-prueba`, y toda `routes/admin/notificaciones.js` salvo `/log`.
+`tecnico | oficina | admin | notstudio` en `empleados.rol` (ver Autenticación). El frontend oculta menú/rutas por rol (`hasRole()` con jerarquía notstudio ⊇ admin, `Sidebar.jsx`, `ProtectedRoute.jsx` con tarjeta "Acceso restringido") **solo por UX**; el enforcement real es del backend (`requireRole`, `requireNotstudio`). Matriz:
+
+| Rol | Ve |
+|---|---|
+| oficina | Dashboard, Órdenes, Clientes, Servicios |
+| admin | + Configuración → Usuarios, Correos, Auditoría; eliminar órdenes |
+| notstudio | + General (kill switch, redirección de correos, cola de trabajos) e Integraciones (Resend/Telegram/webhook). Invisible para los demás; sus rutas dan 404 |
 
 ### Rutas
 
@@ -499,11 +513,10 @@ App Vite+React+Tailwind **separada** de `client/` (sin workspace compartido, `ad
 - **Órdenes** (lista): columna de PDF al inicio (ícono → modal con el PDF embebido + Descargar, `components/PdfPreview.jsx`, como H&A; `listOrdenesAdmin` devuelve `pdf_url`), paginación real server-side, filtros por estado (chips con contadores reales), búsqueda, selección múltiple + "Marcar como Facturada" en lote, cambio de estado inline por fila, export a Excel (solo la página cargada, no el dataset completo), botón "Nueva orden".
 - **Órdenes** (detalle/edición, la pantalla más grande — también sirve `/ordenes/nueva`): distribución estilo H&A (2026-09-22): cabecera con volver, "Orden 00650" + subtítulo, selector de estado, Ver PDF, Regenerar PDF y menú ⋯ (Reenviar / Eliminar admin); debajo tarjetas Cliente / Trabajo / Pago / Equipo / Fotos / Notificaciones / Historial, cada una con su propio Editar y guardado independiente (`buildFormFromOrden(orden)` + campos de esa sección, `components/SectionCard.jsx`). Modo creación = todas editables. Antes: edición completa (horas, patente, trabajos+cantidad, descripción/observaciones, cliente vía buscador con link/unlink, pago, equipo, fotos con agregar/marcar-eliminar), botón "Reenviar" (regenera PDF + reintenta notificaciones, lee el resultado real por canal en vez de asumir éxito), botón "Cambiar estado", botón "Ver PDF", historial de auditoría expandible por orden. Al crear manualmente, la orden nace `'Enviada'` **sin fotos/PDF/notificaciones** — se completan después desde la ficha. Botón "Eliminar" visible solo para rol admin (con confirmación; los objetos de R2 quedan huérfanos a propósito).
 - **Clientes**: ficha como PÁGINA propia `/clientes/:id` (2026-09-22, ya no es modal): cabecera, Datos en 3 columnas, Estadísticas, Otros locales con este RUT, Historial completo de órdenes; alta/edición completa, detección de duplicados por `rut_normalizado` con acciones "Fusionar" (soft merge, `merged_into`, elige un registro "ganador") y "No son duplicados" (marca `rut_grupos_revisados`, para casos como una misma empresa con varios locales que comparten RUT), "Otros locales con este RUT" en la ficha.
-- **Personal**: (fusionada en Usuarios, ver Autenticación) — antes: layout de tabla (`DataTable`), técnicos con stats reales (total órdenes, monto generado), alta con **PIN aleatorio mostrado una sola vez**, ficha editable completa (nombre/RUT/teléfono/usuario/fecha ingreso/especialidades/activo), "Resetear PIN" (idem, una sola vez), activar/desactivar (soft toggle, sin eliminación real). Distinta de "Usuarios" — aclarado textualmente en la propia página.
 - **Servicios**: CRUD con rename inline, activar/desactivar (Deshacer), eliminar **solo si `usos === 0`** (si tiene usos, el botón se convierte en "desactivar" automáticamente — protección explícita contra huérfanos).
-- **Notificaciones**: tab Plantillas (editor de bloques reordenables, preview contra una orden real, "Enviar prueba" real) + tab Historial (log filtrable por canal/fallidas, "Reenviar" por fila).
-- **Configuración** (admin): logo para emails (sube a R2, referenciado en `app_settings`), tarjetas Resend/Telegram con secreto enmascarado y "Probar conexión". El kill switch de suscripción **no está aquí ni en ningún lado del admin** — vive solo en EasyPanel.
-- **Usuarios** (admin): CRUD de `admin_users` con invitación por email, cambio de rol inline, reset de password, guards (no auto-desactivarse/degradarse, no dejar el sistema sin ningún admin activo).
+- **Correos** (admin): correos de la empresa (`email_reply_to` = Responder-a de todo correo del sistema; `email_interno` = copia de cada orden), logo del encabezado, historial de envíos filtrable. Pestaña Plantillas (editor de bloques, preview, enviar prueba) solo para notstudio.
+- **Configuración → General** (notstudio): kill switch de suscripción con mensaje, redirección de correos en modo desarrollo, cola de trabajos con reintento. **Integraciones** (notstudio): Resend/Telegram con secreto enmascarado y "Probar conexión", webhook de n8n.
+- **Usuarios** (admin): todas las personas (ver "Pantalla Usuarios" en Autenticación): alta con rol, PIN de terreno, invitación al panel; guards (no auto-desactivarse/degradarse, no dejar el sistema sin admin activo, no eliminar con órdenes asociadas).
 - **Auditoría** (admin): log global de `audit_log` con filtros por entidad/usuario/fecha.
 
 ## API Endpoints
@@ -527,7 +540,7 @@ POST   /api/ordenes/:id/reenviar        # Regenerar PDF + reenviar notificacione
 
 `authMiddleware` en modo `warn` (default) acepta requests sin token — no bloquea de verdad salvo `AUTH_ENFORCE=enforce`.
 
-### Admin (`/api/admin/*`, JWT admin, todas detrás de `subscriptionGate`)
+### Admin (`/api/admin/*`, JWT admin con `aud:'admin'`; el kill switch NO bloquea el panel)
 
 ```
 POST   /api/admin/auth/login                       # público (rate-limited), bloqueado si kill switch inactivo
@@ -563,9 +576,6 @@ PUT    /api/admin/clientes/:id                         # todos
 GET    /api/admin/empleados                          # todos
 GET    /api/admin/empleados/:id                        # todos
 GET    /api/admin/empleados/:id/stats                    # todos
-POST   /api/admin/empleados                           # todos
-PUT    /api/admin/empleados/:id                          # todos
-POST   /api/admin/empleados/:id/reset-pin                  # todos
 
 GET    /api/admin/servicios                          # todos
 POST   /api/admin/servicios                            # todos
@@ -573,10 +583,10 @@ PUT    /api/admin/servicios/:id                          # todos
 DELETE /api/admin/servicios/:id                            # todos (409 si usos>0)
 
 GET    /api/admin/notificaciones/log                  # todos
-GET    /api/admin/notificaciones                       # SOLO admin
-GET    /api/admin/notificaciones/:canal                  # SOLO admin
-PUT    /api/admin/notificaciones/:canal                    # SOLO admin
-POST   /api/admin/notificaciones/:canal/test                 # SOLO admin
+GET    /api/admin/notificaciones                       # SOLO notstudio (404 al resto)
+GET    /api/admin/notificaciones/:canal                  # SOLO notstudio
+PUT    /api/admin/notificaciones/:canal                    # SOLO notstudio
+POST   /api/admin/notificaciones/:canal/test                 # SOLO notstudio
 
 GET    /api/admin/plantillas                          # todos
 GET    /api/admin/plantillas/:key                        # todos
@@ -587,12 +597,28 @@ POST   /api/admin/plantillas/enviar-prueba                    # SOLO admin
 
 GET    /api/admin/settings/logo                          # SOLO admin
 POST   /api/admin/settings/logo                             # SOLO admin
+GET    /api/admin/settings/correos                       # SOLO admin — email_reply_to, email_interno
+PUT    /api/admin/settings/correos                          # SOLO admin
+GET    /api/admin/settings/general                       # SOLO notstudio — kill switch, webhook, dev redirect
+PUT    /api/admin/settings/general                          # SOLO notstudio
+GET    /api/admin/settings/webhook-notificaciones        # SOLO notstudio
+PUT    /api/admin/settings/webhook-notificaciones           # SOLO notstudio
+GET    /api/admin/settings/jobs                          # SOLO notstudio — cola de trabajos
+POST   /api/admin/settings/jobs/:id/reintentar              # SOLO notstudio
 
-GET    /api/admin/usuarios                              # SOLO admin
-POST   /api/admin/usuarios                                 # SOLO admin
-PUT    /api/admin/usuarios/:id                                # SOLO admin
-POST   /api/admin/usuarios/:id/reset-password                    # SOLO admin
-DELETE /api/admin/usuarios/:id                                      # SOLO admin
+GET    /api/admin/usuarios                              # SOLO admin — todas las personas (notstudio invisible salvo para notstudio)
+GET    /api/admin/usuarios/:id                             # SOLO admin
+POST   /api/admin/usuarios                                 # SOLO admin — { nombre, rol, email, usuario, accesoTerreno, invitar }
+PUT    /api/admin/usuarios/:id                                # SOLO admin — datos, rol, email, activo
+POST   /api/admin/usuarios/:id/pin                            # SOLO admin — dar acceso terreno / resetear PIN
+DELETE /api/admin/usuarios/:id/pin                            # SOLO admin — quitar acceso terreno
+POST   /api/admin/usuarios/:id/invitar                        # SOLO admin — invitación al panel (72 h)
+POST   /api/admin/usuarios/:id/reset-password                    # SOLO admin — contraseña temporal
+DELETE /api/admin/usuarios/:id/panel                          # SOLO admin — quitar acceso al panel
+POST   /api/admin/usuarios/:id/desbloquear                    # SOLO admin
+DELETE /api/admin/usuarios/:id                                      # SOLO admin — solo sin órdenes asociadas
+GET    /api/admin/auth/invitacion/:token                   # público — valida invitación
+POST   /api/admin/auth/invitacion/:token                      # público — define contraseña e inicia sesión
 
 GET    /api/admin/auditoria                              # SOLO admin
 ```
@@ -648,9 +674,14 @@ R2_ENDPOINT                  # obligatoria para operar R2
 R2_PUBLIC_URL                # obligatoria — arma URLs públicas de fotos/PDF
 GOTENBERG_URL                 # obligatoria para generar PDF
 APP_ENCRYPTION_KEY           # obligatoria — cifra/descifra credenciales Resend/Telegram (pgcrypto)
+WEBHOOK_NOTIFICACIONES_URL   # respaldo del webhook de n8n (manda app_settings si hay fila)
+EMAIL_DEV_REDIRECT           # respaldo de la redirección de correos (ídem); vacío en producción
+ADMIN_PANEL_URL              # opcional, default https://condor.notstudio.cl/admin/ — enlaces de invitación
+ALERTAS_TELEGRAM_BOT_TOKEN   # opcional, respaldo de alertas si no hay webhook de n8n
+ALERTAS_TELEGRAM_CHAT_ID     # ídem
 ```
 
-`SUBSCRIPTION_ACTIVE` / `SUBSCRIPTION_MESSAGE` **no van en `.env.staging`** — solo se setean directamente en las env vars del servicio EasyPanel de producción (ver Autenticación → Kill switch).
+`SUBSCRIPTION_ACTIVE` / `SUBSCRIPTION_MESSAGE` son solo respaldo: el kill switch real vive en `app_settings` (Configuración → General).
 
 Credenciales de Resend/Telegram **no son env vars** — viven cifradas en Postgres, se configuran desde el admin.
 
@@ -660,7 +691,7 @@ Credenciales de Resend/Telegram **no son env vars** — viven cifradas en Postgr
 ```
 VITE_API_URL=http://localhost:3001/api
 ```
-Fallback hardcodeado en producción: `https://clientes-condor-api.f8ihph.easypanel.host/api` (dominio del backend de **producción** — hoy corre el código viejo de `main`, no Postgres/R2, hasta que se haga el corte).
+Fallback hardcodeado (viejo, ya no aplica en ningún build real): `https://clientes-condor-api.f8ihph.easypanel.host/api`. En producción la URL la fija `client/.env.production` (Pages) o el `ARG VITE_API_URL` del Dockerfile (EasyPanel): `https://condor.notstudio.cl/api`.
 
 ### `admin/.env.local`
 ```
@@ -678,7 +709,7 @@ Paquete standalone (`migration/package.json`, deps propias: `@aws-sdk/client-s3`
 - Flags: `--limit=N` (default 5 órdenes por corrida) y `--finalize` (ejecuta `setval()` real sobre `ordenes_numero_seq` — se omite en corridas parciales para no atrasar la secuencia).
 - `migration/r2-manifest.json` (commiteado, ~28k líneas): manifiesto de progreso para idempotencia de subida de adjuntos.
 - Al final reporta conteos migrados, grupos de RUT duplicado detectados, y un diccionario de "casos raros" (huérfanos, JSON inválido, valores fuera de whitelist, adjuntos fallidos).
-- Estado real ya ejecutado contra staging: 410/410 órdenes, 58 clientes, 9 empleados, 12 servicios, 4.732/4.732 adjuntos.
+- Corrida final el 2026-09-22 (corte): 656 órdenes, 61 clientes, 10 empleados, 12 servicios, 7.592 adjuntos. Solo se volvería a usar si hubiera que rescatar algo de Airtable antes de cancelarlo.
 
 ## Pantalla de Confirmación (`client/`)
 
@@ -764,7 +795,7 @@ El admin tiene su propio `admin/src/utils/format.js` equivalente (RUT/CLP/fechas
 16. **Solo técnicos activos de Postgres**: No hay opción de "persona externa" en el personal.
 17. **Confirmación clara**: 4 checks visuales + botón Ver PDF + número de orden destacado.
 18. **Sesión larga en terreno, corta en oficina**: 30 días técnico vs 12h admin — la revocación real es siempre por estado en DB, no por expiración del token.
-19. **Kill switch invisible al producto**: nunca mostrar ni permitir editar `SUBSCRIPTION_ACTIVE` desde ninguna UI — es exclusivo de EasyPanel.
+19. **Kill switch solo para NotStudio**: se edita desde Configuración → General (rol notstudio); el cliente no lo ve. Frena solo la app de terreno.
 20. **RUT compartido no es error**: varios clientes con el mismo RUT (ej. locales distintos de una misma empresa) es un caso válido — nunca forzar fusión automática, solo sugerirla.
 
 ## Deploy
@@ -773,6 +804,6 @@ El admin tiene su propio `admin/src/utils/format.js` equivalente (RUT/CLP/fechas
 - **Admin (`admin/`)**: en EasyPanel (`Dockerfile.admin`, nginx, `VITE_BASE=/admin/`) bajo `condor.notstudio.cl/admin/`. No se publica en Pages.
 - **Backend (`server/`)**: EasyPanel + Docker. El `Dockerfile` (raíz) construye **solo `server/`** (copia también el logo PNG de `client/public/` para los PDFs). Los tres servicios del proyecto "condor" tienen auto-deploy desde `main`.
 - **Adjuntos**: Cloudflare R2 (bucket único), ya no `/uploads/` local ni limpieza cada 30 min — eso desapareció con la migración.
-- **Infraestructura EasyPanel relevante** (según el plan de migración): proyecto **"clientes"** corre el backend de producción (`clientes-condor-api.f8ihph.easypanel.host`, hoy todavía en modo Airtable porque no se ha hecho el corte); proyecto **"condor"** aloja el Postgres/backend de **staging** usados durante todo este trabajo; Gotenberg self-hosted confirmado alcanzable en `infra-gotenberg.f8ihph.easypanel.host`.
+- **Infraestructura EasyPanel**: proyecto **"condor"** = producción (`condor-app`, `condor-terreno`, `condor-admin`, `condor-postgres`); proyecto **"infra"** = servicios compartidos (Gotenberg `infra-gotenberg.f8ihph.easypanel.host`, n8n `infra-n8n.f8ihph.easypanel.host`); proyecto **"clientes"** = backends viejos, todos DETENIDOS desde el corte. La API de EasyPanel es tRPC (`$EASYPANEL_API_URL/api/trpc/<proc>`, token en `.env` raíz).
 - **Repo**: https://github.com/notstudiocl/condor-sistema
 - **Rama de trabajo**: `main`.

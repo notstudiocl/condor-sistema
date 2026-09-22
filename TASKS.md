@@ -1,24 +1,28 @@
 # Tasks
 
-Rama `feat/postgres-migration` — versión NUEVA de Condor 360 (Postgres + R2 + admin), hosteada en EasyPanel (proyecto "condor"). La app antigua (`main`, GitHub Pages, Airtable) **no se toca** hasta el corte. Arquitectura completa en `CLAUDE.md`.
+Condor 360 en producción desde el 2026-09-22 (rama `main`, EasyPanel proyecto "condor", `condor.notstudio.cl`). Arquitectura completa en `CLAUDE.md`.
 
 ## Active
 
-- [ ] **Orden de prueba end-to-end en producción** - crear desde terreno con un técnico real (ya sin redirección de correos: le llega al cliente) o esperar la primera orden real y revisar PDF + correos + Telegram - crear desde terreno → Postgres → fotos R2 → PDF Gotenberg → log de notificaciones
-  - Hacerla después de que termine la migración (para no chocar con la secuencia) y borrarla al final.
+- [ ] **Primera orden real en producción** - revisar cuando llegue (será la OT-00661): PDF en R2, correo al cliente con Responder-a de Condor, copia interna, Telegram al grupo, fila en el historial de Correos
+- [ ] **Crear las cuentas de oficina de Condor** - desde Usuarios, cuando Francisco pase los correos (les llega invitación de 72 h). Hasta entonces el cliente no tiene acceso al panel.
+- [ ] **Órdenes 652 a 657 sin fotos ni PDF** (incidente Airtable) - las completan los técnicos desde la app (editar y reenviar) o la oficina desde el panel (agregar fotos + Regenerar PDF + Reenviar). Aparecen en "Órdenes con problemas" del dashboard hasta entonces.
 
 ## Waiting On
 
-- [ ] **OK para mandar un mensaje de prueba al grupo de Telegram de Condor** - Matías, since 2026-09-21
-  - Chat `-5133715111` con el bot "Hermes NotStudio"; falta confirmar que Hermes está en ese grupo.
+- [ ] **Correos de Francisco y de la oficina** - Matías, since 2026-09-22 (para crear las cuentas)
 - [ ] **Cambiar la contraseña temporal de `admin@notstudio.cl`** - Matías, since 2026-09-21
-- [ ] **Subir logo de emails y crear usuarios de oficina de Condor desde el admin** - Matías
+- [ ] **Subir el logo para los correos** (Correos → Logo) - Matías
+- [ ] **CNAME `www.condor` → `condor.notstudio.cl` en Cloudflare** - Matías, opcional (las rutas `www` ya están en EasyPanel)
+- [ ] **Respuestas de Francisco a dos preguntas del análisis del dashboard**: ¿registrar montos/facturación en la app o va aparte? ¿Rentokil necesita reporte mensual por local (es el 62 % de la operación)?
 
 ## Someday
 
-- [ ] **Cancelar Airtable** tras el período de respaldo
-- [ ] **Cerrar el puerto externo de Postgres (54320)** - solo se necesita abierto para correr `migration/` desde fuera
-- [ ] **Indicador de progreso al subir fotos en el wizard**
+- [ ] **Cancelar Airtable** tras el período de respaldo (2–3 semanas sin necesitar rescatar nada)
+- [ ] **Cerrar el puerto externo de Postgres (54320)** - solo hace falta para correr `migration/` desde fuera
+- [ ] **Indicador de progreso al subir fotos en el wizard de terreno** - hoy solo hay textos por etapa; la barra real requiere XMLHttpRequest con `upload.onprogress`
+- [ ] **Tablas del admin en celular como tarjetas** (hoy scroll lateral) y timeline de estados en la ficha de orden (se quitó al adoptar el layout de H&A)
+- [ ] **Borrar `feat/postgres-migration` en GitHub** cuando ya no haga falta como referencia
 
 ## Done
 
