@@ -23,6 +23,7 @@ Rama `feat/postgres-migration` — versión NUEVA de Condor 360 (Postgres + R2 +
 
 ## Done
 
+- [x] ~~Usuarios de prueba eliminados (técnico matias, matias@notstudio.cl, oficina@notstudio.cl)~~ (2026-09-22)
 - [x] ~~CORTE A PRODUCCIÓN: main = código nuevo, EasyPanel despliega desde main, la URL vieja de Pages sirve la app nueva, migración final (656 órdenes), redirección de correos apagada, AUTH_ENFORCE=enforce, técnico de pruebas desactivado~~ (2026-09-22)
 - [x] ~~Correo de respuesta (Reply-To) e interno de Condor configurables desde Correos, aplicados a todo correo del sistema; botón Ver PDF en la lista de órdenes (modal, como H&A)~~ (2026-09-22)
 - [x] ~~Dashboard rediseñado con KPIs de operación (sin plata): semana/mes con comparación, hidrojet, duración, por técnico, por cliente (RUT), día de la semana 6 meses, órdenes con problemas~~ (2026-09-22)
