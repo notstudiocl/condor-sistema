@@ -170,7 +170,7 @@ function PlantillasTab() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 card p-5 space-y-4">
+        <div className="lg:col-span-2 card p-4 sm:p-5 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-heading font-semibold text-gray-900">{TEMPLATE_LABELS[activeKey].label}</h3>
             <label className="inline-flex items-center gap-2 text-xs text-gray-500">
@@ -208,7 +208,7 @@ function PlantillasTab() {
                   <textarea
                     value={b}
                     onChange={(e) => setBloques((prev) => prev.map((x, xi) => (xi === i ? e.target.value : x)))}
-                    className="input-field flex-1 min-h-[70px] font-mono text-xs"
+                    className="input-field flex-1 min-w-0 min-h-[70px] font-mono text-xs"
                     placeholder="Ej: Hola {{cliente_nombre}}, tu orden {{numero_orden}} fue completada."
                   />
                   <div className="flex flex-col gap-1 shrink-0">
@@ -216,7 +216,7 @@ function PlantillasTab() {
                       type="button"
                       disabled={i === 0}
                       onClick={() => setBloques((prev) => { const c = [...prev]; [c[i - 1], c[i]] = [c[i], c[i - 1]]; return c; })}
-                      className="p-1.5 rounded border border-gray-200 text-gray-400 hover:text-gray-700 disabled:opacity-30"
+                      className="h-9 w-9 lg:h-auto lg:w-auto lg:p-1.5 inline-flex items-center justify-center rounded border border-gray-200 text-gray-400 hover:text-gray-700 disabled:opacity-30"
                     >
                       <ArrowUp size={12} />
                     </button>
@@ -224,14 +224,14 @@ function PlantillasTab() {
                       type="button"
                       disabled={i === bloques.length - 1}
                       onClick={() => setBloques((prev) => { const c = [...prev]; [c[i + 1], c[i]] = [c[i], c[i + 1]]; return c; })}
-                      className="p-1.5 rounded border border-gray-200 text-gray-400 hover:text-gray-700 disabled:opacity-30"
+                      className="h-9 w-9 lg:h-auto lg:w-auto lg:p-1.5 inline-flex items-center justify-center rounded border border-gray-200 text-gray-400 hover:text-gray-700 disabled:opacity-30"
                     >
                       <ArrowDown size={12} />
                     </button>
                     <button
                       type="button"
                       onClick={() => setBloques((prev) => prev.filter((_, xi) => xi !== i))}
-                      className="p-1.5 rounded border border-gray-200 text-gray-400 hover:text-red-600"
+                      className="h-9 w-9 lg:h-auto lg:w-auto lg:p-1.5 inline-flex items-center justify-center rounded border border-gray-200 text-gray-400 hover:text-red-600"
                     >
                       <Trash2 size={12} />
                     </button>
@@ -265,7 +265,7 @@ function PlantillasTab() {
           </div>
         </div>
 
-        <div className="card p-5">
+        <div className="card p-4 sm:p-5">
           <h3 className="font-heading font-semibold text-gray-900 mb-3">Variables disponibles</h3>
           <div className="flex flex-wrap gap-1.5">
             {variables.map((v) => (
@@ -389,7 +389,7 @@ function HistorialTab() {
           <input type="checkbox" checked={soloFallidas} onChange={(e) => setSoloFallidas(e.target.checked)} className="rounded border-gray-300" />
           Solo fallidas
         </label>
-        <select value={canal} onChange={(e) => setCanal(e.target.value)} className="input-field w-40 py-1.5 text-sm">
+        <select value={canal} onChange={(e) => setCanal(e.target.value)} className="input-field w-full sm:w-40 py-1.5 sm:text-sm">
           <option value="">Todos los canales</option>
           <option value="resend">Email</option>
           <option value="telegram">Telegram</option>
@@ -403,7 +403,7 @@ function HistorialTab() {
         <EmptyState title="Sin envíos" description="Todavía no se ha registrado ninguna notificación." />
       ) : (
         <div className="card overflow-hidden">
-          <div className="overflow-auto max-h-[65vh]">
+          <div className="overflow-auto lg:max-h-[65vh]">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-gray-50">
                 <tr>
@@ -418,11 +418,11 @@ function HistorialTab() {
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id} className="border-b border-gray-100 last:border-0">
-                    <td className="px-4 py-3 font-mono font-semibold text-gray-800">OT-{r.numero_orden_display}</td>
+                    <td className="px-4 py-3 font-mono font-semibold text-gray-800 whitespace-nowrap">OT-{r.numero_orden_display}</td>
                     <td className="px-4 py-3 text-gray-600">{r.canal === 'resend' ? 'Email' : 'Telegram'}</td>
                     <td className="px-4 py-3 text-gray-600 max-w-[220px] truncate">{r.destinatario || '—'}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatFechaHora(r.sent_at)}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 text-gray-400 whitespace-nowrap">{formatFechaHora(r.sent_at)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
                       {r.ok ? (
                         <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
                           <CheckCircle2 size={13} /> Entregado
@@ -433,7 +433,7 @@ function HistorialTab() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
                       {!r.ok && (
                         <button
                           onClick={() => handleReenviar(r)}

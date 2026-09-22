@@ -50,7 +50,7 @@ export default function SearchInput({
         onChange={handleChange}
         placeholder={placeholder}
         autoFocus={autoFocus}
-        className="w-full bg-white border border-gray-200 rounded-lg pl-9 pr-8 py-2.5 text-sm text-gray-900
+        className="w-full bg-white border border-gray-200 rounded-lg pl-9 pr-8 py-2.5 text-base sm:text-sm text-gray-900
           placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-condor-400 focus:border-transparent
           transition-shadow"
       />

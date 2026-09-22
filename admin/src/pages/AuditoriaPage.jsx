@@ -128,13 +128,13 @@ export default function AuditoriaPage() {
 
   return (
     <div className="space-y-4">
-      <div className="card p-4 flex flex-wrap items-end gap-3">
+      <div className="card p-4 grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-end gap-3">
         <div>
           <label className="label-field">Entidad</label>
           <select
             value={filtros.entidad}
             onChange={(e) => handleFiltro('entidad', e.target.value)}
-            className="input-field w-52"
+            className="input-field w-full lg:w-52"
           >
             {ENTIDADES.map((e) => (
               <option key={e.value} value={e.value}>
@@ -148,7 +148,7 @@ export default function AuditoriaPage() {
           <select
             value={filtros.adminUserId}
             onChange={(e) => handleFiltro('adminUserId', e.target.value)}
-            className="input-field w-52"
+            className="input-field w-full lg:w-52"
           >
             <option value="">Todos los usuarios</option>
             {usuarios.map((u) => (
@@ -164,7 +164,7 @@ export default function AuditoriaPage() {
             type="date"
             value={filtros.fechaDesde}
             onChange={(e) => handleFiltro('fechaDesde', e.target.value)}
-            className="input-field w-40"
+            className="input-field w-full lg:w-40"
           />
         </div>
         <div>
@@ -173,10 +173,10 @@ export default function AuditoriaPage() {
             type="date"
             value={filtros.fechaHasta}
             onChange={(e) => handleFiltro('fechaHasta', e.target.value)}
-            className="input-field w-40"
+            className="input-field w-full lg:w-40"
           />
         </div>
-        <p className="text-sm text-gray-400 ml-auto">{total} registro{total === 1 ? '' : 's'}</p>
+        <p className="text-sm text-gray-400 sm:col-span-2 lg:col-auto lg:ml-auto">{total} registro{total === 1 ? '' : 's'}</p>
       </div>
 
       <DataTable
@@ -188,7 +188,7 @@ export default function AuditoriaPage() {
       />
 
       {!loading && rows.length > 0 && (
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm text-gray-400">
             Página {page} de {totalPages}
           </p>

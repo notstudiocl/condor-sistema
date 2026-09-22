@@ -6,7 +6,7 @@ export default function KpiCard({ label, value, sublabel, icon: Icon, highlight 
       type="button"
       onClick={onClick}
       disabled={!clickable}
-      className={`card p-5 text-left w-full transition-all ${
+      className={`card p-4 sm:p-5 text-left w-full min-w-0 transition-all ${
         highlight ? 'border-orange-300 ring-1 ring-orange-200' : ''
       } ${clickable ? 'hover:shadow-md hover:-translate-y-0.5 cursor-pointer' : 'cursor-default'}`}
     >

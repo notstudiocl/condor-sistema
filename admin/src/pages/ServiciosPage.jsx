@@ -197,7 +197,7 @@ export default function ServiciosPage() {
                 iniciarEdicion(s);
               }}
               title="Renombrar servicio"
-              className="shrink-0 p-1 rounded text-gray-300 opacity-0 group-hover/nombre:opacity-100 hover:text-condor-700 hover:bg-condor-50 transition-opacity"
+              className="shrink-0 p-1.5 rounded text-gray-300 md:opacity-0 md:group-hover/nombre:opacity-100 hover:text-condor-700 hover:bg-condor-50 transition-opacity"
             >
               <Pencil size={13} />
             </button>
@@ -232,7 +232,7 @@ export default function ServiciosPage() {
             handleEliminarOConfirmar(s);
           }}
           title={s.usos > 0 ? 'En uso: se desactivará en vez de eliminar' : 'Eliminar servicio'}
-          className="inline-flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-red-600 transition-colors"
+          className="inline-flex items-center justify-center h-9 w-9 -my-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
         >
           {s.usos > 0 ? <EyeOff size={14} /> : <Trash2 size={14} />}
         </button>
@@ -267,7 +267,7 @@ export default function ServiciosPage() {
       </form>
 
       <div className="flex items-center justify-between gap-3">
-        <SearchInput placeholder="Buscar servicio..." value={query} onChange={setQuery} className="w-72" />
+        <SearchInput placeholder="Buscar servicio..." value={query} onChange={setQuery} className="w-full sm:w-72" />
         <p className="text-sm text-gray-400 shrink-0">{filtrados.length} servicios</p>
       </div>
 

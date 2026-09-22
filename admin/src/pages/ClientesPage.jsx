@@ -286,9 +286,10 @@ export default function ClientesPage() {
           </div>
           <div className="flex gap-2 flex-wrap">
             {gruposConDatos.map((g, i) => (
-              <div key={i} className="flex items-center gap-1.5">
-                <button onClick={() => abrirFusion(g)} className="btn-accent py-1.5 px-3 text-xs shrink-0">
-                  <GitMerge size={13} /> Fusionar {g.clientes[0].empresa || g.clientes[0].nombre}
+              <div key={i} className="flex items-center gap-1.5 w-full sm:w-auto min-w-0">
+                <button onClick={() => abrirFusion(g)} className="btn-accent py-1.5 px-3 text-xs min-w-0 flex-1 sm:flex-none">
+                  <GitMerge size={13} className="shrink-0" />
+                  <span className="truncate">Fusionar {g.clientes[0].empresa || g.clientes[0].nombre}</span>
                 </button>
                 <button
                   onClick={() => descartarGrupo(g)}
@@ -303,9 +304,9 @@ export default function ClientesPage() {
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3">
-        <SearchInput placeholder="Buscar RUT, nombre, empresa, email..." value={query} onChange={setQuery} className="w-80" />
-        <div className="flex items-center gap-3 shrink-0">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <SearchInput placeholder="Buscar RUT, nombre, empresa, email..." value={query} onChange={setQuery} className="w-full sm:w-80" />
+        <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
           <p className="text-sm text-gray-400">{filtrados.length} clientes</p>
           <button onClick={() => setNuevoOpen(true)} className="btn-primary shrink-0">
             <Plus size={16} /> Nuevo cliente
@@ -343,7 +344,7 @@ export default function ClientesPage() {
             <label className="label-field">Nombre (persona de contacto)</label>
             <input name="nombre" required className="input-field" placeholder="Ej: Carla Curificil" />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label-field">RUT</label>
               <input
@@ -368,7 +369,7 @@ export default function ClientesPage() {
             <label className="label-field">Empresa</label>
             <input name="empresa" className="input-field" placeholder="Ej: Burger King" />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label-field">Email</label>
               <input name="email" type="email" className="input-field" placeholder="contacto@empresa.cl" />
@@ -378,7 +379,7 @@ export default function ClientesPage() {
               <input name="telefono" className="input-field" placeholder="+56 9 1234 5678" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label-field">Dirección</label>
               <input name="direccion" className="input-field" placeholder="Av. Los Leones 1234" />
@@ -561,7 +562,7 @@ export default function ClientesPage() {
             </div>
 
             <div className="overflow-x-auto">
-              <div className="grid gap-3 min-w-max" style={{ gridTemplateColumns: `repeat(${grupoFusion.clientes.length}, minmax(220px,1fr))` }}>
+              <div className="grid gap-3 sm:min-w-max sm:[grid-template-columns:var(--fusion-cols)]" style={{ '--fusion-cols': `repeat(${grupoFusion.clientes.length}, minmax(220px,1fr))` }}>
                 {grupoFusion.clientes.map((c) => (
                   <button
                     key={c.id}

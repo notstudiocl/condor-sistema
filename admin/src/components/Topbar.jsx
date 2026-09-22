@@ -24,17 +24,17 @@ export default function Topbar({ title, user, onLogout, onOpenMobileNav }) {
   }, []);
 
   return (
-    <header className="sticky top-0 z-30 h-16 bg-white border-b border-gray-200 flex items-center gap-4 px-4 md:px-6">
+    <header className="sticky top-0 z-30 h-16 bg-white border-b border-gray-200 flex items-center gap-2 sm:gap-4 px-3 sm:px-4 md:px-6">
       <button
         onClick={onOpenMobileNav}
-        className="md:hidden p-2 -ml-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+        className="lg:hidden h-10 w-10 -ml-1 shrink-0 inline-flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
         aria-label="Abrir menú"
       >
-        <Menu size={20} />
+        <Menu size={22} />
       </button>
-      <h1 className="font-heading font-semibold text-gray-900 text-lg shrink-0 truncate">{title}</h1>
+      <h1 className="font-heading font-semibold text-gray-900 text-base sm:text-lg min-w-0 truncate">{title}</h1>
 
-      <div className="flex-1 max-w-md ml-2 hidden sm:block">
+      <div className="flex-1 max-w-md ml-2 hidden md:block">
         <div className="relative">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
@@ -52,14 +52,14 @@ export default function Topbar({ title, user, onLogout, onOpenMobileNav }) {
         </div>
       </div>
 
-      <div className="ml-auto flex items-center gap-1">
+      <div className="ml-auto flex items-center gap-0.5 sm:gap-1 shrink-0">
         <NotificationBell />
         <span className="hidden sm:block h-8 w-px bg-gray-200 mx-2" aria-hidden="true" />
-        <div className="flex items-center gap-2.5 pl-1">
+        <div className="flex items-center gap-2.5 pl-1" title={user?.nombre || user?.email}>
           <span className="h-9 w-9 rounded-full bg-condor-50 text-condor-700 ring-1 ring-condor-100 flex items-center justify-center shrink-0">
             <UserRound size={17} />
           </span>
-          <span className="hidden md:block leading-tight">
+          <span className="hidden lg:block leading-tight">
             <span className="block text-sm font-semibold text-gray-900 truncate max-w-[160px]">
               {user?.nombre || user?.email}
             </span>
@@ -70,7 +70,7 @@ export default function Topbar({ title, user, onLogout, onOpenMobileNav }) {
           onClick={onLogout}
           title="Cerrar sesión"
           aria-label="Cerrar sesión"
-          className="ml-1 p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+          className="ml-0.5 sm:ml-1 h-10 w-10 inline-flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
         >
           <LogOut size={18} />
         </button>

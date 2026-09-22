@@ -92,7 +92,7 @@ function LogoEmailCard() {
   }
 
   return (
-    <div className="card p-5 space-y-4">
+    <div className="card p-4 sm:p-5 space-y-4">
       <h3 className="font-heading font-semibold text-gray-900 flex items-center gap-2">
         <ImageIcon size={16} className="text-gray-400" /> Logo para correos
       </h3>
@@ -101,7 +101,7 @@ function LogoEmailCard() {
         ninguno, se usa el logo por defecto del sistema.
       </p>
 
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
         <div className="w-40 h-20 rounded-lg border border-dashed border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden shrink-0">
           {previewUrl || logoUrl ? (
             <img src={previewUrl || logoUrl} alt="Logo actual" className="max-w-full max-h-full object-contain" />
@@ -109,7 +109,7 @@ function LogoEmailCard() {
             <span className="text-[11px] text-gray-400 text-center px-2">Sin logo personalizado</span>
           )}
         </div>
-        <div className="flex-1 space-y-2">
+        <div className="flex-1 min-w-0 space-y-2">
           <input
             ref={fileInputRef}
             type="file"
@@ -191,7 +191,7 @@ function CanalCard({ canal, icon: Icon, label, extraFields }) {
   }
 
   return (
-    <div className="card p-5 space-y-4">
+    <div className="card p-4 sm:p-5 space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="font-heading font-semibold text-gray-900 flex items-center gap-2">
           <Icon size={16} className="text-gray-400" /> {label}
@@ -235,7 +235,7 @@ function CanalCard({ canal, icon: Icon, label, extraFields }) {
             value={testTo}
             onChange={(e) => setTestTo(e.target.value)}
             placeholder="correo para la prueba"
-            className="input-field w-52 py-2 text-xs"
+            className="input-field w-full sm:w-52 py-2 text-xs"
           />
         )}
         <button
@@ -290,7 +290,7 @@ function WebhookN8nCard() {
   }
 
   return (
-    <div className="card p-5 space-y-4">
+    <div className="card p-4 sm:p-5 space-y-4">
       <h3 className="font-heading font-semibold text-gray-900 flex items-center gap-2">
         <Webhook size={16} className="text-gray-400" /> Envío vía n8n (webhook)
       </h3>

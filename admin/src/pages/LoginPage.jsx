@@ -37,7 +37,7 @@ export default function LoginPage({ onLogin }) {
   };
 
   return (
-    <div className="min-h-screen bg-white flex flex-col items-center justify-center px-4 relative overflow-hidden">
+    <div className="min-h-screen bg-white flex flex-col items-center px-4 py-8 relative overflow-x-clip">
       {/* Fondo decorativo animado — mismas burbujas azules que la app de terreno */}
       <div
         className="absolute top-[-10%] right-[-5%] w-72 h-72 bg-blue-100 rounded-full blur-3xl opacity-60 animate-pulse"
@@ -54,11 +54,11 @@ export default function LoginPage({ onLogin }) {
 
       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-blue-500 to-transparent" />
 
-      <div className="relative z-10 w-full max-w-sm flex flex-col items-center">
+      <div className="relative z-10 w-full max-w-sm flex flex-col items-center my-auto">
         <AppSwitch />
 
         <img src={logoUrl} alt="Condor 360" className="h-20 object-contain mb-3" />
-        <p className="text-blue-600 text-sm font-medium tracking-widest uppercase mb-10">Panel de Oficina</p>
+        <p className="text-blue-600 text-sm font-medium tracking-widest uppercase mb-6 sm:mb-10">Panel de Oficina</p>
 
         <form onSubmit={handleSubmit} className="w-full space-y-5">
           <div>
@@ -124,7 +124,7 @@ export default function LoginPage({ onLogin }) {
           </button>
         </form>
 
-        <div className="mt-12 text-center text-xs text-gray-300 space-y-1">
+        <div className="mt-8 sm:mt-12 text-center text-xs text-gray-300 space-y-1">
           <p>Condor 360 &copy; {new Date().getFullYear()} &middot; Panel v{APP_VERSION}</p>
           <p>
             Sistema integral desarrollado por{' '}
